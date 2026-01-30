@@ -1,0 +1,21 @@
+# requirements.txt
+
+# LangChain 核心
+langchain>=0.3.0
+langchain-community>=0.3.0
+
+# OpenAI 接口（可替换为其他 LLM provider）
+openai>=0.27.0
+
+# MySQL 连接
+mysql-connector-python>=8.1.0
+
+# Pydantic，用于 JSON Guard / 校验
+pydantic>=2.3.0
+
+# subprocess 是标准库，无需额外安装
+# 可选：如果需要其他工具，可加，例如 requests / rich / tqdm
+requests>=2.31.0
+rich>=13.4.0
+tqdm>=4.66.1
+
