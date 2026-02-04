@@ -1,0 +1,30 @@
+apiVersion: v1
+data:
+  local.json: |-
+    {
+      "service": {}
+    }
+  tools.yml: |
+    accessKey: ZlbUZYqqsvYaxlrZ
+    secretKey: nTAZODYPYEUaEaJy
+kind: ConfigMap
+metadata:
+  annotations:
+    infra.tce.io/current-md5: 58b0476442ca0fb36b1dff785eef9282
+  creationTimestamp: "2025-12-04T02:57:56Z"
+  labels:
+    dawn.infra.tce.io/application-instance-name: ocloud-tdmq-rocketmq5-namesrv
+    dawn.infra.tce.io/application-instance-uuid: aab75aedd4e059c4a1f3df1d3587ad56
+    dawn.infra.tce.io/application-name: ocloud-tdmq-rocketmq5-namesrv
+    dawn.infra.tce.io/application-version: 0.1.0-20251124-170532-b7ad69e
+    dawn.infra.tce.io/product-instance-id: tdmq-rocketmq-1
+    dawn.infra.tce.io/region-id: "50000001"
+    dawn.infra.tce.io/region-name: chongqing
+    infra.tce.io/app-version: 0.1.0-20251124-170532-b7ad69e.rhel.amd64
+    infra.tce.io/chart-name: ocloud-tdmq-rocketmq5-namesrv
+    infra.tce.io/oam-app: tdmq-config-rocketmq5-namesrv-tools-config
+    infra.tce.io/oam-comp: tdmq-config-rocketmq5-namesrv-tools-config
+    infra.tce.io/oam-config: tdmq-config-rocketmq5-namesrv-tools-config
+    infra.tce.io/oam-product: tdmq-rocketmq
+  name: tdmq-config-rocketmq5-namesrv-tools-config
+  namespace: tce

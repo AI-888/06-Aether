@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: ocloud-tdmq-rocketmq5-namesrv
+    dawn.infra.tce.io/application-instance-name: ocloud-tdmq-rocketmq5-namesrv
+    dawn.infra.tce.io/application-instance-uuid: aab75aedd4e059c4a1f3df1d3587ad56
+    dawn.infra.tce.io/application-name: ocloud-tdmq-rocketmq5-namesrv
+    dawn.infra.tce.io/application-version: 0.1.0-20251124-170532-b7ad69e
+    dawn.infra.tce.io/product-instance-id: tdmq-rocketmq-1
+    dawn.infra.tce.io/region-id: "50000001"
+    dawn.infra.tce.io/region-name: chongqing
+    infra.tce.io/app-version: 0.1.0-20251124-170532-b7ad69e.rhel.amd64
+    infra.tce.io/chart-name: ocloud-tdmq-rocketmq5-namesrv
+    infra.tce.io/oam-app: ocloud-tdmq-rocketmq5-namesrv
+    infra.tce.io/oam-comp: ocloud-tdmq-rocketmq5-namesrv
+    infra.tce.io/oam-product: tdmq-rocketmq
+    rocketmq.version: "4"
+  name: ocloud-tdmq-rocketmq5-namesrv
+  namespace: tce
+spec:
+  podManagementPolicy: Parallel
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      infra.tce.io/oam-app: ocloud-tdmq-rocketmq5-namesrv
+      infra.tce.io/oam-comp: ocloud-tdmq-rocketmq5-namesrv
+  serviceName: ocloud-tdmq-rocketmq5-namesrv
+  template:
+    metadata:
+      annotations:
+        network.infra.tce.io/ip-reserved: "true"
+      creationTimestamp: null
+      labels:
+        app: ocloud-tdmq-rocketmq5-namesrv
+        infra.tce.io/oam-app: ocloud-tdmq-rocketmq5-namesrv
+        infra.tce.io/oam-comp: ocloud-tdmq-rocketmq5-namesrv
+        rocketmq.version: "4"
+    spec:
+      containers:
+        - args:
+            - nameserver
+          command:
+            - ./entrypoint.sh
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: ROCKETMQ_HOME
+              value: /root
+            - name: CLUSTER_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: REGION_NAME
+              value: cq
+            - name: CONFIG_SOURCE
+              value: rainbow
+            - name: RAINBOW_ENV
+              value: Default
+            - name: RAINBOW_USERID
+            - name: RAINBOW_APPID
+            - name: RAINBOW_SECRET
+            - name: ENABLE_CONTROLLER_MODE
+              value: "true"
+            - name: JAVA_OPT_EXT
+              value: ' -Duser.timezone=Asia/Shanghai  -Dtls.server.mode=disabled '
+            - name: TENCENT_JAVA_OPT_EXT
+            - name: MEMORY_OS_ENV_GB
+              valueFrom:
+                resourceFieldRef:
+                  containerName: ocloud-tdmq-rocketmq5-namesrv
+                  divisor: 1Gi
+                  resource: limits.memory
+            - name: TZ
+              value: Asia/Shanghai
+          image: registry.jiguang.woa.com/csig-tdmq/tdmq-rocketmq:tigerweili_release-2.15.1_c3db00f6e_20251121111211.rhel.amd64
+          imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - $ROCKETMQ_HOME/bin/mqshutdown namesrv
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 9876
+            timeoutSeconds: 1
+          name: ocloud-tdmq-rocketmq5-namesrv
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            successThreshold: 1
+            tcpSocket:
+              port: 9876
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+            requests:
+              cpu: "1"
+              memory: 2Gi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /root/logs
+              name: rocketmq-data
+            - mountPath: /data
+              name: rocketmq-data
+            - mountPath: /root/conf/tools.yml
+              name: tdmq-config-rocketmq5-namesrv-tools-config
+              subPath: tools.yml
+      dnsConfig:
+        options:
+          - name: single-request-reopen
+          - name: timeout
+            value: "1"
+      dnsPolicy: ClusterFirst
+      initContainers:
+        - args:
+            - |
+              ./init.sh nameserver
+              echo 'all enerivent vars: ' && env
+          command:
+            - /bin/sh
+            - -c
+          env:
+            - name: TZ
+              value: Asia/Shanghai
+            - name: CLUSTER_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          image: registry.jiguang.woa.com/csig-tdmq/tdmq-rocketmq:tigerweili_release-2.15.1_c3db00f6e_20251121111211.rhel.amd64
+          imagePullPolicy: IfNotPresent
+          name: init-data
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100M
+            requests:
+              cpu: 100m
+              memory: 100M
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data
+              name: rocketmq-data
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: { }
+      terminationGracePeriodSeconds: 600
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: tdmq-config-rocketmq5-namesrv-filebeat-config
+          name: tdmq-config-rocketmq5-namesrv-filebeat-config
+        - configMap:
+            defaultMode: 420
+            name: tdmq-config-rocketmq5-namesrv-tools-config
+          name: tdmq-config-rocketmq5-namesrv-tools-config
+        - name: rocketmq-data
+          emptyDir: { }
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+

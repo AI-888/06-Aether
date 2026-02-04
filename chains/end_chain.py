@@ -1,29 +1,24 @@
 # chains/end_chain.py
 """
-RocketMQ ISR Agent 的最终结论 Chain
+RocketMQ Agent 的最终结论 Chain
 - 收集 Evidence
-- 输出结构化 Incident / RCA 报告
+- 输出结构化结论
 """
 
 from typing import Dict, Any, List
 
 
 def end_chain(context: Dict[str, Any]) -> Dict[str, Any]:
-    """生成最终 ISR 故障结论"""
+    """生成最终结论"""
     evidences: List[Dict[str, Any]] = context.get('evidences', [])
     analysis: Dict[str, Any] = context.get('analysis', {})
 
     incident_report = {
-        "incident": "RocketMQ ISR 异常",
-        "root_cause": analysis.get('reason', 'unknown'),
+        "incident": "RocketMQ 故障分析结论",
         "suspected_root": analysis.get('suspected_root', 'unknown'),
         "evidence_count": len(evidences),
         "evidences": evidences,
-        "suggested_action": [
-            "检查 broker 与 controller 网络",
-            "检查 broker 磁盘 IO",
-            "评估替换或扩容异常 broker",
-        ],
+        "suggested_action": analysis.get('recommended_next_actions', []),
         "confidence": analysis.get('confidence', 0.0),
     }
 
