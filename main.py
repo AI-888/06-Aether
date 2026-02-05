@@ -3,9 +3,8 @@ import sys
 
 from langchain_community.chat_models import ChatOllama
 
-from chains.broker_log_chain import build_chain, parse_analysis_result
-from chains import run_master_chain
-from router import route
+from chains import run_intent_router_chain
+from tools.kubectl_tools import run_kubectl
 
 
 def load_prompt_from_file():
@@ -14,181 +13,195 @@ def load_prompt_from_file():
     all_prompts = []
 
     try:
-        # 检查目录是否存在
         if not os.path.exists(prompts_dir):
             print(f"警告: 提示词目录不存在 {prompts_dir}")
             return ""
 
-        # 遍历目录中的所有.prompt文件
         for filename in os.listdir(prompts_dir):
+            if not filename.endswith(".prompt"):
+                continue
             file_path = os.path.join(prompts_dir, filename)
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read().strip()
                     if content:
-                        # 添加文件标题和内容
                         all_prompts.append(f"=== {filename} ===\n{content}\n")
             except Exception as e:
                 print(f"警告: 读取文件 {filename} 时出错: {e}")
 
-        # 合并所有提示词内容
-        if all_prompts:
-            return "\n".join(all_prompts)
-        else:
-            print("警告: 未找到任何.prompt文件")
-            return ""
+        return "\n".join(all_prompts) if all_prompts else ""
 
     except Exception as e:
         print(f"读取提示词目录时出错: {e}")
         return ""
 
 
-def main():
-    # 加载提示词内容
-    prompt_content = load_prompt_from_file()
+def _extract_kv(text, key):
+    import re
+    patterns = [
+        rf"{key}\\s*=\\s*([\\w\\-\\.]+)",
+        rf"{key}\\s*:\\s*([\\w\\-\\.]+)",
+    ]
+    for p in patterns:
+        m = re.search(p, text, re.IGNORECASE)
+        if m:
+            return m.group(1)
+    return None
 
-    # 使用ollama本地模型
-    llm = ChatOllama(model="qwen2.5:1.5b", temperature=0)
-    chain = build_chain(llm)
 
-    # 检查是否有命令行参数
-    if len(sys.argv) > 1:
-        # 命令行参数模式
-        user_msg = sys.argv[1]
-        process_user_msg(user_msg, chain, prompt_content, llm)
+def process_user_msg(user_msg, prompt_content, llm, interactive=False):
+    print("\n" + "=" * 72)
+    print("== 输入内容")
+    print("=" * 72)
+    print(user_msg + "\n")
+
+    # 意图识别
+    intent_data = run_intent_router_chain(llm, user_msg, base_prompt=prompt_content)
+    intents = intent_data.get("intents", []) or []
+
+    print("\n" + "=" * 72)
+    print("== 意图识别结果")
+    print("=" * 72)
+    print(intent_data)
+
+    results = []
+
+    # Case 1: kubectl 列表
+    if "list_broker_pods" in intents:
+        cmd = "kubectl get pods -Ao wide | grep rocketmq5-broker"
+        res = run_kubectl(cmd[len("kubectl "):], execute=True)
+        results.append({"action": cmd, "result": res})
+    if "list_namesrv_pods" in intents:
+        cmd = "kubectl get pods -Ao wide | grep rocketmq5-namesrv"
+        res = run_kubectl(cmd[len("kubectl "):], execute=True)
+        results.append({"action": cmd, "result": res})
+    if "list_proxy_pods" in intents:
+        cmd = "kubectl get pods -Ao wide | grep rocketmq5-proxy"
+        res = run_kubectl(cmd[len("kubectl "):], execute=True)
+        results.append({"action": cmd, "result": res})
+
+    # Case 2: 发送消息失败 -> 校验 topic 是否存在
+    if "send_fail_check" in intents:
+        instance_id = intent_data.get("instance_id") or _extract_kv(user_msg, "instance_id")
+        namespace = intent_data.get("namespace") or _extract_kv(user_msg, "namespace")
+        topic = intent_data.get("topic") or _extract_kv(user_msg, "topic")
+
+        def _ask(prompt):
+            return input(prompt).strip() if interactive else ""
+
+        if not instance_id:
+            if interactive:
+                instance_id = _ask("请输入实例id（格式 rmq-xxxx 或 rocketmq-xxxx）：")
+            if not instance_id:
+                print("\n" + "=" * 72)
+                print("== 信息不足，无法继续")
+                print("=" * 72)
+                print("缺少实例id。")
+                return
+
+        if not topic:
+            if interactive:
+                topic = _ask("请输入 topic：")
+            if not topic:
+                print("\n" + "=" * 72)
+                print("== 信息不足，无法继续")
+                print("=" * 72)
+                print("缺少 topic。")
+                return
+
+        # rmq-xxxx 实例不需要 namespace
+        if not (instance_id or "").lower().startswith("rmq-"):
+            if not namespace:
+                if interactive:
+                    namespace = _ask("请输入命名空间（MQ_INT 开头）：")
+                if not namespace:
+                    print("\n" + "=" * 72)
+                    print("== 信息不足，无法继续")
+                    print("=" * 72)
+                    print("缺少命名空间。")
+                    return
+
+        if instance_id.lower().startswith("rocketmq-"):
+            ns = "tce"
+            real_topic = f"{namespace}%{topic}"
+        else:
+            ns = namespace
+            real_topic = f"{instance_id.replace('-', '')}%{topic}"
+
+        cmd = (
+            f"kubectl exec -it -n {ns} ocloud-tdmq-rocketmq5-namesrv-0 "
+            f"-c ocloud-tdmq-rocketmq5-namesrv -- "
+            f"bin/mqadmin topicList -n 127.0.0.1:9876 | grep {real_topic}"
+        )
+        res = run_kubectl(cmd[len("kubectl "):], execute=True)
+        results.append({"action": cmd, "result": res})
+
+        # 诊断 topic 是否存在
+        output = res.get("output", "")
+        if output and real_topic in output:
+            print("\n" + "=" * 72)
+            print("== 诊断结论")
+            print("=" * 72)
+            print("topic 存在，继续下一步排查。")
+        else:
+            print("\n" + "=" * 72)
+            print("== 诊断结论")
+            print("=" * 72)
+            print("topic 不存在。请确认 topic 配置或创建主题。")
+
+    # LLM 格式化输出
+    if results:
+        try:
+            fmt_prompt = (
+                "请将以下工具执行结果整理为可读的摘要，输出纯文本，不要Markdown。\n\n"
+                f"{results}"
+            )
+            fmt_resp = llm.invoke(fmt_prompt)
+            print("\n" + "=" * 72)
+            print("== 工具结果格式化输出")
+            print("=" * 72)
+            print(getattr(fmt_resp, "content", str(fmt_resp)))
+        except Exception as e:
+            print(f"[Format Error] {e}")
     else:
-        # 交互式对话模式
-        interactive_mode(chain, prompt_content, llm)
+        print("\n" + "=" * 72)
+        print("== 未识别到可执行意图")
+        print("=" * 72)
 
 
-def process_user_msg(user_msg, chain, prompt_content, llm):
-    """处理用户消息"""
-    print(f"分析输入内容:\n{user_msg}\n")
-
-    # 如果有提示词内容，显示加载状态
+def interactive_mode(prompt_content, llm):
+    print("=== RocketMQ智能诊断Agent（精简版） ===")
     if prompt_content:
-        # 统计加载的文件数量
         file_count = prompt_content.count("===")
-        print(f"✓ 已加载 {file_count} 个RocketMQ专家提示词文件")
-
-    # 从用户输入中提取 namespace/topic/group（格式：key=value 或 key: value）
-    def _extract_kv(text, key):
-        import re
-        patterns = [
-            rf"{key}\\s*=\\s*([\\w\\-\\.]+)",
-            rf"{key}\\s*:\\s*([\\w\\-\\.]+)",
-        ]
-        for p in patterns:
-            m = re.search(p, text, re.IGNORECASE)
-            if m:
-                return m.group(1)
-        return None
-
-    namespace = _extract_kv(user_msg, "namespace")
-    topic = _extract_kv(user_msg, "topic")
-    group = _extract_kv(user_msg, "group")
-
-    # 调用总控顺序 Chain（执行命令）
-    master_result = run_master_chain({
-        "user_msg": user_msg,
-        "log_text": user_msg,
-        "execute": True,
-        "namespace": namespace,
-        "topic": topic,
-        "group": group,
-        "llm": llm,
-        "base_prompt": prompt_content,
-    })
-    print("=== Master Chain 输出 ===")
-    print(master_result)
-
-    # 调用分析链（打印上下文与原始输出）
-    model_input = {
-        "user_msg": user_msg,
-        "intents": master_result.get("context", {}).get("intent_router", {}),
-    }
-    print("=== LLM上下文（平衡模式） ===")
-    print(model_input)
-    raw_response = chain.invoke(model_input)
-    print("=== LLM原始输出 ===")
-    print(raw_response.content)
-
-    # 解析分析结果
-    analysis = parse_analysis_result(raw_response)
-
-    # 显示分析结果（解析后的JSON）
-    print("=== Agent分析结果 ===")
-    print(f"问题范围: {analysis.problem_scope.value}")
-    print(f"疑似对象: {analysis.suspected_object.value if analysis.suspected_object else 'null'}")
-    print(f"疑似组件: {analysis.suspected_component.value if analysis.suspected_component else 'null'}")
-    print(f"怀疑根因: {analysis.suspected_root.value}")
-    print(f"置信度: {analysis.confidence:.2f}")
-
-    # 显示关键证据
-    if analysis.key_evidence:
-        print("\n关键证据:")
-        for i, evidence in enumerate(analysis.key_evidence, 1):
-            print(f"  {i}. {evidence}")
-
-    # 显示建议操作
-    if analysis.recommended_next_actions:
-        print("\n建议的下一步操作:")
-        for i, action in enumerate(analysis.recommended_next_actions, 1):
-            print(f"  {i}. {action}")
-
-    # 路由到相应的处理链
-    try:
-        next_step = route(analysis)
-        if next_step:
-            result = next_step({"analysis": analysis.model_dump()})
-
-            # 显示路由结果
-            if result.get("diagnosis_type") == "command_line_interactive":
-                print("\n=== 命令行诊断方案 ===")
-                for i, step in enumerate(result.get("diagnosis_steps", []), 1):
-                    print(f"{i}. {step}")
-                print(f"\n预期输出: {result.get('expected_output', '')}")
-            else:
-                print(f"\n=== 路由结果 ===")
-                print(f"处理结果: {result}")
-    except Exception as e:
-        print(f"路由处理异常: {e}")
-
-
-def interactive_mode(chain, prompt_content, llm):
-    """交互式对话模式"""
-    print("=== RocketMQ智能诊断Agent ===")
-    if prompt_content:
-        # 统计加载的文件数量
-        file_count = prompt_content.count("===")
-        print(f"✓ 已加载 {file_count} 个专业RocketMQ专家提示词文件")
-    print("功能：支持分析以下内容：")
-    print("  - Broker / NameServer 日志片段")
-    print("  - mqadmin 命令输出")
-    print("  - kubectl 命令输出")
-    print("  - 用户描述的问题")
+        print(f"✓ 已加载 {file_count} 个提示词文件")
     print("请输入内容进行分析（输入'quit'或'退出'结束程序）")
     print("-" * 50)
 
     while True:
         try:
             user_input = input("\n请输入内容: ").strip()
-
-            if user_input.lower() in ['quit', '退出', 'exit']:
+            if user_input.lower() in ["quit", "退出", "exit"]:
                 print("感谢使用，再见！")
                 break
-
             if not user_input:
                 print("输入不能为空，请重新输入")
                 continue
-
-            process_user_msg(user_input, chain, prompt_content, llm)
-
+            process_user_msg(user_input, prompt_content, llm, interactive=True)
         except KeyboardInterrupt:
             print("\n\n程序被中断，再见！")
             break
         except Exception as e:
             print(f"处理过程中出现错误: {e}")
+
+
+def main():
+    prompt_content = load_prompt_from_file()
+    llm = ChatOllama(model="qwen2.5:1.5b", temperature=0)
+
+    if len(sys.argv) > 1:
+        process_user_msg(sys.argv[1], prompt_content, llm)
+    else:
+        interactive_mode(prompt_content, llm)
 
 
 if __name__ == "__main__":

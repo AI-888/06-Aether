@@ -17,12 +17,18 @@ import mysql.connector
 
 
 def run_shell(cmd: str, timeout: Optional[int] = 10) -> str:
-    """执行 shell 命令并返回 stdout"""
+    """执行 shell 命令并返回 stdout（若 stdout 为空则返回 stderr）"""
     try:
         result = subprocess.run(
             cmd, shell=True, capture_output=True, text=True, timeout=timeout
         )
-        return result.stdout.strip()
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        if stdout:
+            return stdout
+        if stderr:
+            return f"[stderr] {stderr}"
+        return ""
     except subprocess.TimeoutExpired:
         return f"Command timed out after {timeout} seconds"
     except Exception as e:
