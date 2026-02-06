@@ -125,6 +125,8 @@ def process_user_msg(user_msg, prompt_content, llm, kb_index=None):
             param_descs = {}
             if state.get("missing_for_tool"):
                 param_descs = get_admin_param_descs(state["missing_for_tool"])
+            skipped = False
+            skipped_params = []
             for p in state["missing_params"]:
                 desc = param_descs.get(p, "")
                 if p == "instance_id":
@@ -134,7 +136,12 @@ def process_user_msg(user_msg, prompt_content, llm, kb_index=None):
                 label = f"{p}"
                 if desc:
                     label = f"{p} ({desc})"
-                answers[p] = _ask(f"\033[31m请输入 {label}: \033[0m")
+                # allow empty input: treat as blank and continue
+                val = _ask(f"\033[31m请输入 {label} (可留空): \033[0m")
+                if not val:
+                    skipped = True
+                    skipped_params.append(p)
+                answers[p] = val
             intent_data = dict(state.get("intent_data", {}))
             admin_args = dict(intent_data.get("admin_args") or {})
             for k, v in answers.items():
@@ -165,6 +172,8 @@ def process_user_msg(user_msg, prompt_content, llm, kb_index=None):
                 elif k == "namespace":
                     intent_data["namespace"] = v
             intent_data["admin_args"] = admin_args
+            if skipped_params:
+                intent_data["skipped_params"] = skipped_params
             if "intents" not in intent_data:
                 intent_data["intents"] = state.get("intents", [])
             state = graph.invoke({
@@ -174,7 +183,11 @@ def process_user_msg(user_msg, prompt_content, llm, kb_index=None):
                 "results": [],
                 "intent_data": intent_data,
                 "intents": intent_data.get("intents", []),
+                "skipped_params": skipped_params,
             })
+            if skipped and state.get("error"):
+                _print_step(3, "补参已跳过", "用户选择留空，按跳过参数继续执行。")
+                # continue loop only if still missing non-skipped params
         if state.get("error"):
             red_err = f"\033[31m{state['error']}\033[0m"
             _print_step(3, "信息不足，无法继续", red_err)

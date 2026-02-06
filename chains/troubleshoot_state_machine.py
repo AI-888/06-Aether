@@ -41,6 +41,8 @@ class TSState(TypedDict, total=False):
     missing_params: List[str]
     # 缺参对应的命令
     missing_for_tool: str
+    # 用户选择跳过的参数
+    skipped_params: List[str]
     # 真实拼接后的 topic/group
     resolved_real_topic: str
     resolved_real_group: str
@@ -462,8 +464,11 @@ def _admin_tool_node(state: TSState) -> TSState:
 
 
     required_flags = get_admin_required(next_tool)
+    skipped = set(state.get("skipped_params", []) or [])
     missing = []
     for flag in required_flags:
+        if flag in skipped:
+            continue
         if flag not in admin_args:
             missing.append(flag)
     if missing:
