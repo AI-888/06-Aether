@@ -11,23 +11,9 @@
 - no route info
 - broker not available
 
-常用 MCP 工具：
-- examineTopicRouteInfo
-- getClusterInfo
-- getBrokerRuntimeStats
-
 分析要求：
 - 判断是否为 Producer 自身问题，或由 Broker / NameServer 引起
 - 明确指出证据
-
-Producer FSM（状态 + 触发条件 + 行为 + 下一步）：
-| 状态 | 触发条件 | 行为 | 下一步 |
-| --- | --- | --- | --- |
-| check_topic_exist | 开始 | 执行 `examineTopicStats`（参数：`topic`） | PASS → check_route_info；FAIL → end_topic_not_exist；UNKNOWN → request_more_info |
-| check_route_info | 上一步 PASS | 执行 `examineTopicRouteInfo`（参数：`topic`） | PASS → check_broker_writable；FAIL → namesrv_fsm；UNKNOWN → request_more_info |
-| check_broker_writable | 上一步 PASS | 执行 `getBrokerRuntimeStats` | PASS → check_producer_log；FAIL → broker_fsm；UNKNOWN → request_more_info |
-| check_producer_log | 上一步 PASS | 读取日志 `/root/logs/rocketmqlogs`，关键词：`send timeout`, `no route info` | PASS → end_producer_ok；FAIL → broker_fsm；UNKNOWN → request_more_info |
-
 
 输出 JSON：
 

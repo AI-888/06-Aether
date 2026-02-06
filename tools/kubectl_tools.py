@@ -79,3 +79,35 @@ def run_kubectl_svc(
     if keyword:
         subcmd = f"{subcmd} | grep {keyword}"
     return run_kubectl(subcmd, execute=execute)
+
+
+def run_list_broker_pods(execute: bool = False) -> Dict[str, str]:
+    """List all RocketMQ broker pods."""
+    subcmd = "get pods -A -o wide | grep rocketmq5-broker"
+    return run_kubectl(subcmd, execute=execute)
+
+
+def run_list_namesrv_pods(execute: bool = False) -> Dict[str, str]:
+    """List all RocketMQ namesrv pods."""
+    subcmd = "get pods -A -o wide | grep rocketmq5-namesrv"
+    return run_kubectl(subcmd, execute=execute)
+
+
+def run_list_proxy_pods(execute: bool = False) -> Dict[str, str]:
+    """List all RocketMQ proxy pods."""
+    subcmd = "get pods -A -o wide | grep rocketmq5-proxy"
+    return run_kubectl(subcmd, execute=execute)
+
+
+def run_topic_exists_check(
+    k8s_namespace: str,
+    real_topic: str,
+    execute: bool = False,
+) -> Dict[str, str]:
+    """Check whether a RocketMQ topic exists via mqadmin in namesrv pod."""
+    subcmd = (
+        f"exec -n {k8s_namespace} ocloud-tdmq-rocketmq5-namesrv-0 "
+        f"-c ocloud-tdmq-rocketmq5-namesrv -- "
+        f"bin/mqadmin topicList -n 127.0.0.1:9876 | grep {real_topic}"
+    )
+    return run_kubectl(subcmd, execute=execute)

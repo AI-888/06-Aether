@@ -11,17 +11,6 @@
 - 位点长时间不变
 - 只有部分消费者工作
 
-常用 MCP 工具：
-- examineConsumeStats
-- examineSubscriptionGroupConfig
-
-Consumer Group FSM（状态 + 触发条件 + 行为 + 下一步）：
-| 状态 | 触发条件 | 行为 | 下一步 |
-| --- | --- | --- | --- |
-| check_group_progress | 开始 | 执行 `examineConsumeStats`（参数：`group`） | PASS → end_group_ok；FAIL → check_consumer_online；UNKNOWN → request_more_info |
-| check_consumer_online | 上一步 FAIL | 执行 `examineConsumerConnectionInfo`（参数：`group`） | PASS → broker_fsm；FAIL → end_no_consumer_online；UNKNOWN → request_more_info |
-
-
 输出 JSON：
 
 {{

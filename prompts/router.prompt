@@ -11,20 +11,8 @@
 - mixed
 - non_rocketmq
 
-路由 FSM（状态 + 触发条件 + 行为 + 下一步）：
-| 状态 | 触发条件 | 行为 | 下一步 |
-| --- | --- | --- | --- |
-| classify_problem | 收到 `user_msg` | 判断 `is_rocketmq_issue` 与 `problem_scope` | `is_rocketmq_issue=false` → end_non_rocketmq；`problem_scope=producer` → producer_fsm；`consumer` → consumer_fsm；`group` → group_fsm；`topic` → topic_fsm；`namesrv` → namesrv_fsm；`broker` → broker_fsm；`proxy` → proxy_fsm；`mixed` → producer_fsm |
-
-常见 MCP tool 示例（非完整列表）：
-- getClusterInfo
-- examineTopicRouteInfo
-- examineTopicStats
-- getBrokerRuntimeStats
-- getBrokerConfig
-
 判定规则：
-- 若输入包含 NameServer、MCP Admin API、Broker、Consumer Group、Topic、ISR、RocketMQ、rocketmq5 等关键词，默认判定为 RocketMQ
+- 若输入包含 NameServer、Broker、Consumer Group、Topic、ISR、RocketMQ、rocketmq5 等关键词，默认判定为 RocketMQ
 - “broker-0/1/2”等命名默认指 RocketMQ Broker，不要联想到 Kafka
 
 请根据用户输入的现象、错误信息或日志，判断：

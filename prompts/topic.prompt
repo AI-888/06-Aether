@@ -10,17 +10,6 @@
 - Producer 报 Topic 不存在
 - 消息只写入部分 Broker
 
-常用 MCP 工具：
-- fetchAllTopicList
-- examineTopicStats
-
-Topic FSM（状态 + 触发条件 + 行为 + 下一步）：
-| 状态 | 触发条件 | 行为 | 下一步 |
-| --- | --- | --- | --- |
-| check_topic_exist | 开始 | 执行 `fetchAllTopicList`（参数：`topic`） | PASS → check_topic_status；FAIL → end_topic_not_exist；UNKNOWN → request_more_info |
-| check_topic_status | 上一步 PASS | 执行 `examineTopicStats`（参数：`topic`） | PASS → end_topic_ok；FAIL → broker_fsm；UNKNOWN → request_more_info |
-
-
 输出 JSON：
 
 {{

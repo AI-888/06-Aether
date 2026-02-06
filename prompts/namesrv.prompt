@@ -10,18 +10,6 @@
 - heartbeat timeout
 - route info missing
 
-常用 MCP 工具：
-- getClusterInfo
-- examineTopicRouteInfo
-
-NameServer FSM（状态 + 触发条件 + 行为 + 下一步）：
-| 状态 | 触发条件 | 行为 | 下一步 |
-| --- | --- | --- | --- |
-| check_namesrv_pod | 开始 | 执行 `kubectl.get_pod`（参数：`namesrv`） | PASS → check_broker_register；FAIL → end_namesrv_down；UNKNOWN → request_more_info |
-| check_broker_register | 上一步 PASS | 执行 `getClusterInfo` | PASS → check_route_info；FAIL → end_broker_not_registered；UNKNOWN → request_more_info |
-| check_route_info | 上一步 PASS | 执行 `examineTopicRouteInfo`（参数：`topic`） | PASS → end_namesrv_ok；FAIL → end_route_missing；UNKNOWN → request_more_info |
-
-
 输出 JSON：
 
 {{

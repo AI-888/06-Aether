@@ -9,13 +9,6 @@
 - 客户端请求成功但无消息
 - Proxy 日志异常
 
-Proxy FSM（状态 + 触发条件 + 行为 + 下一步）：
-| 状态 | 触发条件 | 行为 | 下一步 |
-| --- | --- | --- | --- |
-| check_proxy_pod | 开始 | 执行 `kubectl.get_pod`（参数：`proxy`） | PASS → check_proxy_log；FAIL → end_proxy_down；UNKNOWN → request_more_info |
-| check_proxy_log | 上一步 PASS | 读取日志（关键词：`connection refused`, `timeout`） | PASS → end_proxy_ok；FAIL → broker_fsm；UNKNOWN → request_more_info |
-
-
 输出 JSON：
 
 {{
