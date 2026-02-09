@@ -79,38 +79,217 @@ def _derive_title(text: str, fallback: str) -> str:
     return fallback
 
 
+def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
+    """Split Java source code into chunks by classes and methods."""
+    lines = [ln.rstrip() for ln in text.splitlines()]
+    
+    # Remove license header and package/import statements
+    content_start = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith("public class") or line.strip().startswith("class") or \
+           line.strip().startswith("public interface") or line.strip().startswith("interface"):
+            content_start = i
+            break
+    
+    if content_start > 0:
+        lines = lines[content_start:]
+    
+    current_class: List[str] = []
+    current_method: List[str] = []
+    brace_count = 0
+    in_class = False
+    in_method = False
+    class_name = ""
+    method_name = ""
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        # Detect class/interface start
+        if not in_class and (stripped.startswith("public class") or stripped.startswith("class") or 
+                           stripped.startswith("public interface") or stripped.startswith("interface")):
+            if current_class:
+                # Save previous class
+                class_text = "\n".join(current_class)
+                if len(class_text) <= max_chars:
+                    yield (f"Class: {class_name}", class_text)
+                else:
+                    # Split large classes
+                    start = 0
+                    part_num = 1
+                    while start < len(class_text):
+                        end = min(len(class_text), start + max_chars)
+                        chunk = class_text[start:end]
+                        yield (f"Class: {class_name} Part {part_num}", chunk)
+                        if end == len(class_text):
+                            break
+                        start = end
+                        part_num += 1
+                current_class = []
+            
+            in_class = True
+            class_name = stripped.split()[1] if len(stripped.split()) > 1 else "Unknown"
+            current_class.append(line)
+            brace_count = 0
+            
+        elif in_class:
+            current_class.append(line)
+            
+            # Count braces to track scope
+            brace_count += line.count('{')
+            brace_count -= line.count('}')
+            
+            # Detect method start within class
+            if brace_count == 1 and (stripped.startswith("public") or stripped.startswith("private") or 
+                                   stripped.startswith("protected") or stripped.startswith("void") or
+                                   stripped.startswith("int") or stripped.startswith("String") or
+                                   stripped.startswith("boolean") or stripped.startswith("long")):
+                if "(" in stripped and ")" in stripped and not stripped.endswith(';'):
+                    if current_method:
+                        # Save previous method
+                        method_text = "\n".join(current_method)
+                        if len(method_text) <= max_chars:
+                            yield (f"Method: {class_name}.{method_name}", method_text)
+                        else:
+                            start = 0
+                            part_num = 1
+                            while start < len(method_text):
+                                end = min(len(method_text), start + max_chars)
+                                chunk = method_text[start:end]
+                                yield (f"Method: {class_name}.{method_name} Part {part_num}", chunk)
+                                if end == len(method_text):
+                                    break
+                                start = end
+                                part_num += 1
+                        current_method = []
+                    
+                    in_method = True
+                    # Extract method name
+                    method_parts = stripped.split()
+                    for j, part in enumerate(method_parts):
+                        if '(' in part:
+                            method_name = part.split('(')[0]
+                            break
+                    current_method.append(line)
+                    
+            elif in_method:
+                current_method.append(line)
+                
+                # Check if method ends
+                if brace_count <= 0:
+                    in_method = False
+                    if current_method:
+                        method_text = "\n".join(current_method)
+                        if len(method_text) <= max_chars:
+                            yield (f"Method: {class_name}.{method_name}", method_text)
+                        else:
+                            start = 0
+                            part_num = 1
+                            while start < len(method_text):
+                                end = min(len(method_text), start + max_chars)
+                                chunk = method_text[start:end]
+                                yield (f"Method: {class_name}.{method_name} Part {part_num}", chunk)
+                                if end == len(method_text):
+                                    break
+                                start = end
+                                part_num += 1
+                        current_method = []
+            
+            # Check if class ends
+            if brace_count <= 0:
+                in_class = False
+    
+    # Handle last class
+    if current_class:
+        class_text = "\n".join(current_class)
+        if len(class_text) <= max_chars:
+            yield (f"Class: {class_name}", class_text)
+        else:
+            start = 0
+            part_num = 1
+            while start < len(class_text):
+                end = min(len(class_text), start + max_chars)
+                chunk = class_text[start:end]
+                yield (f"Class: {class_name} Part {part_num}", chunk)
+                if end == len(class_text):
+                    break
+                start = end
+                part_num += 1
+    
+    # Handle last method
+    if current_method:
+        method_text = "\n".join(current_method)
+        if len(method_text) <= max_chars:
+            yield (f"Method: {class_name}.{method_name}", method_text)
+        else:
+            start = 0
+            part_num = 1
+            while start < len(method_text):
+                end = min(len(method_text), start + max_chars)
+                chunk = method_text[start:end]
+                yield (f"Method: {class_name}.{method_name} Part {part_num}", chunk)
+                if end == len(method_text):
+                    break
+                start = end
+                part_num += 1
+
+
 def build_index(data_dir: str, index_path: str) -> Dict[str, object]:
-    """Build knowledge base index from markdown files."""
+    """Build knowledge base index from markdown and Java files."""
     docs: List[KBChunk] = []
     total_tokens = 0
     for root, _, files in os.walk(data_dir):
         for fname in files:
-            if not fname.endswith(".md"):
+            # Skip non-supported files
+            if not (fname.endswith(".md") or fname.endswith(".java")):
                 continue
+                
             path = os.path.join(root, fname)
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
             except Exception:
                 continue
+            
             fallback_title = os.path.splitext(fname)[0]
-            title = _derive_title(text, fallback_title)
             category = _infer_category(path, data_dir)
             idx = 0
-            for heading, chunk_text in _chunk_markdown(text):
-                chunk_id = f"{os.path.relpath(path, data_dir)}#{idx}"
-                tokens = _tokenize(chunk_text)
-                total_tokens += len(tokens)
-                docs.append(KBChunk(
-                    id=chunk_id,
-                    path=path,
-                    title=title,
-                    text=chunk_text,
-                    tokens=tokens,
-                    category=category,
-                    heading=heading,
-                ))
-                idx += 1
+            
+            # Choose chunking strategy based on file type
+            if fname.endswith(".java"):
+                # Handle Java files
+                title = f"Java Source: {fallback_title}"
+                for heading, chunk_text in _chunk_java(text):
+                    chunk_id = f"{os.path.relpath(path, data_dir)}#{idx}"
+                    tokens = _tokenize(chunk_text)
+                    total_tokens += len(tokens)
+                    docs.append(KBChunk(
+                        id=chunk_id,
+                        path=path,
+                        title=title,
+                        text=chunk_text,
+                        tokens=tokens,
+                        category="java",
+                        heading=heading,
+                    ))
+                    idx += 1
+            else:
+                # Handle markdown files
+                title = _derive_title(text, fallback_title)
+                for heading, chunk_text in _chunk_markdown(text):
+                    chunk_id = f"{os.path.relpath(path, data_dir)}#{idx}"
+                    tokens = _tokenize(chunk_text)
+                    total_tokens += len(tokens)
+                    docs.append(KBChunk(
+                        id=chunk_id,
+                        path=path,
+                        title=title,
+                        text=chunk_text,
+                        tokens=tokens,
+                        category=category,
+                        heading=heading,
+                    ))
+                    idx += 1
 
     doc_count = len(docs) or 1
     avgdl = total_tokens / doc_count

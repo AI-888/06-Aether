@@ -99,6 +99,10 @@ def run_intent_router_chain(llm, user_msg: str, base_prompt: str = "") -> Dict[s
         if TOOL_GET_BROKER_CONFIG not in intents:
             intents.append(TOOL_GET_BROKER_CONFIG)
 
+    if "消费进度" in user_msg or ("进度" in user_msg and "消费" in user_msg):
+        if "consumerProgress" not in intents:
+            intents.append("consumerProgress")
+
     # Admin tool keyword routing (minimal but direct)
     admin_keyword_map = {
         "topicroute": "topicRoute",
@@ -175,8 +179,7 @@ def run_intent_router_chain(llm, user_msg: str, base_prompt: str = "") -> Dict[s
         "路由规则": "topicRoute",
         "getconsumeroffset": "getConsumerOffset",
         "消费offset": "getConsumerOffset",
-        "getconsumeroffsetbygroup": "getConsumerOffsetByGroup",
-        "按组offset": "getConsumerOffsetByGroup",
+        "消费进度": "getConsumerOffset",
     }
     for key, cmd in admin_keyword_map.items():
         if key in lower:

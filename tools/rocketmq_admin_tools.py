@@ -189,11 +189,7 @@ ADMIN_COMMAND_SPECS: Dict[str, Dict[str, Any]] = {
     "getConsumerOffset": {
         "desc": "Get consumer offset by group.topic.queueId.",
         "raw": "usage: mqadmin getConsumerOffset -b <arg> -g <arg> [-h] [-n <arg>] -q <arg> -t <arg>\n -b,--brokerAddr <arg>    set the broker address\n -g,--group <arg>         set consumer group\n -h,--help                Print help\n -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'\n -q,--queueId <arg>       set the queue id\n -t,--topic <arg>         set the topic\n",
-    },
-    "getConsumerOffsetByGroup": {
-        "desc": "Get consumer offset by group.",
-        "raw": "usage: mqadmin getConsumerOffsetByGroup -b <arg> -g <arg> [-h] [-n <arg>]\n -b,--brokerAddr <arg>    set the broker address\n -g,--group <arg>         set consumer group\n -h,--help                Print help\n -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'\n",
-    },
+    }
 }
 
 # Add parsed params list to specs

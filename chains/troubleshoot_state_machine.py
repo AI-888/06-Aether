@@ -328,7 +328,6 @@ def _admin_tool_node(state: TSState) -> TSState:
         "consumerStatus",
         "getConsumerConfig",
         "getConsumerOffset",
-        "getConsumerOffsetByGroup",
     )
     if requires_instance:
         if not instance_id:
@@ -457,11 +456,6 @@ def _admin_tool_node(state: TSState) -> TSState:
             admin_args["-q"] = queue_id
         if broker_addr and "-b" not in admin_args:
             admin_args["-b"] = broker_addr
-    if next_tool in ("getConsumerOffsetByGroup",):
-        _force_arg("-g", real_group, ["--group"])
-        if broker_addr and "-b" not in admin_args:
-            admin_args["-b"] = broker_addr
-
 
     required_flags = get_admin_required(next_tool)
     skipped = set(state.get("skipped_params", []) or [])
