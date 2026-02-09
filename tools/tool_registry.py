@@ -7,14 +7,7 @@ from tools.kubectl_tools import (
     run_list_proxy_pods,
     run_topic_exists_check,
 )
-from tools.rocketmq_admin_tools import (
-    ADMIN_TOOL_RUNNERS,
-    get_admin_command_specs,
-    get_admin_required_flags,
-    get_admin_param_desc,
-    run_mqadmin_command,
-    run_mqadmin_topic_list,
-)
+from tools.rocketmq_admin_tools import run_mcp_admin_tool
 
 
 @dataclass(frozen=True)
@@ -32,9 +25,16 @@ TOOL_LIST_BROKER_PODS = "list_broker_pods"
 TOOL_LIST_NAMESRV_PODS = "list_namesrv_pods"
 TOOL_LIST_PROXY_PODS = "list_proxy_pods"
 TOOL_SEND_FAIL_CHECK = "send_fail_check"
-TOOL_ROCKETMQ_ADMIN_COMMAND = "rocketmq_admin_command"
 TOOL_LIST_TOPICS = "list_topics"
-TOOL_GET_BROKER_CONFIG = "get_broker_config"
+TOOL_GET_BROKER_CONFIG = "getBrokerConfig"
+TOOL_TOPIC_ROUTE = "topicRoute"
+TOOL_TOPIC_STATUS = "topicStatus"
+TOOL_TOPIC_CLUSTER_LIST = "topicClusterList"
+TOOL_BROKER_STATUS = "brokerStatus"
+TOOL_CONSUMER_PROGRESS = "consumerProgress"
+TOOL_CONSUMER_STATUS = "consumerStatus"
+TOOL_CONSUMER_CONNECTION = "consumerConnection"
+TOOL_PRODUCER_CONNECTION = "producerConnection"
 
 
 def _run_send_fail_check(
@@ -71,40 +71,77 @@ TOOL_DEFS: Dict[str, ToolDef] = {
         runner=_run_send_fail_check,
         category="kubectl",
     ),
-    TOOL_ROCKETMQ_ADMIN_COMMAND: ToolDef(
-        name=TOOL_ROCKETMQ_ADMIN_COMMAND,
-        description="在 namesrv pod 内执行 mqadmin 命令",
-        runner=run_mqadmin_command,
-        include_in_prompt=False,
-        category="admin",
-    ),
     TOOL_LIST_TOPICS: ToolDef(
         name=TOOL_LIST_TOPICS,
         description="列出 RocketMQ 全部主题（topicList）",
-        runner=run_mqadmin_topic_list,
+        runner=lambda **kwargs: run_mcp_admin_tool("fetchAllTopicList", kwargs),
         category="admin",
-        params=["k8s_namespace", "keyword", "namesrv_addr", "namesrv_pod", "namesrv_container"],
+        params=["nameserverAddressList", "ak", "sk"],
     ),
     TOOL_GET_BROKER_CONFIG: ToolDef(
         name=TOOL_GET_BROKER_CONFIG,
         description="查询 RocketMQ Broker 配置（getBrokerConfig）",
-        runner=run_mqadmin_command,
+        runner=lambda **kwargs: run_mcp_admin_tool("getBrokerConfig", kwargs),
         category="admin",
-        params=["k8s_namespace", "namesrv_addr", "namesrv_pod", "namesrv_container", "admin_subcommand"],
+        params=["nameserverAddressList", "ak", "sk", "brokerAddr"],
+    ),
+    TOOL_TOPIC_ROUTE: ToolDef(
+        name=TOOL_TOPIC_ROUTE,
+        description="获取主题路由信息（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_TOPIC_ROUTE, kwargs),
+        category="admin",
+        params=["topic", "nameserverAddressList", "ak", "sk"],
+    ),
+    TOOL_TOPIC_STATUS: ToolDef(
+        name=TOOL_TOPIC_STATUS,
+        description="获取主题统计信息（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_TOPIC_STATUS, kwargs),
+        category="admin",
+        params=["topic", "nameserverAddressList", "ak", "sk"],
+    ),
+    TOOL_TOPIC_CLUSTER_LIST: ToolDef(
+        name=TOOL_TOPIC_CLUSTER_LIST,
+        description="获取主题集群列表（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_TOPIC_CLUSTER_LIST, kwargs),
+        category="admin",
+        params=["topic", "nameserverAddressList", "ak", "sk"],
+    ),
+    TOOL_BROKER_STATUS: ToolDef(
+        name=TOOL_BROKER_STATUS,
+        description="获取 Broker 运行状态（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_BROKER_STATUS, kwargs),
+        category="admin",
+        params=["brokerAddr", "nameserverAddressList", "ak", "sk"],
+    ),
+    TOOL_CONSUMER_PROGRESS: ToolDef(
+        name=TOOL_CONSUMER_PROGRESS,
+        description="获取消费者组消费进度（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_CONSUMER_PROGRESS, kwargs),
+        category="admin",
+        params=["group", "nameserverAddressList", "ak", "sk"],
+    ),
+    TOOL_CONSUMER_STATUS: ToolDef(
+        name=TOOL_CONSUMER_STATUS,
+        description="获取消费者连接信息（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_CONSUMER_STATUS, kwargs),
+        category="admin",
+        params=["consumerGroup", "nameserverAddressList", "ak", "sk"],
+    ),
+    TOOL_CONSUMER_CONNECTION: ToolDef(
+        name=TOOL_CONSUMER_CONNECTION,
+        description="获取消费者连接信息（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_CONSUMER_CONNECTION, kwargs),
+        category="admin",
+        params=["consumerGroup", "nameserverAddressList", "ak", "sk"],
+    ),
+    TOOL_PRODUCER_CONNECTION: ToolDef(
+        name=TOOL_PRODUCER_CONNECTION,
+        description="获取生产者连接信息（MCP）",
+        runner=lambda **kwargs: run_mcp_admin_tool(TOOL_PRODUCER_CONNECTION, kwargs),
+        category="admin",
+        params=["producerGroup", "topic", "nameserverAddressList", "ak", "sk"],
     ),
 }
-
-# Append admin commands as first-class tools (with per-command params)
-for cmd_name, spec in get_admin_command_specs().items():
-    if cmd_name in TOOL_DEFS:
-        continue
-    TOOL_DEFS[cmd_name] = ToolDef(
-        name=cmd_name,
-        description=spec.get("desc", ""),
-        runner=ADMIN_TOOL_RUNNERS.get(cmd_name),
-        category="admin",
-        params=spec.get("params", []) + ["k8s_namespace", "namesrv_addr", "namesrv_pod", "namesrv_container"],
-    )
 
 
 def list_tool_names() -> List[str]:
@@ -143,9 +180,29 @@ def list_admin_tool_names() -> List[str]:
 
 def get_admin_required(name: str) -> List[str]:
     """Return required flags for admin command."""
-    return get_admin_required_flags(name)
+    return []
 
 
 def get_admin_param_descs(name: str) -> Dict[str, str]:
     """Return flag -> description mapping for admin command."""
-    return get_admin_param_desc(name)
+    try:
+        tool = get_tool_def(name)
+    except Exception:
+        return {}
+    base_desc = {
+        "topic": "topic name",
+        "group": "consumer group",
+        "consumerGroup": "consumer group",
+        "producerGroup": "producer group",
+        "brokerAddr": "broker address (IP:PORT)",
+        "nameserverAddressList": "namesrv address list",
+        "ak": "access key",
+        "sk": "secret key",
+        "msgId": "message id",
+        "key": "message key",
+    }
+    descs: Dict[str, str] = {}
+    for p in tool.params or []:
+        if p in base_desc:
+            descs[p] = base_desc[p]
+    return descs

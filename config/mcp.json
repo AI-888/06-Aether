@@ -1,0 +1,9 @@
+{
+  "base_url": "http://9.134.241.105:6868/sse",
+  "call_path": "/message",
+  "call_mode": "tool_call",
+  "ak": "",
+  "sk": "",
+  "nameserverAddressList": [],
+  "timeout_sec": 30
+}

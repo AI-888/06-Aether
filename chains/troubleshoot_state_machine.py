@@ -12,7 +12,6 @@ from tools.tool_registry import (
     TOOL_LIST_TOPICS,
     TOOL_GET_BROKER_CONFIG,
     list_admin_tool_names,
-    get_admin_required,
     run_tool,
 )
 
@@ -105,32 +104,22 @@ def _list_proxy_pods_node(state: TSState) -> TSState:
 
 
 def _list_topics_node(state: TSState) -> TSState:
-    """工具节点：调用 mqadmin topicList 列出全部主题。"""
-    intent_data = state.get("intent_data", {})
-    k8s_ns = "tce"
-    keyword = intent_data.get("topic") or intent_data.get("keyword")
-    res = run_tool(TOOL_LIST_TOPICS, k8s_namespace=k8s_ns, keyword=keyword, execute=True)
+    """工具节点：调用 MCP admin API 列出全部主题。"""
+    res = run_tool(TOOL_LIST_TOPICS)
     results = list(state.get("results", []))
-    results.append({"action": res.get("command"), "result": res})
+    results.append({"action": TOOL_LIST_TOPICS, "result": res})
     return {**state, "results": results}
 
 
 def _get_broker_config_node(state: TSState) -> TSState:
-    """工具节点：调用 mqadmin getBrokerConfig 查询 Broker 配置。"""
+    """工具节点：调用 MCP admin API 查询 Broker 配置。"""
     intent_data = state.get("intent_data", {})
     broker_addr = intent_data.get("broker") or intent_data.get("broker_addr")
     if not broker_addr:
         return {**state, "error": "缺少 broker 地址（brokerAddr）。"}
-    k8s_ns = "tce"
-    admin_subcommand = f"getBrokerConfig -b {broker_addr}"
-    res = run_tool(
-        TOOL_GET_BROKER_CONFIG,
-        k8s_namespace=k8s_ns,
-        admin_subcommand=admin_subcommand,
-        execute=True,
-    )
+    res = run_tool(TOOL_GET_BROKER_CONFIG, brokerAddr=broker_addr)
     results = list(state.get("results", []))
-    results.append({"action": res.get("command"), "result": res})
+    results.append({"action": TOOL_GET_BROKER_CONFIG, "result": res})
     return {**state, "results": results}
 
 
@@ -254,13 +243,11 @@ def _build_tool_queue(intents: List[str]) -> List[str]:
 
 
 def _admin_tool_node(state: TSState) -> TSState:
-    """通用 admin 工具节点：执行任意 mqadmin 命令。"""
+    """通用 admin 工具节点：执行 MCP admin API 工具。"""
+    from tools.tool_registry import get_tool_def
+
     next_tool = state.get("next_tool", "")
     intent_data = state.get("intent_data", {})
-    k8s_ns = intent_data.get("k8s_namespace") or "tce"
-    admin_args = dict(intent_data.get("admin_args") or {})
-    raw_args = intent_data.get("raw_args")
-
     user_msg = state.get("user_msg", "")
 
     def _extract_kv(text: str, key: str) -> Optional[str]:
@@ -295,33 +282,13 @@ def _admin_tool_node(state: TSState) -> TSState:
         or _extract_kv(user_msg, "broker")
         or _extract_kv(user_msg, "brokerAddr")
     )
-    msg_id = _extract_kv(user_msg, "msgId") or _extract_kv(user_msg, "msg_id") or _extract_kv(user_msg, "messageId")
-    msg_key = _extract_kv(user_msg, "msgKey") or _extract_kv(user_msg, "key") or _extract_kv(user_msg, "messageKey")
-    queue_id = _extract_kv(user_msg, "queueId") or _extract_kv(user_msg, "queue_id")
-    offset = _extract_kv(user_msg, "offset")
-    cluster = _extract_kv(user_msg, "cluster") or _extract_kv(user_msg, "clusterName")
-    client_id = _extract_kv(user_msg, "clientId") or _extract_kv(user_msg, "client_id")
-    unit_name = _extract_kv(user_msg, "unitName") or _extract_kv(user_msg, "unit")
-    instant = _extract_kv(user_msg, "instant")
-    lmq = _extract_kv(user_msg, "lmq")
-    trace_topic = _extract_kv(user_msg, "traceTopic")
-    controller_addr = _extract_kv(user_msg, "controllerAddress") or _extract_kv(user_msg, "controller")
-    queue_count = _extract_kv(user_msg, "count")
-    begin_ts = _extract_kv(user_msg, "beginTimestamp") or _extract_kv(user_msg, "begin")
-    end_ts = _extract_kv(user_msg, "endTimestamp") or _extract_kv(user_msg, "end")
 
-    # Topic / group queries require instance_id; use it to pick k8s namespace
+    skipped = set(state.get("skipped_params", []) or intent_data.get("skipped_params", []) or [])
+
     requires_instance = next_tool in (
         "topicRoute",
         "topicStatus",
         "topicClusterList",
-        "topicList",
-        "queryMsgById",
-        "queryMsgByKey",
-        "queryMsgByUniqueKey",
-        "queryMsgByOffset",
-        "queryMsgTraceById",
-        "printMsg",
         "producerConnection",
         "consumerConnection",
         "consumerProgress",
@@ -329,25 +296,20 @@ def _admin_tool_node(state: TSState) -> TSState:
         "getConsumerConfig",
         "getConsumerOffset",
     )
-    if requires_instance:
-        if not instance_id:
-            return {
-                **state,
-                "error": f"{next_tool} 缺少必要参数: instance_id",
-                "missing_params": ["instance_id"],
-            }
-        instance_lower = instance_id.lower()
-        if instance_lower.startswith("rmq-"):
-            suffix = instance_id.split("-", 1)[1]
-            k8s_ns = f"rmqnamesrv-{suffix}"
-        else:
-            k8s_ns = "tce"
-            if not rocketmq_ns:
-                return {
-                    **state,
-                    "error": f"{next_tool} 缺少必要参数: namespace",
-                    "missing_params": ["namespace"],
-                }
+    if requires_instance and not instance_id and "instance_id" not in skipped:
+        return {
+            **state,
+            "error": f"{next_tool} 缺少必要参数: instance_id",
+            "missing_params": ["instance_id"],
+            "missing_for_tool": next_tool,
+        }
+    if instance_id and instance_id.lower().startswith("rocketmq-") and not rocketmq_ns and "namespace" not in skipped:
+        return {
+            **state,
+            "error": f"{next_tool} 缺少必要参数: namespace",
+            "missing_params": ["namespace"],
+            "missing_for_tool": next_tool,
+        }
 
     def _normalize_topic(raw_topic: Optional[str]) -> Optional[str]:
         if not raw_topic or not instance_id:
@@ -372,99 +334,36 @@ def _admin_tool_node(state: TSState) -> TSState:
     real_topic = _normalize_topic(topic)
     real_group = _normalize_group(group)
 
-    def _force_arg(short_flag: str, value: Optional[str], long_flags: Optional[List[str]] = None) -> None:
-        if not value:
-            return
-        admin_args[short_flag] = value
-        if long_flags:
-            for lf in long_flags:
-                admin_args.pop(lf, None)
-
+    mcp_params: Dict[str, Any] = {}
     if next_tool in ("topicRoute", "topicStatus", "topicClusterList"):
-        _force_arg("-t", real_topic, ["--topic"])
+        if real_topic:
+            mcp_params["topic"] = real_topic
+    if next_tool in ("consumerProgress",):
+        if real_group:
+            mcp_params["group"] = real_group
+    if next_tool in ("consumerConnection", "consumerStatus"):
+        if real_group:
+            mcp_params["consumerGroup"] = real_group
     if next_tool in ("producerConnection",):
-        _force_arg("-g", real_group, ["--producerGroup"])
-        _force_arg("-t", real_topic, ["--topic"])
-    if next_tool in ("consumerConnection", "consumerStatus", "consumerProgress"):
-        _force_arg("-g", real_group, ["--consumerGroup", "--group"])
-    if next_tool in ("brokerStatus", "brokerConsumeStats", "getAcl", "listAcl", "getConsumerOffset"):
-        if broker_addr and "-b" not in admin_args and "--brokerAddr" not in admin_args:
-            admin_args["-b"] = broker_addr
-    if next_tool in ("queryMsgById", "queryMsgByUniqueKey"):
-        if msg_id and "-i" not in admin_args and "--msgId" not in admin_args:
-            admin_args["-i"] = msg_id
-        _force_arg("-t", real_topic, ["--topic"])
-        _force_arg("-g", real_group, ["--consumerGroup", "--group"])
-        if client_id and "-d" not in admin_args and "--clientId" not in admin_args:
-            admin_args["-d"] = client_id
-        if unit_name and "-u" not in admin_args and "--unitName" not in admin_args:
-            admin_args["-u"] = unit_name
-    if next_tool == "queryMsgByKey":
-        if msg_key and "-k" not in admin_args and "--msgKey" not in admin_args:
-            admin_args["-k"] = msg_key
-        _force_arg("-t", real_topic, ["--topic"])
-        if begin_ts and "-b" not in admin_args and "--beginTimestamp" not in admin_args:
-            admin_args["-b"] = begin_ts
-        if end_ts and "-e" not in admin_args and "--endTimestamp" not in admin_args:
-            admin_args["-e"] = end_ts
-    if next_tool == "queryMsgByOffset":
-        if queue_id and "-i" not in admin_args and "--queueId" not in admin_args:
-            admin_args["-i"] = queue_id
-        if offset and "-o" not in admin_args and "--offset" not in admin_args:
-            admin_args["-o"] = offset
-        _force_arg("-t", real_topic, ["--topic"])
-        if broker_addr and "-b" not in admin_args and "--brokerName" not in admin_args:
-            admin_args["-b"] = broker_addr
-    if next_tool == "queryMsgTraceById":
-        if msg_id and "-i" not in admin_args:
-            admin_args["-i"] = msg_id
-        if trace_topic and "-t" not in admin_args and "--traceTopic" not in admin_args:
-            admin_args["-t"] = trace_topic
-        if begin_ts and "-b" not in admin_args and "--beginTimestamp" not in admin_args:
-            admin_args["-b"] = begin_ts
-        if end_ts and "-e" not in admin_args and "--endTimestamp" not in admin_args:
-            admin_args["-e"] = end_ts
-    if next_tool == "printMsg":
-        _force_arg("-t", real_topic, ["--topic"])
-        if begin_ts and "-b" not in admin_args:
-            admin_args["-b"] = begin_ts
-        if end_ts and "-e" not in admin_args:
-            admin_args["-e"] = end_ts
-    if next_tool == "brokerConsumeStats":
-        if broker_addr and "-b" not in admin_args:
-            admin_args["-b"] = broker_addr
-    if next_tool == "browseMessage":
-        _force_arg("-t", real_topic, ["--topic"])
-        if lmq and "-l" not in admin_args:
-            admin_args["-l"] = lmq
-        if instant and "-i" not in admin_args:
-            admin_args["-i"] = instant
-        if queue_count and "-c" not in admin_args:
-            admin_args["-c"] = queue_count
-    if next_tool == "getConsumerConfig":
-        _force_arg("-g", real_group, ["--groupName"])
-    if next_tool in ("clusterAclConfigVersion", "haStatus", "getSyncStateSet", "getBrokerEpoch"):
-        if cluster and "-c" not in admin_args and "--clusterName" not in admin_args:
-            admin_args["-c"] = cluster
-    if next_tool in ("getControllerMetaData", "getControllerConfig", "getSyncStateSet"):
-        if controller_addr and "-a" not in admin_args and "--controllerAddress" not in admin_args:
-            admin_args["-a"] = controller_addr
-    if next_tool in ("getConsumerOffset",):
-        _force_arg("-g", real_group, ["--group"])
-        _force_arg("-t", real_topic, ["--topic"])
-        if queue_id and "-q" not in admin_args:
-            admin_args["-q"] = queue_id
-        if broker_addr and "-b" not in admin_args:
-            admin_args["-b"] = broker_addr
+        if real_group:
+            mcp_params["producerGroup"] = real_group
+        if real_topic:
+            mcp_params["topic"] = real_topic
+    if next_tool in ("brokerStatus", "getBrokerConfig"):
+        if broker_addr:
+            mcp_params["brokerAddr"] = broker_addr
 
-    required_flags = get_admin_required(next_tool)
-    skipped = set(state.get("skipped_params", []) or [])
-    missing = []
-    for flag in required_flags:
-        if flag in skipped:
+    tool_def = get_tool_def(next_tool)
+    required_params = list(tool_def.params or [])
+    for auto_param in ("nameserverAddressList", "ak", "sk"):
+        if auto_param in required_params:
+            required_params.remove(auto_param)
+    missing: List[str] = []
+    for param in required_params:
+        if param in skipped:
             continue
-        if flag not in admin_args:
-            missing.append(flag)
+        if param not in mcp_params:
+            missing.append(param)
     if missing:
         return {
             **state,
@@ -474,18 +373,12 @@ def _admin_tool_node(state: TSState) -> TSState:
         }
 
     state = {**state}
-    if real_topic or real_group:
+    if real_topic or real_group or instance_id or rocketmq_ns:
         state["resolved_real_topic"] = real_topic or ""
         state["resolved_real_group"] = real_group or ""
         state["resolved_instance_id"] = instance_id or ""
         state["resolved_namespace"] = rocketmq_ns or ""
-    res = run_tool(
-        next_tool,
-        k8s_namespace=k8s_ns,
-        admin_args=admin_args,
-        raw_args=raw_args,
-        execute=True,
-    )
+    res = run_tool(next_tool, **mcp_params)
     results = list(state.get("results", []))
-    results.append({"action": res.get("command"), "result": res})
+    results.append({"action": next_tool, "result": res})
     return {**state, "results": results}

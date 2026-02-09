@@ -171,6 +171,12 @@ def process_user_msg(user_msg, prompt_content, llm, kb_index=None):
                     intent_data["instance_id"] = v
                 elif k == "namespace":
                     intent_data["namespace"] = v
+                elif k == "topic":
+                    intent_data["topic"] = v
+                elif k in ("group", "consumerGroup", "producerGroup"):
+                    intent_data["group"] = v
+                elif k == "brokerAddr":
+                    intent_data["broker"] = v
             intent_data["admin_args"] = admin_args
             if skipped_params:
                 intent_data["skipped_params"] = skipped_params

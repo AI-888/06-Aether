@@ -34,8 +34,8 @@ def run_intent_router_chain(llm, user_msg: str, base_prompt: str = "") -> Dict[s
     intents_list = list_tool_names() + list_admin_tool_names() + ["unknown"]
     intents_lines = "\n".join([f"- {name}" for name in intents_list])
     template = f"""
-        {base_prompt}
-        
+        {{base_prompt}}
+
         {tool_list_text}
 
         你是 RocketMQ 排障意图路由器。请根据用户输入识别要执行的操作意图。
@@ -69,10 +69,10 @@ def run_intent_router_chain(llm, user_msg: str, base_prompt: str = "") -> Dict[s
     prompt = PromptTemplate.from_template(template)
     try:
         chain = prompt | llm
-        resp = chain.invoke({"user_msg": user_msg})
+        resp = chain.invoke({"user_msg": user_msg, "base_prompt": base_prompt})
     except TypeError:
         # Fallback for dummy/test LLM without Runnable support
-        resp = llm.invoke({"user_msg": user_msg})
+        resp = llm.invoke({"user_msg": user_msg, "base_prompt": base_prompt})
     data = _extract_json(resp.content)
 
     # rule-based fallback

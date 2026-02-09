@@ -19,13 +19,14 @@ def run_kubectl(
     if not execute:
         result = {"command": cmd, "output": "", "executed": "false"}
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{ts}] [Tool Call] kubectl output: {result}")
+        print(f"[{ts}] [Tool Call] kubectl output: {{'executed': 'false', 'command': '{cmd}'}}")
         return result
 
     output = run_shell(cmd)
     result = {"command": cmd, "output": output, "executed": "true"}
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] [Tool Call] kubectl output: {result}")
+    preview = output.replace("\n", " ")[:300]
+    print(f"[{ts}] [Tool Call] kubectl output: {{'executed': 'true', 'command': '{cmd}', 'output_preview': '{preview}'}}")
     return result
 
 
