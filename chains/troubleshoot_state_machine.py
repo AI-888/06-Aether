@@ -4,6 +4,7 @@ from langgraph.graph import END
 from langgraph.graph.state import StateGraph
 
 from chains.intent_router_chain import run_intent_router_chain
+from skills.skills_loader import load_skills_from_dir
 from tools.tool_registry import (
     TOOL_LIST_BROKER_PODS,
     TOOL_LIST_NAMESRV_PODS,
@@ -48,6 +49,8 @@ class TSState(TypedDict, total=False):
     # 关联实例与命名空间
     resolved_instance_id: str
     resolved_namespace: str
+    # skills 内容（仅在工具调用前加载）
+    skills_content: str
 
 
 def _intent_node(state: TSState) -> TSState:
@@ -76,6 +79,11 @@ def _dispatch_node(state: TSState) -> TSState:
     next_tool = queue.pop(0)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] [Step 2] dispatch: next_tool={next_tool}, remain={queue}")
+    if not state.get("skills_content"):
+        skills_content = load_skills_from_dir()
+        if skills_content:
+            print(f"[{ts}] [Step 2] Skills loaded before tool call")
+        return {**state, "tool_queue": queue, "next_tool": next_tool, "skills_content": skills_content}
     return {**state, "tool_queue": queue, "next_tool": next_tool}
 
 
@@ -264,23 +272,23 @@ def _admin_tool_node(state: TSState) -> TSState:
 
     instance_id = intent_data.get("instance_id") or _extract_kv(user_msg, "instance_id")
     topic = (
-        intent_data.get("topic")
-        or _extract_kv(user_msg, "topic")
-        or _extract_kv(user_msg, "traceTopic")
-        or _extract_kv(user_msg, "lmq")
+            intent_data.get("topic")
+            or _extract_kv(user_msg, "topic")
+            or _extract_kv(user_msg, "traceTopic")
+            or _extract_kv(user_msg, "lmq")
     )
     rocketmq_ns = intent_data.get("namespace") or _extract_kv(user_msg, "namespace")
     group = (
-        intent_data.get("group")
-        or _extract_kv(user_msg, "group")
-        or _extract_kv(user_msg, "consumerGroup")
-        or _extract_kv(user_msg, "producerGroup")
+            intent_data.get("group")
+            or _extract_kv(user_msg, "group")
+            or _extract_kv(user_msg, "consumerGroup")
+            or _extract_kv(user_msg, "producerGroup")
     )
     broker_addr = (
-        intent_data.get("broker")
-        or intent_data.get("broker_addr")
-        or _extract_kv(user_msg, "broker")
-        or _extract_kv(user_msg, "brokerAddr")
+            intent_data.get("broker")
+            or intent_data.get("broker_addr")
+            or _extract_kv(user_msg, "broker")
+            or _extract_kv(user_msg, "brokerAddr")
     )
 
     skipped = set(state.get("skipped_params", []) or intent_data.get("skipped_params", []) or [])

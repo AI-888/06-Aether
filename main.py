@@ -209,9 +209,10 @@ def process_user_msg(user_msg, prompt_content, llm, kb_index=None):
     results = state.get("results", [])
     if results:
         try:
+            skills_context = state.get("skills_content", "")
             fmt_prompt = (
                 "请将以下工具执行结果整理为可读的摘要，输出纯文本，不要Markdown。\n\n"
-                f"{results}"
+                f"{skills_context}\n\n{results}" if skills_context else f"{results}"
             )
             fmt_resp = llm.invoke(fmt_prompt)
             _print_step(4, "工具结果格式化输出", getattr(fmt_resp, "content", str(fmt_resp)))

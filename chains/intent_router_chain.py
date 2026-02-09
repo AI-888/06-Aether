@@ -33,8 +33,9 @@ def run_intent_router_chain(llm, user_msg: str, base_prompt: str = "") -> Dict[s
     tool_list_text = build_tools_prompt()
     intents_list = list_tool_names() + list_admin_tool_names() + ["unknown"]
     intents_lines = "\n".join([f"- {name}" for name in intents_list])
+    safe_base = base_prompt.replace("{", "{{").replace("}", "}}")
     template = f"""
-        {{base_prompt}}
+        {safe_base}
 
         {tool_list_text}
 
@@ -69,10 +70,10 @@ def run_intent_router_chain(llm, user_msg: str, base_prompt: str = "") -> Dict[s
     prompt = PromptTemplate.from_template(template)
     try:
         chain = prompt | llm
-        resp = chain.invoke({"user_msg": user_msg, "base_prompt": base_prompt})
+        resp = chain.invoke({"user_msg": user_msg})
     except TypeError:
         # Fallback for dummy/test LLM without Runnable support
-        resp = llm.invoke({"user_msg": user_msg, "base_prompt": base_prompt})
+        resp = llm.invoke({"user_msg": user_msg})
     data = _extract_json(resp.content)
 
     # rule-based fallback
