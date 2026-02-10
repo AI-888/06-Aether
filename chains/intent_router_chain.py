@@ -26,7 +26,7 @@ def run_intent_router_chain(llm, user_msg: str, base_prompt: str = "") -> Dict[s
     使用 LLM 识别用户意图，输出结构化 intents。
     """
     tool_list_text = build_tools_prompt()
-    intents_list = list_tool_names() + list_tool_names() + ["unknown"]
+    intents_list = list_tool_names() + ["unknown"]
     intents_lines = "\n".join([f"- {name}" for name in intents_list])
     safe_base = base_prompt.replace("{", "{{").replace("}", "}}")
     template = f"""
