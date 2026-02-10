@@ -1,4 +1,3 @@
-
 # 运维管理
 ---
 
@@ -63,7 +62,8 @@ $ nohup sh mqbroker -n 192.168.1.1:9876 -c $ROCKETMQ_HOME/conf/2m-noslave/broker
 ...
 ```
 
-如上启动命令是在单个NameServer情况下使用的。对于多个NameServer的集群，Broker启动命令中`-n`后面的地址列表用分号隔开即可，例如 `192.168.1.1:9876;192.161.2:9876`。
+如上启动命令是在单个NameServer情况下使用的。对于多个NameServer的集群，Broker启动命令中`-n`后面的地址列表用分号隔开即可，例如
+`192.168.1.1:9876;192.161.2:9876`。
 
 #### 1.3 多Master多Slave模式-异步复制
 
@@ -135,7 +135,8 @@ $ nohup sh mqbroker -n 192.168.1.1:9876 -c $ROCKETMQ_HOME/conf/2m-2s-sync/broker
 $ nohup sh mqbroker -n 192.168.1.1:9876 -c $ROCKETMQ_HOME/conf/2m-2s-sync/broker-b-s.properties &
 ```
 
-以上Broker与Slave配对是通过指定相同的BrokerName参数来配对，Master的BrokerId必须是0，Slave的BrokerId必须是大于0的数。另外一个Master下面可以挂载多个Slave，同一Master下的多个Slave通过指定不同的BrokerId来区分。$ROCKETMQ_HOME指的RocketMQ安装目录，需要用户自己设置此环境变量。
+以上Broker与Slave配对是通过指定相同的BrokerName参数来配对，Master的BrokerId必须是0，Slave的BrokerId必须是大于0的数。另外一个Master下面可以挂载多个Slave，同一Master下的多个Slave通过指定不同的BrokerId来区分。$
+ROCKETMQ_HOME指的RocketMQ安装目录，需要用户自己设置此环境变量。
 
 #### 1.5  RocketMQ 5.0 自动主从切换
 
@@ -154,7 +155,9 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
 > 1. 执行命令方法：`./mqadmin {command} {args}`
 > 2. 几乎所有命令都需要配置-n表示NameServer地址，格式为ip:port
 > 3. 几乎所有命令都可以通过-h获取帮助
-> 4. 如果既有Broker地址（-b）配置项又有clusterName（-c）配置项，则优先以Broker地址执行命令，如果不配置Broker地址，则对集群中所有主机执行命令，只支持一个Broker地址。-b格式为ip:port，port默认是10911
+> 4.
+如果既有Broker地址（-b）配置项又有clusterName（-c）配置项，则优先以Broker地址执行命令，如果不配置Broker地址，则对集群中所有主机执行命令，只支持一个Broker地址。-b格式为ip:
+port，port默认是10911
 > 5. 在tools下可以看到很多命令，但并不是所有命令都能使用，只有在MQAdminStartup中初始化的命令才能使用，你也可以修改这个类，增加或自定义命令
 > 6. 由于版本更新问题，少部分命令可能未及时更新，遇到错误请直接阅读相关命令源码
 
@@ -393,8 +396,6 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
  </tr>
 </table>
 
-
-
 #### 2.2 集群相关
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -468,7 +469,6 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
   <td class=xl66 width=185 style='width:139pt'>NameServer 服务地址，格式 ip:port</td>
  </tr>
 </table>
-
 
 #### 2.3 Broker相关
 
@@ -686,7 +686,6 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
   <td class=xl68 width=87 style='width:65pt'>发送次数</td>
  </tr>
 </table>
-
 
 #### 2.4 消息相关
 
@@ -1020,7 +1019,6 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
  </tr>
 </table>
 
-
 #### 2.5 消费者、消费组相关
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -1189,9 +1187,6 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
  </tr>
 </table>
 
-
-
-
 #### 2.6 连接相关
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -1242,9 +1237,6 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
   <td class=xl68 width=87 style='width:65pt'>打印帮助</td>
  </tr>
 </table>
-
-
-
 
 #### 2.7 NameServer相关
 
@@ -1337,9 +1329,6 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
  </tr>
 </table>
 
-
-
-
 #### 2.8 其他
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -1367,18 +1356,18 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
  </tr>
 </table>
 
-
 ### 3   运维常见问题
 
 #### 3.1 RocketMQ的mqadmin命令报错问题
 
->  问题描述：有时候在部署完RocketMQ集群后，尝试执行“mqadmin”一些运维命令，会出现下面的异常信息：
+> 问题描述：有时候在部署完RocketMQ集群后，尝试执行“mqadmin”一些运维命令，会出现下面的异常信息：
 >
 > ```java
 > org.apache.rocketmq.remoting.exception.RemotingConnectException: connect to <null> failed
 > ```
 
-解决方法：可以在部署RocketMQ集群的虚拟机上执行`export NAMESRV_ADDR=ip:9876`（ip指的是集群中部署NameServer组件的机器ip地址）命令之后再使用“mqadmin”的相关命令进行查询，即可得到结果。
+解决方法：可以在部署RocketMQ集群的虚拟机上执行`export NAMESRV_ADDR=ip:9876`
+（ip指的是集群中部署NameServer组件的机器ip地址）命令之后再使用“mqadmin”的相关命令进行查询，即可得到结果。
 
 #### 3.2 RocketMQ生产端和消费端版本不一致导致不能正常消费的问题
 
@@ -1388,13 +1377,14 @@ RocketMQ 5.0 开始支持自动主从切换的模式，可参考以下文档
 > Not found the consumer group consume stats, because return offset table is empty, maybe the consumer not consume any message的异常消息。
 > ```
 
-  解决方案：RocketMQ 的jar包：rocketmq-client等包应该保持生产端，消费端使用相同的version。
+解决方案：RocketMQ 的jar包：rocketmq-client等包应该保持生产端，消费端使用相同的version。
 
 #### 3.3  新增一个topic的消费组时，无法消费历史消息的问题
 
-> 问题描述：当同一个topic的新增消费组启动时，消费的消息是当前的offset的消息，并未获取历史消息。    
+> 问题描述：当同一个topic的新增消费组启动时，消费的消息是当前的offset的消息，并未获取历史消息。
 
-解决方案：rocketmq默认策略是从消息队列尾部，即跳过历史消息。如果想消费历史消息，则需要设置：`org.apache.rocketmq.client.consumer.DefaultMQPushConsumer#setConsumeFromWhere`。常用的有以下三种配置：
+解决方案：rocketmq默认策略是从消息队列尾部，即跳过历史消息。如果想消费历史消息，则需要设置：
+`org.apache.rocketmq.client.consumer.DefaultMQPushConsumer#setConsumeFromWhere`。常用的有以下三种配置：
 
 - 默认配置，一个新的订阅组第一次启动从队列的最后位置开始消费，后续再启动接着上次消费的进度开始消费，即跳过历史消息；
 
@@ -1408,7 +1398,8 @@ consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
 consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
 ```
 
-- 一个新的订阅组第一次启动从指定时间点开始消费，后续再启动接着上次消费的进度开始消费，和consumer.setConsumeTimestamp()配合使用，默认是半个小时以前；
+- 一个新的订阅组第一次启动从指定时间点开始消费，后续再启动接着上次消费的进度开始消费，和consumer.setConsumeTimestamp()
+  配合使用，默认是半个小时以前；
 
 ```java
 consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_TIMESTAMP);
@@ -1416,11 +1407,16 @@ consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_TIMESTAMP);
 
 #### 3.4 如何开启从Slave读数据功能
 
-在某些情况下，Consumer需要将消费位点重置到1-2天前，这时在内存有限的Master Broker上，CommitLog会承载比较重的IO压力，影响到该Broker的其它消息的读与写。可以开启`slaveReadEnable=true`，当Master Broker发现Consumer的消费位点与CommitLog的最新值的差值的容量超过该机器内存的百分比（`accessMessageInMemoryMaxRatio=40%`），会推荐Consumer从Slave Broker中去读取数据，降低Master Broker的IO。
+在某些情况下，Consumer需要将消费位点重置到1-2天前，这时在内存有限的Master
+Broker上，CommitLog会承载比较重的IO压力，影响到该Broker的其它消息的读与写。可以开启`slaveReadEnable=true`，当Master
+Broker发现Consumer的消费位点与CommitLog的最新值的差值的容量超过该机器内存的百分比（`accessMessageInMemoryMaxRatio=40%`
+），会推荐Consumer从Slave Broker中去读取数据，降低Master Broker的IO。
 
 #### 3.5 性能调优问题
 
-异步刷盘建议使用自旋锁，同步刷盘建议使用重入锁，调整Broker配置项`useReentrantLockWhenPutMessage`，默认为false；异步刷盘建议开启`TransientStorePoolEnable`；建议关闭transferMsgByHeap，提高拉消息效率；同步刷盘建议适当增大`sendMessageThreadPoolNums`，具体配置需要经过压测。
+异步刷盘建议使用自旋锁，同步刷盘建议使用重入锁，调整Broker配置项`useReentrantLockWhenPutMessage`，默认为false；异步刷盘建议开启
+`TransientStorePoolEnable`；建议关闭transferMsgByHeap，提高拉消息效率；同步刷盘建议适当增大`sendMessageThreadPoolNums`
+，具体配置需要经过压测。
 
 #### 3.6 在RocketMQ中msgId和offsetMsgId的含义与区别
 
@@ -1430,5 +1426,7 @@ consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_TIMESTAMP);
 SendResult [sendStatus=SEND_OK, msgId=0A42333A0DC818B4AAC246C290FD0000, offsetMsgId=0A42333A00002A9F000000000134F1F5, messageQueue=MessageQueue [topic=topicTest1, BrokerName=mac.local, queueId=3], queueOffset=4]
 ```
 
-- msgId，对于客户端来说msgId是由客户端producer实例端生成的，具体来说，调用方法`MessageClientIDSetter.createUniqIDBuffer()`生成唯一的Id；
-- offsetMsgId，offsetMsgId是由Broker服务端在写入消息时生成的（采用”IP地址+Port端口”与“CommitLog的物理偏移量地址”做了一个字符串拼接），其中offsetMsgId就是在RocketMQ控制台直接输入查询的那个messageId。
+- msgId，对于客户端来说msgId是由客户端producer实例端生成的，具体来说，调用方法`MessageClientIDSetter.createUniqIDBuffer()`
+  生成唯一的Id；
+-
+offsetMsgId，offsetMsgId是由Broker服务端在写入消息时生成的（采用”IP地址+Port端口”与“CommitLog的物理偏移量地址”做了一个字符串拼接），其中offsetMsgId就是在RocketMQ控制台直接输入查询的那个messageId。

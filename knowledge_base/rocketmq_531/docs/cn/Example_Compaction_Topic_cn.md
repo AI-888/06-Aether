@@ -3,7 +3,9 @@
 ## 使用方式
 
 ### 打开namesrv上支持顺序消息的开关
+
 CompactionTopic依赖顺序消息来保障一致性
+
 ```shell
 $ bin/mqadmin updateNamesrvConfig -k orderMessageEnable -v true
 ```

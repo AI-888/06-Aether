@@ -15,7 +15,9 @@
 
 RocketMQ 的安装包分为两种，二进制包和源码包。
 
-点击[这里](https://archive.apache.org/dist/rocketmq/4.9.4/rocketmq-all-4.9.4-source-release.zip) 下载 Apache RocketMQ 4.9.4的源码包。你也可以从[这里](https://archive.apache.org/dist/rocketmq/4.9.4/rocketmq-all-4.9.4-bin-release.zip) 下载到二进制包。二进制包是已经编译完成后可以直接运行的，源码包是需要编译后运行的，
+点击[这里](https://archive.apache.org/dist/rocketmq/4.9.4/rocketmq-all-4.9.4-source-release.zip) 下载 Apache RocketMQ
+4.9.4的源码包。你也可以从[这里](https://archive.apache.org/dist/rocketmq/4.9.4/rocketmq-all-4.9.4-bin-release.zip)
+下载到二进制包。二进制包是已经编译完成后可以直接运行的，源码包是需要编译后运行的，
 
 :::
 
@@ -27,6 +29,7 @@ RocketMQ 的安装包分为两种，二进制包和源码包。
 $ mvn -Prelease-all -DskipTests -Dspotbugs.skip=true clean install -U
 $ cd distribution/target/rocketmq-4.9.4/rocketmq-4.9.4
 ```
+
 ## 2. 启动NameServer
 
 安装完RocketMQ包后，我们启动NameServer
@@ -71,9 +74,10 @@ The broker[broker-a,192.169.1.2:10911] boot success...
 
 :::
 
-## 4. 消息收发 
+## 4. 消息收发
 
-在进行消息收发之前，我们需要告诉客户端NameServer的地址，RocketMQ有多种方式在客户端中设置NameServer地址，这里我们利用环境变量`NAMESRV_ADDR`
+在进行消息收发之前，我们需要告诉客户端NameServer的地址，RocketMQ有多种方式在客户端中设置NameServer地址，这里我们利用环境变量
+`NAMESRV_ADDR`
 
 ``` shell
 $ export NAMESRV_ADDR=localhost:9876
@@ -83,8 +87,6 @@ $ sh bin/tools.sh org.apache.rocketmq.example.quickstart.Producer
 $ sh bin/tools.sh org.apache.rocketmq.example.quickstart.Consumer
  ConsumeMessageThread_%d Receive New Messages: [MessageExt...
 ```
-
-
 
 ## 5. 关闭服务器
 

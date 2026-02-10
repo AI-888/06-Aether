@@ -32,10 +32,12 @@ import os
 import re
 import subprocess
 import sys
+
 import urllib2
 
 try:
     import jira.client
+
     JIRA_IMPORTED = True
 except ImportError:
     JIRA_IMPORTED = False
@@ -55,7 +57,6 @@ JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
 # https://github.com/settings/tokens. This script only requires the "public_repo" scope.
 GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
-
 
 GITHUB_BASE = "https://github.com/apache/rocketmq/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/rocketmq"
@@ -132,7 +133,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         had_conflicts = True
 
     commit_authors = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name,
-                             '--pretty=format:%an <%ae>']).split("\n")
+                              '--pretty=format:%an <%ae>']).split("\n")
     distinct_authors = sorted(set(commit_authors),
                               key=lambda x: commit_authors.count(x), reverse=True)
     primary_author = raw_input(
@@ -142,7 +143,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         primary_author = distinct_authors[0]
 
     commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name,
-                      '--pretty=format:%h [%an] %s']).split("\n\n")
+                       '--pretty=format:%h [%an] %s']).split("\n\n")
 
     merge_message_flags = []
 
@@ -410,7 +411,7 @@ def main():
 
     if not bool(pr["mergeable"]):
         msg = "Pull request %s is not mergeable in its current form.\n" % pr_num + \
-            "Continue? (experts only!)"
+              "Continue? (experts only!)"
         continue_maybe(msg)
 
     print("\n=== Pull Request #%s ===" % pr_num)
@@ -439,8 +440,10 @@ def main():
         print("Could not find jira-python library. Run 'sudo pip install jira' to install.")
         print("Exiting without trying to close the associated JIRA.")
 
+
 if __name__ == "__main__":
     import doctest
+
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         exit(-1)

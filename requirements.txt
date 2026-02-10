@@ -1,5 +1,8 @@
 # requirements.txt
 
+# LangGraph - 状态机框架
+langgraph>=0.0.40
+
 # MySQL 连接
 mysql-connector-python>=8.1.0
 

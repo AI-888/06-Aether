@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Iterable, Tuple
 
-
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
@@ -82,18 +81,18 @@ def _derive_title(text: str, fallback: str) -> str:
 def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
     """Split Java source code into chunks by classes and methods."""
     lines = [ln.rstrip() for ln in text.splitlines()]
-    
+
     # Remove license header and package/import statements
     content_start = 0
     for i, line in enumerate(lines):
         if line.strip().startswith("public class") or line.strip().startswith("class") or \
-           line.strip().startswith("public interface") or line.strip().startswith("interface"):
+                line.strip().startswith("public interface") or line.strip().startswith("interface"):
             content_start = i
             break
-    
+
     if content_start > 0:
         lines = lines[content_start:]
-    
+
     current_class: List[str] = []
     current_method: List[str] = []
     brace_count = 0
@@ -101,13 +100,13 @@ def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
     in_method = False
     class_name = ""
     method_name = ""
-    
+
     for i, line in enumerate(lines):
         stripped = line.strip()
-        
+
         # Detect class/interface start
-        if not in_class and (stripped.startswith("public class") or stripped.startswith("class") or 
-                           stripped.startswith("public interface") or stripped.startswith("interface")):
+        if not in_class and (stripped.startswith("public class") or stripped.startswith("class") or
+                             stripped.startswith("public interface") or stripped.startswith("interface")):
             if current_class:
                 # Save previous class
                 class_text = "\n".join(current_class)
@@ -126,24 +125,24 @@ def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
                         start = end
                         part_num += 1
                 current_class = []
-            
+
             in_class = True
             class_name = stripped.split()[1] if len(stripped.split()) > 1 else "Unknown"
             current_class.append(line)
             brace_count = 0
-            
+
         elif in_class:
             current_class.append(line)
-            
+
             # Count braces to track scope
             brace_count += line.count('{')
             brace_count -= line.count('}')
-            
+
             # Detect method start within class
-            if brace_count == 1 and (stripped.startswith("public") or stripped.startswith("private") or 
-                                   stripped.startswith("protected") or stripped.startswith("void") or
-                                   stripped.startswith("int") or stripped.startswith("String") or
-                                   stripped.startswith("boolean") or stripped.startswith("long")):
+            if brace_count == 1 and (stripped.startswith("public") or stripped.startswith("private") or
+                                     stripped.startswith("protected") or stripped.startswith("void") or
+                                     stripped.startswith("int") or stripped.startswith("String") or
+                                     stripped.startswith("boolean") or stripped.startswith("long")):
                 if "(" in stripped and ")" in stripped and not stripped.endswith(';'):
                     if current_method:
                         # Save previous method
@@ -162,7 +161,7 @@ def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
                                 start = end
                                 part_num += 1
                         current_method = []
-                    
+
                     in_method = True
                     # Extract method name
                     method_parts = stripped.split()
@@ -171,10 +170,10 @@ def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
                             method_name = part.split('(')[0]
                             break
                     current_method.append(line)
-                    
+
             elif in_method:
                 current_method.append(line)
-                
+
                 # Check if method ends
                 if brace_count <= 0:
                     in_method = False
@@ -194,11 +193,11 @@ def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
                                 start = end
                                 part_num += 1
                         current_method = []
-            
+
             # Check if class ends
             if brace_count <= 0:
                 in_class = False
-    
+
     # Handle last class
     if current_class:
         class_text = "\n".join(current_class)
@@ -215,7 +214,7 @@ def _chunk_java(text: str, max_chars: int = 1200) -> Iterable[Tuple[str, str]]:
                     break
                 start = end
                 part_num += 1
-    
+
     # Handle last method
     if current_method:
         method_text = "\n".join(current_method)
@@ -243,18 +242,18 @@ def build_index(data_dir: str, index_path: str) -> Dict[str, object]:
             # Skip non-supported files
             if not (fname.endswith(".md") or fname.endswith(".java")):
                 continue
-                
+
             path = os.path.join(root, fname)
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
             except Exception:
                 continue
-            
+
             fallback_title = os.path.splitext(fname)[0]
             category = _infer_category(path, data_dir)
             idx = 0
-            
+
             # Choose chunking strategy based on file type
             if fname.endswith(".java"):
                 # Handle Java files
@@ -328,7 +327,8 @@ def load_index(index_path: str) -> Dict[str, object]:
         return json.load(f)
 
 
-def _bm25_score(query_tokens: List[str], doc_tokens: List[str], df: Dict[str, int], doc_count: int, avgdl: float) -> float:
+def _bm25_score(query_tokens: List[str], doc_tokens: List[str], df: Dict[str, int], doc_count: int,
+                avgdl: float) -> float:
     """Compute BM25-like score."""
     if not doc_tokens:
         return 0.0

@@ -8,14 +8,18 @@
 2. 64位 JDK 1.8+
 
 :::
+
 ## 1.配置 broker.conf
+
 ```shell
 # 配置 broker 的IP地址
 echo "brokerIP1=127.0.0.1" > broker.conf
 ```
 
 ## 2.编写docker-compose
+
 为了快速启动并运行 RockerMQ 集群，您可以使用以下模板通过修改或添加环境部分中的配置来创建 docker-compose.yml 文件。
+
 ```text
 version: '3.8'
 
@@ -52,6 +56,7 @@ networks:
 ```
 
 ## 3.启动RocketMQ集群
+
 根据 docker-compose.yml 文件启动所有定义的服务。
 
 import Tabs from '@theme/Tabs';
@@ -70,10 +75,12 @@ docker-compose up -d
 ```code
 docker-compose -p rocketmq_project up -d
 ```
+
 </TabItem>
 </Tabs>
 
 ## 4.工具测试消息收发
+
 ```shell
 # 进入broker容器
 $ docker exec -it rmqbroker bash
@@ -101,7 +108,8 @@ $ sh tools.sh org.apache.rocketmq.example.quickstart.Consumer
    </dependency>
    ```
 
-3. 在已创建的Java工程中，创建发送普通消息程序并运行，Apache RocketMQ可用于以三种方式发送消息：**同步、异步和单向传输**，这里以同步模式为示例：
+3. 在已创建的Java工程中，创建发送普通消息程序并运行，Apache RocketMQ可用于以三种方式发送消息：**同步、异步和单向传输**
+   ，这里以同步模式为示例：
 
    ```java
    import org.apache.rocketmq.client.producer.DefaultMQProducer;

@@ -5,9 +5,14 @@ Before introducing the mqadmin management tool, the following points need to be 
 - The way of executing a command is:./mqadmin {command} {args}
 - Almost all commands need to attach the -n option to represent the nameServer address, formatted as ip:port;
 - Almost all commands can get help information with the -h option;
-- If the broker address -b option and clusterName -c option are both configured with specific values, the command execution will select the broker address specified by -b option. The value of the -b option can only be configured with a single address. The format is ip:port. The default port value is 10911. If the value of the -b option is not configured, the command will be applied to all brokers in the entire cluster.
-- You can see many commands under tools, but not all commands can be used, only the commands initialized in MQAdminStartup can be used, you can also modify this class, add or customize commands;
-- Due to the issue of version update, a small number of commands may not be updated in time, please read the related command source code to eliminate and resolve the error.
+- If the broker address -b option and clusterName -c option are both configured with specific values, the command
+  execution will select the broker address specified by -b option. The value of the -b option can only be configured
+  with a single address. The format is ip:port. The default port value is 10911. If the value of the -b option is not
+  configured, the command will be applied to all brokers in the entire cluster.
+- You can see many commands under tools, but not all commands can be used, only the commands initialized in
+  MQAdminStartup can be used, you can also modify this class, add or customize commands;
+- Due to the issue of version update, a small number of commands may not be updated in time, please read the related
+  command source code to eliminate and resolve the error.
 
 ## 1 Topic related command instructions
 
@@ -236,15 +241,9 @@ Before introducing the mqadmin management tool, the following points need to be 
  </tr>
 </table>
 
-
-
-
-
-
-
 ## 2 Cluster related command instructions
 
-#### 
+####  
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
  <col width=177>
@@ -316,10 +315,6 @@ Before introducing the mqadmin management tool, the following points need to be 
   <td class=xl66 width=185 style='width:139pt'>Service address used to specify nameServer and formatted as ip:port</td>
  </tr>
 </table>
-
-
-
-
 
 ## 3 Broker related command instructions
 
@@ -528,11 +523,9 @@ Before introducing the mqadmin management tool, the following points need to be 
  </tr>
 </table>
 
-
-
 ## 4 Message related command instructions
 
-#### 
+####  
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
  <col width=177>
@@ -865,11 +858,9 @@ Before introducing the mqadmin management tool, the following points need to be 
  </tr>
 </table>
 
-
-
 ## 5 Consumer and Consumer Group related command instructions
 
-#### 
+####  
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
  <col width=177>
@@ -1061,12 +1052,9 @@ Before introducing the mqadmin management tool, the following points need to be 
  </tr>
 </table>
 
-
-
-
 ## 6 Connection related command instructions
 
-#### 
+####  
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
  <col width=177>
@@ -1117,12 +1105,9 @@ Before introducing the mqadmin management tool, the following points need to be 
  </tr>
 </table>
 
-
-
-
 ## 7 NameServer related command instructions
 
-#### 
+####  
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
  <col width=177>
@@ -1213,12 +1198,9 @@ Before introducing the mqadmin management tool, the following points need to be 
  </tr>
 </table>
 
-
-
-
 ## 8 Other relevant command notes
 
-#### 
+####  
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
  <col width=177>

@@ -16,21 +16,21 @@ from knowledge_base.kb_store import load_index, search
 def query_rocketmq_kb(query: str, top_k: int = 5, show_content: bool = True):
     """Query RocketMQ knowledge base with enhanced formatting."""
     index_path = os.path.join(os.path.dirname(__file__), "rocketmq_kb_index.json")
-    
+
     if not os.path.exists(index_path):
         print("RocketMQ knowledge base index not found.")
         print("Please run build_rocketmq_kb.py first to build the index.")
         return
-    
+
     # Load the index
     index = load_index(index_path)
-    
+
     # Search for relevant content
     results = search(index, query, top_k=top_k)
-    
+
     print(f"\n🔍 Search results for: '{query}'")
     print("=" * 80)
-    
+
     if not results:
         print("❌ No matching results found.")
         print("\n💡 Suggestions:")
@@ -38,14 +38,14 @@ def query_rocketmq_kb(query: str, top_k: int = 5, show_content: bool = True):
         print("- Search for specific classes (e.g., 'DefaultMQPushConsumer', 'MessageQueue')")
         print("- Look for error types (e.g., 'MQClientException', 'RemotingException')")
         return
-    
+
     for i, result in enumerate(results, 1):
         print(f"\n{i}. 📄 {result.get('title', 'Unknown')}")
         print(f"   📁 Category: {result.get('category', 'unknown')}")
         print(f"   📍 Heading: {result.get('heading', 'N/A')}")
         print(f"   📊 Score: {result.get('score', 0):.4f}")
         print(f"   📍 File: {os.path.basename(result.get('path', 'N/A'))}")
-        
+
         if show_content:
             text = result.get('text', '')
             # Clean up and format the content
@@ -57,12 +57,12 @@ def query_rocketmq_kb(query: str, top_k: int = 5, show_content: bool = True):
                     preview_lines.append(line)
                     if len(preview_lines) >= 5:  # Show first 5 meaningful lines
                         break
-            
+
             if preview_lines:
                 print(f"   📝 Content preview:")
                 for j, line in enumerate(preview_lines, 1):
                     print(f"      {j}. {line}")
-                    
+
             # Show method/class signature if available
             if "Method:" in result.get('heading', '') or "Class:" in result.get('heading', ''):
                 # Extract signature from first few lines
@@ -74,8 +74,9 @@ def query_rocketmq_kb(query: str, top_k: int = 5, show_content: bool = True):
                             break
                 if signature_lines:
                     signature = ' '.join(signature_lines)
-                    print(f"   🏷️  Signature: {signature[:200]}..." if len(signature) > 200 else f"   🏷️  Signature: {signature}")
-    
+                    print(f"   🏷️  Signature: {signature[:200]}..." if len(
+                        signature) > 200 else f"   🏷️  Signature: {signature}")
+
     print("\n" + "=" * 80)
     print(f"📈 Found {len(results)} results for your query.")
 
@@ -83,18 +84,18 @@ def query_rocketmq_kb(query: str, top_k: int = 5, show_content: bool = True):
 def show_rocketmq_categories():
     """Show available categories in the RocketMQ knowledge base."""
     index_path = os.path.join(os.path.dirname(__file__), "rocketmq_kb_index.json")
-    
+
     if not os.path.exists(index_path):
         print("Knowledge base not found. Please build it first.")
         return
-    
+
     index = load_index(index_path)
     categories = {}
-    
+
     for doc in index.get('docs', []):
         category = doc.get('category', 'unknown')
         categories[category] = categories.get(category, 0) + 1
-    
+
     print("\n📂 RocketMQ Knowledge Base Categories:")
     print("=" * 50)
     for category, count in sorted(categories.items(), key=lambda x: x[1], reverse=True):
@@ -138,11 +139,11 @@ def interactive_mode():
     print("  - 'categories' - Show available categories")
     print("  - 'tips' - Show search tips")
     print("  - 'quit' or 'exit' - Exit the tool")
-    
+
     while True:
         try:
             user_input = input("\n🔍 Query: ").strip()
-            
+
             if user_input.lower() in ['quit', 'exit', 'q']:
                 print("👋 Goodbye!")
                 break
@@ -154,7 +155,7 @@ def interactive_mode():
                 continue
             else:
                 query_rocketmq_kb(user_input, top_k=5, show_content=True)
-                
+
         except KeyboardInterrupt:
             print("\n👋 Goodbye!")
             break

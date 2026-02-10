@@ -9,8 +9,6 @@
 
 :::
 
-
-
 ## 1.拉取RocketMQ镜像
 
 这里以[dockerhub](https://hub.docker.com/r/apache/rocketmq/tags)上 RocketMQ 4.9.6 版本的镜像为例，介绍部署过程。
@@ -47,7 +45,6 @@ docker logs -f rmqnamesrv
 
 NameServer成功启动后，我们启动Broker。
 
-
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -71,6 +68,7 @@ apache/rocketmq:4.9.6 sh mqbroker \
 # 验证 Broker 是否启动成功
 docker logs rmqbroker
 ```
+
 </TabItem>
 <TabItem value="Windows" label="Windows">
 
@@ -141,7 +139,8 @@ $ sh tools.sh org.apache.rocketmq.example.quickstart.Consumer
    </dependency>
    ```
 
-3. 在已创建的Java工程中，创建发送普通消息程序并运行，Apache RocketMQ可用于以三种方式发送消息：**同步、异步和单向传输**，这里以同步模式为示例：
+3. 在已创建的Java工程中，创建发送普通消息程序并运行，Apache RocketMQ可用于以三种方式发送消息：**同步、异步和单向传输**
+   ，这里以同步模式为示例：
 
    ```java
    import org.apache.rocketmq.client.producer.DefaultMQProducer;
@@ -212,9 +211,10 @@ $ sh tools.sh org.apache.rocketmq.example.quickstart.Consumer
    }
    ```
 
-
 ## 7. 停止容器
+
 完成实验后，我们可以通过以下方式停止容器
+
 ```shell
 # 停止 NameServer 容器
 docker stop rmqnamesrv

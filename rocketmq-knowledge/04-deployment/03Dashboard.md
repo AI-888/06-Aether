@@ -1,7 +1,7 @@
-
 # RocketMQ Dashboard
 
-`RocketMQ Dashboard` 是 RocketMQ 的管控利器，为用户提供客户端和应用程序的各种事件、性能的统计信息，支持以可视化工具代替 Topic 配置、Broker 管理等命令行操作。
+`RocketMQ Dashboard` 是 RocketMQ 的管控利器，为用户提供客户端和应用程序的各种事件、性能的统计信息，支持以可视化工具代替
+Topic 配置、Broker 管理等命令行操作。
 
 ### 启动 RocketMQ Dashboard
 
@@ -69,11 +69,11 @@ $ docker run -d --name rocketmq-dashboard -e "JAVA_OPTS=-Drocketmq.namesrv.addr=
 
 ### 2. 源码安装
 
-源码地址：[apache/rocketmq-dashboard](https://github.com/apache/rocketmq-dashboard) 
+源码地址：[apache/rocketmq-dashboard](https://github.com/apache/rocketmq-dashboard)
 
 下载并解压，切换至源码目录 ```rocketmq-dashboard-master/```
 
-① 编译 ```rocketmq-dashboard``` 
+① 编译 ```rocketmq-dashboard```
 
 ```shell
 $ mvn clean package -Dmaven.test.skip=true
@@ -97,7 +97,7 @@ $ java -jar target/rocketmq-dashboard-1.0.1-SNAPSHOT.jar
 
 ## 使用教程
 
-### 1. 创建主题 Topic 
+### 1. 创建主题 Topic
 
 主题 ```>``` 新增/更新
 

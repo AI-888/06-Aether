@@ -1,39 +1,55 @@
 # TLS Configuration
+
 This section introduce TLS configuration in RocketMQ.
 
 ## 1 Generate Certification Files
+
 User can generate certification files using OpenSSL. Suggested to generate files in Linux.
 
 ### 1.1 Generate ca.pem
+
 ```shell
 openssl req -newkey rsa:2048 -keyout ca_rsa_private.pem -x509 -days 365 -out ca.pem
 ```
+
 ### 1.2 Generate server.csr
+
 ```shell
 openssl req -newkey rsa:2048 -keyout server_rsa.key  -out server.csr
 ```
+
 ### 1.3 Generate server.pem
+
 ```shell
 openssl x509 -req -days 365 -in server.csr -CA ca.pem -CAkey ca_rsa_private.pem -CAcreateserial -out server.pem
 ```
+
 ### 1.4 Generate client.csr
+
 ```shell
 openssl req -newkey rsa:2048 -keyout client_rsa.key -out client.csr
 ```
+
 ### 1.5 Generate client.pem
+
 ```shell
 openssl x509 -req -days 365 -in client.csr -CA ca.pem -CAkey ca_rsa_private.pem -CAcreateserial -out client.pem
 ```
+
 ### 1.6 Generate server.key
+
 ```shell
 openssl pkcs8 -topk8 -v1 PBE-SHA1-RC4-128 -in  server_rsa.key -out server.key
 ```
+
 ### 1.7 Generate client.key
+
 ```shell
 openssl pkcs8 -topk8 -v1 PBE-SHA1-RC4-128 -in client_rsa.key -out client.key
 ```
 
 ## 2 Create tls.properties
+
 Create tls.properties, correctly configure the path and password of the generated certificates.
 
 ```properties
@@ -68,7 +84,6 @@ tls.client.authServer=false
 tls.client.trustCertPath=/opt/certFiles/ca.pem
 ```
 
-
 ## 3 Update Rocketmq JVM parameters
 
 Edit the configuration file under the rocketmq/bin path to make tls.properties configurations take effect.
@@ -76,12 +91,15 @@ Edit the configuration file under the rocketmq/bin path to make tls.properties c
 The value of "tls.config.file" needs to be replaced by the file path created in step 2.
 
 ### 3.1 Edit runserver.sh
+
 Add following content in JAVA_OPT:
+
 ```shell
 JAVA_OPT="${JAVA_OPT} -Dtls.server.mode=enforcing -Dtls.config.file=/opt/rocketmq-4.9.3/conf/tls.properties"
 ```
 
 ### 3.2 Edit runbroker.sh
+
 Add following content in JAVA_OPT:
 
 ```shell
@@ -91,6 +109,7 @@ JAVA_OPT="${JAVA_OPT} -Dorg.apache.rocketmq.remoting.ssl.mode=enforcing -Dtls.co
 # 4 Client connection
 
 Create tlsclient.properties using by client. Add following content:
+
 ```properties
 # The store path of client-side private key 
 tls.client.keyPath=/opt/certFiles/client.key
@@ -103,11 +122,13 @@ tls.client.trustCertPath=/opt/certFiles/ca.pem
 ```
 
 Add following parameters in JVM. The value of "tls.config.file" needs to be replaced by the file path we created:
+
 ```properties
 -Dtls.client.authServer=true -Dtls.enable=true  -Dtls.test.mode.enable=false  -Dtls.config.file=/opt/certs/tlsclient.properties
 ```
 
 Enable TLS for client linke following:
+
 ```Java
 public class ExampleProducer {
     public static void main(String[] args) throws Exception {

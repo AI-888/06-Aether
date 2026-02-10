@@ -2,7 +2,6 @@
 
 这一节介绍如何在 Kubernetes 环境下，使⽤ Helm 快速部署⼀个单节点 RocketMQ-4.x 版本的服务，并完成简单的消息收发。
 
-
 :::tip 系统要求
 
 - 一个运行中的 `Kubernetes` 集群
@@ -10,7 +9,6 @@
 - 64位 `JDK 1.8+`
 
 :::
-
 
 ## 1.安装 Helm
 
@@ -26,16 +24,12 @@ $ helm version
 $ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 ```
 
-
-
 ## 2.下载 RocketMQ Helm 仓库
 
 ```bash
 $ helm pull oci://registry-1.docker.io/apache/rocketmq --version 0.0.1 
 $ tar -zxvf rocketmq-0.0.1.tgz
 ```
-
-
 
 ## 3.部署 RocketMQ
 
@@ -65,7 +59,6 @@ default       rocketmq-demo-broker-0                      0/1     Running   0   
 default       rocketmq-demo-nameserver-6678bb86f6-62s5d   0/1     Running   0          19s   192.168.85.229    k8s-node01   <none>           <none>
 ```
 
-
 ## 4.验证消息发送和接收
 
 使用tools工具测试验证消息发送和接收。
@@ -85,7 +78,6 @@ SendResult [sendStatus=SEND_OK, msgId=7F00000100E60F6F4D334B52982103E7, offsetMs
 $ sh tools.sh org.apache.rocketmq.example.quickstart.Consumer
 ConsumeMessageThread_please_rename_unique_group_name_4_16 Receive New Messages: [MessageExt [brokerName=rocketmq-demo-broker-0, queueId=2, storeSize=192, queueOffset=124, sysFlag=0, bornTimestamp=1723734104097, bornHost=/192.168.58.228:40492, storeTimestamp=1723734104097, storeHost=/192.168.58.228:10911, msgId=C0A83AE400002A9F000000000002ECD2, commitLogOffset=191698, bodyCRC=638172955, reconsumeTimes=0, preparedTransactionOffset=0, toString()=Message{topic='TopicTest', flag=0, properties={MIN_OFFSET=0, MAX_OFFSET=125, CONSUME_START_TIME=1723734158990, UNIQ_KEY=7F00000100E60F6F4D334B52982103E7, CLUSTER=DefaultCluster, TAGS=TagA}, body=[72, 101, 108, 108, 111, 32, 82, 111, 99, 107, 101, 116, 77, 81, 32, 57, 57, 57], transactionId='null'}]]
 ```
-
 
 ## 5.释放 RocketMQ 资源
 

@@ -1,11 +1,15 @@
 # Dledger Quick Deployment
 ---
+
 ### preface
+
 This document is mainly introduced for how to build and deploy auto failover RocketMQ cluster based on DLedger.
 
-For detailed new cluster deployment and old cluster upgrade document, please refer to [Deployment Guide](deploy_guide.md).
+For detailed new cluster deployment and old cluster upgrade document, please refer
+to [Deployment Guide](deploy_guide.md).
 
 ### 1. Build from source code
+
 Build phase contains two parts, first, build DLedger, then build RocketMQ.
 
 #### 1.1 Build DLedger
@@ -57,10 +61,10 @@ $ sh bin/dledger/fast-try.sh stop
 
 Quick deployment, default configuration is in directory conf/dledger, default storage path is /tmp/rmqstore.
 
-
 ### 3. Failover
 
-After successful deployment, kill Leader process(as the above example, kill process that binds port 30931), about 10 seconds elapses, use clusterList command check cluster's status, Leader switch to another node.
+After successful deployment, kill Leader process(as the above example, kill process that binds port 30931), about 10
+seconds elapses, use clusterList command check cluster's status, Leader switch to another node.
 
 
 

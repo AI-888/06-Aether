@@ -20,7 +20,8 @@ Run the command below.
 nohup sh mqproxy &
 ```
 
-The command will only launch the `Proxy` component itself. It assumes that `Namesrv` nodes are already running at the address specified `nameSrvAddr`, and broker nodes, registering themselves with `nameSrvAddr`, are running too.
+The command will only launch the `Proxy` component itself. It assumes that `Namesrv` nodes are already running at the
+address specified `nameSrvAddr`, and broker nodes, registering themselves with `nameSrvAddr`, are running too.
 
 ## `Local` Mode
 
@@ -33,4 +34,5 @@ Run the command below.
 nohup sh mqproxy &
 ```
 
-The previous command will launch the `Proxy`, with `Broker` in the same process. It assumes `Namesrv` nodes are running at the address specified by `nameSrvAddr`.
+The previous command will launch the `Proxy`, with `Broker` in the same process. It assumes `Namesrv` nodes are running
+at the address specified by `nameSrvAddr`.

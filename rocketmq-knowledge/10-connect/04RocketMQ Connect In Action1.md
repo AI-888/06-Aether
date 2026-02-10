@@ -1,6 +1,6 @@
 # RocketMQ Connect实战1
 
-MySQL Source(CDC)  -  >RocketMQ Connect  ->  MySQL Sink(JDBC)
+MySQL Source(CDC)  -  >RocketMQ Connect ->  MySQL Sink(JDBC)
 
 ## 准备
 
@@ -11,27 +11,25 @@ MySQL Source(CDC)  -  >RocketMQ Connect  ->  MySQL Sink(JDBC)
 3. Maven 3.2.x或以上版本;
 4. 启动 [RocketMQ](https://rocketmq.apache.org/docs/quick-start/);
 
-
-
 **tips** : ${ROCKETMQ_HOME} 位置说明
 
->bin-release.zip 版本：/rocketmq-all-4.9.4-bin-release
+> bin-release.zip 版本：/rocketmq-all-4.9.4-bin-release
 >
 >source-release.zip 版本：/rocketmq-all-4.9.4-source-release/distribution
 
-
 ### 启动Connect
-
 
 #### Connector插件编译
 
 Debezium RocketMQ Connector
+
 ```
 $ cd rocketmq-connect/connectors/rocketmq-connect-debezium/
 $ mvn clean package -Dmaven.test.skip=true
 ```
 
 将 Debezium MySQL RocketMQ Connector 编译好的包放入Runtime加载目录。命令如下：
+
 ```
 mkdir -p /usr/local/connector-plugins
 cp rocketmq-connect-debezium-mysql/target/rocketmq-connect-debezium-mysql-0.0.1-SNAPSHOT-jar-with-dependencies.jar /usr/local/connector-plugins
@@ -40,6 +38,7 @@ cp rocketmq-connect-debezium-mysql/target/rocketmq-connect-debezium-mysql-0.0.1-
 JDBC Connector
 
 将 JDBC Connector 编译好的包放入Runtime加载目录。命令如下：
+
 ```
 $ cd rocketmq-connect/connectors/rocketmq-connect-jdbc/
 $ mvn clean package -Dmaven.test.skip=true
@@ -48,6 +47,7 @@ cp rocketmq-connect-jdbc/target/rocketmq-connect-jdbc-0.0.1-SNAPSHOT-jar-with-de
 ```
 
 #### 启动Connect Runtime
+
 ```
 cd  rocketmq-connect
 
@@ -56,6 +56,7 @@ mvn -Prelease-connect -DskipTests clean install -U
 ```
 
 修改配置`connect-standalone.conf` ，重点配置如下
+
 ```
 $ cd distribution/target/rocketmq-connect-0.0.1-SNAPSHOT/rocketmq-connect-0.0.1-SNAPSHOT
 $ vim conf/connect-standalone.conf
@@ -84,7 +85,6 @@ clusterName="DefaultCluster"
 pluginPaths=/usr/local/connector-plugins
 ```
 
-
 ```
 cd distribution/target/rocketmq-connect-0.0.1-SNAPSHOT/rocketmq-connect-0.0.1-SNAPSHOT
 
@@ -93,10 +93,13 @@ sh bin/connect-standalone.sh -c conf/connect-standalone.conf &
 ```
 
 ### MySQL镜像
+
 使用debezium的MySQL docker搭建环境MySQL数据库
+
 ```
 docker run -it --rm --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser -e MYSQL_PASSWORD=mysqlpw quay.io/debezium/example-mysql:1.9
 ```
+
 MySQL信息
 
 端口：3306
@@ -104,7 +107,6 @@ MySQL信息
 账号：root/debezium
 
 slave:debezium/dbz
-
 
 ### 测试数据
 
@@ -145,6 +147,7 @@ INSERT INTO `employee` VALUES (15, NULL, 0, 0, NULL, 0, NULL, '2022-06-14 20:13:
 ```
 
 目标库：inventory_2.employee
+
 ```
 CREATE database inventory_2;
 use inventory_2;
@@ -225,7 +228,6 @@ curl -X POST -H "Content-Type: application/json" http://127.0.0.1:8082/connector
   "value.converter": "org.apache.rocketmq.connect.runtime.converter.record.json.JsonConverter"
 }'
 ```
-
 
 以上两个Connector任务创建成功以后
 通过root/debezium账号登录数据库

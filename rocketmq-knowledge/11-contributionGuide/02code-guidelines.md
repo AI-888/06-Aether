@@ -16,9 +16,10 @@
 
 ### 导入 Code Style
 
-1.  文件位置：源码 ```rocketmq/style``` 目录下 ```rmq_codeStyle.xml```
+1. 文件位置：源码 ```rocketmq/style``` 目录下 ```rmq_codeStyle.xml```
 
-2.  Apple OS 导入：```IntelliJ IDEA > Settings > Editor > Code Style ``` 。进入 ```Code Style``` 标签页，依次选择 ```Manage > Import``` ，导入文件并命名 ```Scheme```
+2. Apple OS 导入：```IntelliJ IDEA > Settings > Editor > Code Style ``` 。进入 ```Code Style``` 标签页，依次选择
+   ```Manage > Import``` ，导入文件并命名 ```Scheme```
 
 3. Windows OS 导入：```IntelliJ IDEA > Settings > Editor > Code Style > Import Scheme```
 
@@ -34,13 +35,14 @@
 
 ![1656683960857](../picture/02code-guidelines/2_ApacheV2.png)
 
-2. 许可说明： [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0) 
+2. 许可说明： [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 ## 选择 Apache 版权
 
 ![1656684219109](../picture/02code-guidelines/3_ApacheCopyRight.png)
 
-可参考  [五种开源协议(GPL,LGPL,BSD,MIT,Apache) - OSCHINA - 中文开源技术交流社区](https://www.oschina.net/question/54100_9455) 了解详情
+可参考  [五种开源协议(GPL,LGPL,BSD,MIT,Apache) - OSCHINA - 中文开源技术交流社区](https://www.oschina.net/question/54100_9455)
+了解详情
 
 ## 移除 Javadoc 标签
 

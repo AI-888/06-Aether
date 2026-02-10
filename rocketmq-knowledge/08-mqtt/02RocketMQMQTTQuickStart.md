@@ -46,7 +46,8 @@ sh mqtt.sh start
 
 ## 示例说明
 
-RocketMQ-MQTT项目工程代码里面提供了基本的[example](https://github.com/apache/rocketmq-mqtt/tree/main/mqtt-example)代码，详见代码示例。
+RocketMQ-MQTT项目工程代码里面提供了基本的[example](https://github.com/apache/rocketmq-mqtt/tree/main/mqtt-example)
+代码，详见代码示例。
 
 ```text
 MqttConsumer.java  // MQTT客户端启动订阅消息

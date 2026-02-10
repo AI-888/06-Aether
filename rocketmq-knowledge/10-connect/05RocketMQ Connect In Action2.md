@@ -1,6 +1,6 @@
 # RocketMQ Connect实战2
 
-PostgreSQL Source(CDC)  -  >RocketMQ Connect  ->  MySQL Sink(JDBC)
+PostgreSQL Source(CDC)  -  >RocketMQ Connect ->  MySQL Sink(JDBC)
 
 ## 准备
 
@@ -11,27 +11,25 @@ PostgreSQL Source(CDC)  -  >RocketMQ Connect  ->  MySQL Sink(JDBC)
 3. Maven 3.2.x或以上版本;
 4. 启动 [RocketMQ](https://rocketmq.apache.org/docs/quick-start/);
 
-
-
 **tips** : ${ROCKETMQ_HOME} 位置说明
 
->bin-release.zip 版本：/rocketmq-all-4.9.4-bin-release
+> bin-release.zip 版本：/rocketmq-all-4.9.4-bin-release
 >
 >source-release.zip 版本：/rocketmq-all-4.9.4-source-release/distribution
 
-
 ### 启动Connect
-
 
 #### Connector插件编译
 
 Debezium RocketMQ Connector
+
 ```
 $ cd rocketmq-connect/connectors/rocketmq-connect-debezium/
 $ mvn clean package -Dmaven.test.skip=true
 ```
 
 将 Debezium PostgreSQL RocketMQ Connector 编译好的包放入Runtime加载目录。命令如下：
+
 ```
 mkdir -p /usr/local/connector-plugins
 cp rocketmq-connect-debezium-postgresql/target/rocketmq-connect-debezium-postgresql-0.0.1-SNAPSHOT-jar-with-dependencies.jar /usr/local/connector-plugins
@@ -40,6 +38,7 @@ cp rocketmq-connect-debezium-postgresql/target/rocketmq-connect-debezium-postgre
 JDBC Connector
 
 将 JDBC Connector 编译好的包放入Runtime加载目录。命令如下：
+
 ```
 $ cd rocketmq-connect/connectors/rocketmq-connect-jdbc/
 $ mvn clean package -Dmaven.test.skip=true
@@ -57,6 +56,7 @@ mvn -Prelease-connect -DskipTests clean install -U
 ```
 
 修改配置`connect-standalone.conf` ，重点配置如下
+
 ```
 $ cd distribution/target/rocketmq-connect-0.0.1-SNAPSHOT/rocketmq-connect-0.0.1-SNAPSHOT
 $ vim conf/connect-standalone.conf
@@ -85,7 +85,6 @@ clusterName="DefaultCluster"
 pluginPaths=/usr/local/connector-plugins
 ```
 
-
 ```
 cd distribution/target/rocketmq-connect-0.0.1-SNAPSHOT/rocketmq-connect-0.0.1-SNAPSHOT
 
@@ -96,6 +95,7 @@ sh bin/connect-standalone.sh -c conf/connect-standalone.conf &
 ### Postgres镜像
 
 使用debezium的Postgres docker搭建环境MySQL数据库
+
 ```
 # starting a pg instance
 docker run -d --name postgres -p 5432:5432 -e POSTGRES_USER=start_data_engineer -e POSTGRES_PASSWORD=password debezium/postgres:14
@@ -103,6 +103,7 @@ docker run -d --name postgres -p 5432:5432 -e POSTGRES_USER=start_data_engineer 
 # bash into postgres instance
 docker exec -ti postgres /bin/bash
 ```
+
 Postgres信息
 端口：5432
 账号：start_data_engineer/password
@@ -112,6 +113,7 @@ Postgres信息
 ### MySQL镜像
 
 使用debezium的MySQL docker搭建环境MySQL数据库
+
 ```
 docker run -it --rm --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser -e MYSQL_PASSWORD=mysqlpw quay.io/debezium/example-mysql:1.9
 ```
@@ -121,7 +123,6 @@ MySQL信息
 端口：3306
 
 账号：root/debezium
-
 
 ### 测试数据
 
@@ -152,6 +153,7 @@ update bank.holding set holding_quantity = 300 where holding_id=1000;
 ```
 
 目标表：bank1.holding
+
 ```
 create database bank1;
 CREATE TABLE holding (

@@ -1,14 +1,17 @@
-# Master-Slave automatic switch Quick start 
+# Master-Slave automatic switch Quick start
 
 ## Introduction
 
 ![架构图](../image/controller/controller_design_2.png)
 
-This document mainly introduces how to quickly build a RocketMQ cluster that supports automatic master-slave switch, as shown in the above diagram. The main addition is the Controller component, which can be deployed independently or embedded in the NameServer.
+This document mainly introduces how to quickly build a RocketMQ cluster that supports automatic master-slave switch, as
+shown in the above diagram. The main addition is the Controller component, which can be deployed independently or
+embedded in the NameServer.
 
 For detailed design ideas, please refer to [Design ideas](design.md).
 
-For detailed guidelines on new cluster deployment and old cluster upgrades, please refer to [Deployment guide](deploy.md).
+For detailed guidelines on new cluster deployment and old cluster upgrades, please refer
+to [Deployment guide](deploy.md).
 
 ## Compile RocketMQ source code
 
@@ -31,7 +34,8 @@ $ cd distribution/target/rocketmq-{rocketmq-version}/rocketmq-{rocketmq-version}
 $ sh bin/controller/fast-try.sh start
 ```
 
-If the above steps are successful, you can view the status of the Controller using the operation and maintenance command.
+If the above steps are successful, you can view the status of the Controller using the operation and maintenance
+command.
 
 ```shell
 $ sh bin/mqadmin getControllerMetaData -a localhost:9878
@@ -47,11 +51,12 @@ If you need to shut down the cluster quickly , you can execute：
 $ sh bin/controller/fast-try.sh stop
 ```
 
-For quick deployment, the default configuration is in `conf/controller/quick-start`, the default storage path is `/tmp/rmqstore`, and a controller (embedded in Namesrv) and two brokers will be started.
+For quick deployment, the default configuration is in `conf/controller/quick-start`, the default storage path is
+`/tmp/rmqstore`, and a controller (embedded in Namesrv) and two brokers will be started.
 
 ### Query SyncStateSet
 
- Use the operation and maintenance tool to query SyncStateSet：
+Use the operation and maintenance tool to query SyncStateSet：
 
 ```shell
 $ sh bin/mqadmin getSyncStateSet -a localhost:9878 -b broker-a
@@ -65,7 +70,7 @@ If successful, you should see the following content：
 
 ### Query BrokerEpoch
 
- Use the operation and maintenance tool to query  BrokerEpochEntry：
+Use the operation and maintenance tool to query BrokerEpochEntry：
 
 ```shell
 $ sh bin/mqadmin getBrokerEpoch -n localhost:9876 -b broker-a
@@ -100,11 +105,10 @@ The master has switched.
 
 ![image-20220605211244128](../image/controller/quick-start/changemaster.png)
 
-
-
 ## Deploying controller embedded in Nameserver cluster
 
-The Controller component is embedded in the Nameserver cluster (consisting of 3 nodes) and quickly started through the plugin mode：
+The Controller component is embedded in the Nameserver cluster (consisting of 3 nodes) and quickly started through the
+plugin mode：
 
 ```shell
 $ sh bin/controller/fast-try-namesrv-plugin.sh start
@@ -145,7 +149,9 @@ If you need to quickly stop the cluster：
 $ sh bin/controller/fast-try-namesrv-plugin.sh stop
 ```
 
-The `fast-try-namesrv-plugin.sh` script is used for quick deployment with default configurations in the `conf/controller/cluster-3n-namesrv-plugin` directory, and it will start 3 Nameservers and 3 controllers (embedded in Nameserver).
+The `fast-try-namesrv-plugin.sh` script is used for quick deployment with default configurations in the
+`conf/controller/cluster-3n-namesrv-plugin` directory, and it will start 3 Nameservers and 3 controllers (embedded in
+Nameserver).
 
 ## Deploying Controller in independent cluster
 
@@ -190,11 +196,14 @@ If you need to quickly stop the cluster：
 $ sh bin/controller/fast-try-independent-deployment.sh stop
 ```
 
-Use the `fast-try-independent-deployment.sh` script to quickly deploy, the default configuration is in `conf/controller/cluster-3n-independent` and it will start 3 controllers (independent deployment) to form a cluster.
-
-
+Use the `fast-try-independent-deployment.sh` script to quickly deploy, the default configuration is in
+`conf/controller/cluster-3n-independent` and it will start 3 controllers (independent deployment) to form a cluster.
 
 ## Note
 
-- If you want to ensure that the Controller has fault tolerance, the Controller deployment requires at least three copies (in accordance with the majority protocol of Raft).
-- In the controller deployment configuration file, the IP addresses configured in the `controllerDLegerPeers` parameter should be configured as IPs that can be accessed by other nodes. This is especially important when deploying on multiple machines. The example is for reference only and needs to be modified and adjusted according to the actual situation.
+- If you want to ensure that the Controller has fault tolerance, the Controller deployment requires at least three
+  copies (in accordance with the majority protocol of Raft).
+- In the controller deployment configuration file, the IP addresses configured in the `controllerDLegerPeers` parameter
+  should be configured as IPs that can be accessed by other nodes. This is especially important when deploying on
+  multiple machines. The example is for reference only and needs to be modified and adjusted according to the actual
+  situation.

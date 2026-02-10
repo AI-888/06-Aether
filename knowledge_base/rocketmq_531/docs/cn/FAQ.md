@@ -44,7 +44,8 @@
 
    1）启动一个新的Broker并将其注册到name server中的Broker列表里。
 
-   2）默认只自动创建内部系统topic和consumer group。 如果您希望在新节点上拥有您的业务主题和消费者组，请从现有的Broker中复制它们。 我们提供了管理工具和命令行来处理此问题。
+   2）默认只自动创建内部系统topic和consumer group。 如果您希望在新节点上拥有您的业务主题和消费者组，请从现有的Broker中复制它们。
+   我们提供了管理工具和命令行来处理此问题。
 
 ## 3 配置相关
 
@@ -79,7 +80,8 @@
 
    原因：fastjson 版本太低，无法让广播消费者加载本地 offsets.json，导致消费者启动失败。 损坏的 fastjson 文件也会导致同样的问题。
 
-   解决方案：Fastjson 版本必须升级到 RocketMQ 客户端依赖版本，以确保可以加载本地 offsets.json。 默认情况下，offsets.json 文件在 /home/{user}/.rocketmq_offsets 中。 或者检查fastjson的完整性。
+   解决方案：Fastjson 版本必须升级到 RocketMQ 客户端依赖版本，以确保可以加载本地 offsets.json。 默认情况下，offsets.json 文件在
+   /home/{user}/.rocketmq_offsets 中。 或者检查fastjson的完整性。
 
 3. **Broker崩溃以后有什么影响？**
 
@@ -89,11 +91,13 @@
 
    2）一些Slave节点崩溃
 
-   只要有另一个工作的slave，就不会影响发送消息。 对消费消息也不会产生影响，除非消费者组设置为优先从该Slave消费。 默认情况下，消费者组从 master 消费。
+   只要有另一个工作的slave，就不会影响发送消息。 对消费消息也不会产生影响，除非消费者组设置为优先从该Slave消费。 默认情况下，消费者组从
+   master 消费。
 
    3）所有Slave节点崩溃
 
-   向master发送消息不会有任何影响，但是，如果master是SYNC_MASTER，producer会得到一个SLAVE_NOT_AVAILABLE，表示消息没有发送给任何slave。 对消费消息也没有影响，除非消费者组设置为优先从slave消费。 默认情况下，消费者组从master消费。
+   向master发送消息不会有任何影响，但是，如果master是SYNC_MASTER，producer会得到一个SLAVE_NOT_AVAILABLE，表示消息没有发送给任何slave。
+   对消费消息也没有影响，除非消费者组设置为优先从slave消费。 默认情况下，消费者组从master消费。
 
 4. **Producer提示“No Topic Route Info”，如何诊断？**
 

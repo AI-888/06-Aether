@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, TypedDict, Optional
+from typing import Dict, Any, List, TypedDict
 
 from langgraph.graph import END
 from langgraph.graph.state import StateGraph
@@ -6,13 +6,7 @@ from langgraph.graph.state import StateGraph
 from chains.intent_router_chain import run_intent_router_chain
 from skills.skills_loader import load_skills_from_dir
 from tools.tool_registry import (
-    TOOL_LIST_BROKER_PODS,
-    TOOL_LIST_NAMESRV_PODS,
-    TOOL_LIST_PROXY_PODS,
-    TOOL_SEND_FAIL_CHECK,
-    TOOL_LIST_TOPICS,
-    TOOL_GET_BROKER_CONFIG,
-    list_admin_tool_names,
+    list_tool_names,
     run_tool,
 )
 
@@ -59,11 +53,23 @@ def _intent_node(state: TSState) -> TSState:
         intent_data = state.get("intent_data", {})
         intents = intent_data.get("intents", []) or []
     else:
-        llm = state["llm"]
+        llm = state.get("llm")
         user_msg = state["user_msg"]
         prompt_content = state.get("prompt_content", "")
-        intent_data = run_intent_router_chain(llm, user_msg, base_prompt=prompt_content)
-        intents = intent_data.get("intents", []) or []
+        
+        # 检查LLM是否可用
+        if not llm:
+            # 如果LLM不可用，创建默认的意图数据
+            intent_data = {
+                "intents": [],
+                "info_only": True,
+                "error": "LLM不可用，无法进行意图识别"
+            }
+            intents = []
+        else:
+            intent_data = run_intent_router_chain(llm, user_msg, base_prompt=prompt_content)
+            intents = intent_data.get("intents", []) or []
+    
     tool_queue = _build_tool_queue(intents)
     return {**state, "intent_data": intent_data, "intents": intents, "tool_queue": tool_queue}
 
@@ -94,171 +100,228 @@ def _ensure_skills(state: TSState) -> TSState:
     return {**state, "skills_content": skills_content}
 
 
-def _list_broker_pods_node(state: TSState) -> TSState:
-    """工具节点：调用 kubectl 列出所有 broker pods。"""
-    state = _ensure_skills(state)
-    results = list(state.get("results", []))
-    res = run_tool(TOOL_LIST_BROKER_PODS, execute=True)
-    results.append({"action": res.get("command"), "result": res})
-    return {**state, "results": results}
 
 
-def _list_namesrv_pods_node(state: TSState) -> TSState:
-    """工具节点：调用 kubectl 列出所有 namesrv pods。"""
-    state = _ensure_skills(state)
-    results = list(state.get("results", []))
-    res = run_tool(TOOL_LIST_NAMESRV_PODS, execute=True)
-    results.append({"action": res.get("command"), "result": res})
-    return {**state, "results": results}
 
 
-def _list_proxy_pods_node(state: TSState) -> TSState:
-    """工具节点：调用 kubectl 列出所有 proxy pods。"""
-    state = _ensure_skills(state)
-    results = list(state.get("results", []))
-    res = run_tool(TOOL_LIST_PROXY_PODS, execute=True)
-    results.append({"action": res.get("command"), "result": res})
-    return {**state, "results": results}
 
 
-def _list_topics_node(state: TSState) -> TSState:
-    """工具节点：调用 MCP admin API 列出全部主题。"""
-    state = _ensure_skills(state)
-    res = run_tool(TOOL_LIST_TOPICS)
-    results = list(state.get("results", []))
-    results.append({"action": TOOL_LIST_TOPICS, "result": res})
-    return {**state, "results": results}
 
-
-def _get_broker_config_node(state: TSState) -> TSState:
-    """工具节点：调用 MCP admin API 查询 Broker 配置。"""
-    state = _ensure_skills(state)
-    intent_data = state.get("intent_data", {})
-    broker_addr = intent_data.get("broker") or intent_data.get("broker_addr")
-    if not broker_addr:
-        return {**state, "error": "缺少 broker 地址（brokerAddr）。"}
-    res = run_tool(TOOL_GET_BROKER_CONFIG, brokerAddr=broker_addr)
-    results = list(state.get("results", []))
-    results.append({"action": TOOL_GET_BROKER_CONFIG, "result": res})
-    return {**state, "results": results}
-
-
-def _send_fail_check_node(state: TSState) -> TSState:
-    """工具节点：根据实例类型构造 topic 查询命令，判断 topic 是否存在。"""
-    state = _ensure_skills(state)
-
-    user_msg = state["user_msg"]
-    intent_data = state.get("intent_data", {})
-
-    def _extract_kv(text, key):
-        import re
-        patterns = [
-            rf"{key}\s*=\s*([\w\-\.]+)",
-            rf"{key}\s*:\s*([\w\-\.]+)",
-        ]
-        for p in patterns:
-            m = re.search(p, text, re.IGNORECASE)
-            if m:
-                return m.group(1)
-        return None
-
-    instance_id = intent_data.get("instance_id") or _extract_kv(user_msg, "instance_id")
-    rocketmq_namespace = intent_data.get("namespace") or _extract_kv(user_msg, "namespace")
-    topic = intent_data.get("topic") or _extract_kv(user_msg, "topic")
-
-    if not instance_id or not topic:
-        return {**state, "error": "缺少实例id或topic，无法继续排查。"}
-
-    instance_lower = instance_id.lower()
-    if instance_lower.startswith("rocketmq-"):
-        if not rocketmq_namespace:
-            return {**state, "error": "缺少 RocketMQ 命名空间（MQ_INT 开头）。"}
-        k8s_ns = "tce"
-        real_topic = f"{rocketmq_namespace}%{topic}"
-    else:
-        suffix = instance_id.split("-", 1)[1]
-        k8s_ns = f"rmqnamesrv-{suffix}"
-        real_topic = f"{instance_id.replace('-', '')}%{topic}"
-
-    res = run_tool(TOOL_SEND_FAIL_CHECK, k8s_namespace=k8s_ns, real_topic=real_topic, execute=True)
-    results = list(state.get("results", []))
-    results.append({"action": res.get("command"), "result": res})
-    return {**state, "results": results}
 
 
 def _route_node(state: TSState) -> str:
     """路由节点：根据 next_tool 决定执行哪个工具节点。"""
     next_tool = state.get("next_tool", "")
-    if next_tool == TOOL_SEND_FAIL_CHECK:
-        return TOOL_SEND_FAIL_CHECK
-    if next_tool == TOOL_LIST_BROKER_PODS:
-        return TOOL_LIST_BROKER_PODS
-    if next_tool == TOOL_LIST_NAMESRV_PODS:
-        return TOOL_LIST_NAMESRV_PODS
-    if next_tool == TOOL_LIST_PROXY_PODS:
-        return TOOL_LIST_PROXY_PODS
-    if next_tool == TOOL_LIST_TOPICS:
-        return TOOL_LIST_TOPICS
-    if next_tool == TOOL_GET_BROKER_CONFIG:
-        return TOOL_GET_BROKER_CONFIG
-    if next_tool in list_admin_tool_names():
+    
+    if next_tool in list_tool_names():
         return "admin_tool"
-    return "done"
+    return "end_check"
+
+
+def _end_check_node(state: TSState) -> TSState:
+    """结束判断节点：基于智能规则判断是否应该结束执行流程。"""
+    from datetime import datetime
+    
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 调用智能结束判断器
+    end_decision = _intelligent_end_check(state)
+    need_continue = end_decision.get("need_continue", True)
+    reason = end_decision.get("reason", "")
+    next_action = end_decision.get("next_action", "continue_tool")
+    
+    if not need_continue:
+        # print(f"[{ts}] [End Check] 判断结束: {reason}")
+        return {**state, "end_reason": reason, "should_end": True, "end_decision": end_decision}
+    
+    print(f"[{ts}] [End Check] 继续执行: {reason}, 下一步: {next_action}")
+    return {**state, "should_end": False, "end_decision": end_decision}
+
+
+def _intelligent_end_check(state: TSState) -> Dict[str, Any]:
+    """智能结束判断器：基于规则判断是否终止任务。"""
+    
+    # 1. 检查用户明确停止指令
+    user_msg = state.get("user_msg", "").lower()
+    stop_keywords = ["停止", "结束", "不用了", "取消", "stop", "end", "cancel"]
+    if any(keyword in user_msg for keyword in stop_keywords):
+        return {
+            "need_continue": False,
+            "reason": "用户明确要求停止执行",
+            "next_action": "finish"
+        }
+    
+    # 2. 检查错误状态
+    if state.get("error"):
+        return {
+            "need_continue": False,
+            "reason": f"执行过程中出现错误: {state.get('error')}",
+            "next_action": "finish"
+        }
+    
+    # 3. 检查工具调用失败
+    results = state.get("results", [])
+    for result in results:
+        result_data = result.get("result", {})
+        if result_data.get("error") or result_data.get("failed"):
+            return {
+                "need_continue": False,
+                "reason": "工具/MCP调用失败",
+                "next_action": "finish"
+            }
+    
+    # 4. 检查执行步骤限制
+    if len(results) >= 10:  # 最大执行步骤限制
+        return {
+            "need_continue": False,
+            "reason": f"达到最大执行步骤限制({len(results)}步)",
+            "next_action": "finish"
+        }
+    
+    # 5. 检查是否需要追问用户信息（优先级较高）
+    missing_params = state.get("missing_params", [])
+    if missing_params:
+        skipped_params = state.get("skipped_params", [])
+        # 如果用户已经跳过了所有缺失参数，则结束
+        if skipped_params and len(skipped_params) >= len(missing_params):
+            return {
+                "need_continue": False,
+                "reason": "缺少关键信息且用户拒绝补充",
+                "next_action": "finish"
+            }
+        # 否则需要用户补充信息
+        return {
+            "need_continue": True,
+            "reason": "需要用户补充关键信息",
+            "next_action": "ask_user"
+        }
+    
+    # 6. 检查核心需求是否已满足
+    intents = state.get("intents", [])
+    executed_tools = [result.get("action") for result in results if result.get("action")]
+    remaining_intents = [intent for intent in intents if intent not in executed_tools]
+    
+    if not remaining_intents:
+        return {
+            "need_continue": False,
+            "reason": "用户核心需求已完全满足",
+            "next_action": "finish"
+        }
+    
+    # 8. 检查工具队列状态
+    tool_queue = state.get("tool_queue", [])
+    if not tool_queue:
+        return {
+            "need_continue": False,
+            "reason": "工具队列已空，任务完成",
+            "next_action": "finish"
+        }
+    
+    # 9. 检查结果是否已经足够得出结论
+    if _has_sufficient_results(state):
+        return {
+            "need_continue": False,
+            "reason": "已有足够结果得出结论",
+            "next_action": "finish"
+        }
+    
+    # 10. 默认继续执行
+    return {
+        "need_continue": True,
+        "reason": "需求未完全满足，需继续调用工具",
+        "next_action": "continue_tool"
+    }
+
+
+def _has_sufficient_results(state: TSState) -> bool:
+    """判断当前结果是否已经足够得出结论。"""
+    results = state.get("results", [])
+    
+    # 如果有错误结果，通常已经足够
+    for result in results:
+        if result.get("result", {}).get("error"):
+            return True
+    
+    # 检查是否有明确的成功/失败结论
+    success_indicators = ["success", "正常", "running", "healthy"]
+    failure_indicators = ["error", "失败", "not found", "异常"]
+    
+    for result in results:
+        result_text = str(result.get("result", {})).lower()
+        
+        # 检查成功指标
+        if any(indicator in result_text for indicator in success_indicators):
+            return True
+        
+        # 检查失败指标
+        if any(indicator in result_text for indicator in failure_indicators):
+            return True
+    
+    # 如果有多个相关结果，可能已经足够
+    if len(results) >= 3:
+        # 检查结果的相关性
+        related_results = 0
+        for result in results:
+            action = result.get("action", "")
+            if any(keyword in action for keyword in ["list", "get", "check"]):
+                related_results += 1
+        
+        if related_results >= 2:
+            return True
+    
+    return False
+
+
+def _final_route_node(state: TSState) -> TSState:
+    """最终路由节点：根据智能结束判断结果决定下一步动作。"""
+    end_decision = state.get("end_decision", {})
+    next_action = end_decision.get("next_action", "continue_tool")
+    
+    if next_action == "finish":
+        return {**state, "next_node": END}
+    elif next_action == "ask_user":
+        # 这里可以添加用户交互逻辑，暂时先继续执行
+        return {**state, "next_node": "dispatch"}
+    else:  # continue_tool
+        return {**state, "next_node": "dispatch"}
 
 
 def build_troubleshoot_graph() -> StateGraph:
-    """构建 LangGraph 状态机：intent -> dispatch -> tool -> dispatch -> END。"""
+    """构建 LangGraph 状态机：intent -> dispatch -> tool -> dispatch -> end_check -> END。"""
     graph = StateGraph(TSState)
     graph.add_node("intent", _intent_node)
     graph.add_node("dispatch", _dispatch_node)
-    graph.add_node(TOOL_LIST_BROKER_PODS, _list_broker_pods_node)
-    graph.add_node(TOOL_LIST_NAMESRV_PODS, _list_namesrv_pods_node)
-    graph.add_node(TOOL_LIST_PROXY_PODS, _list_proxy_pods_node)
-    graph.add_node(TOOL_LIST_TOPICS, _list_topics_node)
-    graph.add_node(TOOL_GET_BROKER_CONFIG, _get_broker_config_node)
     graph.add_node("admin_tool", _admin_tool_node)
-    graph.add_node(TOOL_SEND_FAIL_CHECK, _send_fail_check_node)
+    
+    graph.add_node("end_check", _end_check_node)
 
     graph.set_entry_point("intent")
     graph.add_edge("intent", "dispatch")
     graph.add_conditional_edges("dispatch", _route_node, {
-        TOOL_LIST_BROKER_PODS: TOOL_LIST_BROKER_PODS,
-        TOOL_LIST_NAMESRV_PODS: TOOL_LIST_NAMESRV_PODS,
-        TOOL_LIST_PROXY_PODS: TOOL_LIST_PROXY_PODS,
-        TOOL_LIST_TOPICS: TOOL_LIST_TOPICS,
-        TOOL_GET_BROKER_CONFIG: TOOL_GET_BROKER_CONFIG,
-        TOOL_SEND_FAIL_CHECK: TOOL_SEND_FAIL_CHECK,
         "admin_tool": "admin_tool",
-        "done": END,
+        "end_check": "end_check",
     })
-    graph.add_edge(TOOL_LIST_BROKER_PODS, "dispatch")
-    graph.add_edge(TOOL_LIST_NAMESRV_PODS, "dispatch")
-    graph.add_edge(TOOL_LIST_PROXY_PODS, "dispatch")
-    graph.add_edge(TOOL_LIST_TOPICS, "dispatch")
-    graph.add_edge(TOOL_GET_BROKER_CONFIG, "dispatch")
+    
+    # 添加工具节点到dispatch的连接
     graph.add_edge("admin_tool", "dispatch")
-    graph.add_edge(TOOL_SEND_FAIL_CHECK, "dispatch")
+    graph.add_edge("end_check", "final_route")
+    graph.add_node("final_route", _final_route_node)
+    graph.add_conditional_edges("final_route", lambda state: state.get("next_node", "dispatch"), {
+        "dispatch": "dispatch",
+        END: END,
+    })
+    
+    # 添加dispatch到end_check的直接连接，确保每个工具执行后都进行结束判断
+    graph.add_edge("dispatch", "end_check")
     return graph
 
 
 def _build_tool_queue(intents: List[str]) -> List[str]:
-    """将 intents 变为工具执行队列，保证每个工具都有独立节点。"""
+    """将 intents 变为工具执行队列。"""
     queue: List[str] = []
-    if TOOL_SEND_FAIL_CHECK in intents:
-        queue.append(TOOL_SEND_FAIL_CHECK)
-    if TOOL_LIST_BROKER_PODS in intents:
-        queue.append(TOOL_LIST_BROKER_PODS)
-    if TOOL_LIST_NAMESRV_PODS in intents:
-        queue.append(TOOL_LIST_NAMESRV_PODS)
-    if TOOL_LIST_PROXY_PODS in intents:
-        queue.append(TOOL_LIST_PROXY_PODS)
-    if TOOL_LIST_TOPICS in intents:
-        queue.append(TOOL_LIST_TOPICS)
-    if TOOL_GET_BROKER_CONFIG in intents:
-        queue.append(TOOL_GET_BROKER_CONFIG)
-    admin_tools = set(list_admin_tool_names())
+    admin_tools = set(list_tool_names())
     for intent in intents:
-        if intent in admin_tools and intent not in queue:
+        if intent in admin_tools:
             queue.append(intent)
     return queue
 
@@ -266,126 +329,41 @@ def _build_tool_queue(intents: List[str]) -> List[str]:
 def _admin_tool_node(state: TSState) -> TSState:
     """通用 admin 工具节点：执行 MCP admin API 工具。"""
     from tools.tool_registry import get_tool_def
+    from tools.mcp_client import get_mcp_defaults
 
     state = _ensure_skills(state)
     next_tool = state.get("next_tool", "")
     intent_data = state.get("intent_data", {})
-    user_msg = state.get("user_msg", "")
-
-    def _extract_kv(text: str, key: str) -> Optional[str]:
-        import re
-        patterns = [
-            rf"{key}\s*=\s*([\\w\\-\\.:%]+)",
-            rf"{key}\s*:\s*([\\w\\-\\.:%]+)",
-        ]
-        for p in patterns:
-            m = re.search(p, text, re.IGNORECASE)
-            if m:
-                return m.group(1)
-        return None
-
-    instance_id = intent_data.get("instance_id") or _extract_kv(user_msg, "instance_id")
-    topic = (
-            intent_data.get("topic")
-            or _extract_kv(user_msg, "topic")
-            or _extract_kv(user_msg, "traceTopic")
-            or _extract_kv(user_msg, "lmq")
-    )
-    rocketmq_ns = intent_data.get("namespace") or _extract_kv(user_msg, "namespace")
-    group = (
-            intent_data.get("group")
-            or _extract_kv(user_msg, "group")
-            or _extract_kv(user_msg, "consumerGroup")
-            or _extract_kv(user_msg, "producerGroup")
-    )
-    broker_addr = (
-            intent_data.get("broker")
-            or intent_data.get("broker_addr")
-            or _extract_kv(user_msg, "broker")
-            or _extract_kv(user_msg, "brokerAddr")
-    )
-
     skipped = set(state.get("skipped_params", []) or intent_data.get("skipped_params", []) or [])
 
-    requires_instance = next_tool in (
-        "topicRoute",
-        "topicStatus",
-        "topicClusterList",
-        "producerConnection",
-        "consumerConnection",
-        "consumerProgress",
-        "consumerStatus",
-        "getConsumerConfig",
-        "getConsumerOffset",
-    )
-    if requires_instance and not instance_id and "instance_id" not in skipped:
-        return {
-            **state,
-            "error": f"{next_tool} 缺少必要参数: instance_id",
-            "missing_params": ["instance_id"],
-            "missing_for_tool": next_tool,
-        }
-    if instance_id and instance_id.lower().startswith("rocketmq-") and not rocketmq_ns and "namespace" not in skipped:
-        return {
-            **state,
-            "error": f"{next_tool} 缺少必要参数: namespace",
-            "missing_params": ["namespace"],
-            "missing_for_tool": next_tool,
-        }
-
-    def _normalize_topic(raw_topic: Optional[str]) -> Optional[str]:
-        if not raw_topic or not instance_id:
-            return raw_topic
-        instance_lower = instance_id.lower()
-        if instance_lower.startswith("rmq-"):
-            return f"{instance_id.replace('-', '')}%{raw_topic}"
-        if instance_lower.startswith("rocketmq-") and rocketmq_ns:
-            return f"{rocketmq_ns}%{raw_topic}"
-        return raw_topic
-
-    def _normalize_group(raw_group: Optional[str]) -> Optional[str]:
-        if not raw_group or not instance_id:
-            return raw_group
-        instance_lower = instance_id.lower()
-        if instance_lower.startswith("rmq-"):
-            return f"{instance_id.replace('-', '')}%{raw_group}"
-        if instance_lower.startswith("rocketmq-") and rocketmq_ns:
-            return f"{rocketmq_ns}%{raw_group}"
-        return raw_group
-
-    real_topic = _normalize_topic(topic)
-    real_group = _normalize_group(group)
-
-    mcp_params: Dict[str, Any] = {}
-    if next_tool in ("topicRoute", "topicStatus", "topicClusterList"):
-        if real_topic:
-            mcp_params["topic"] = real_topic
-    if next_tool in ("consumerProgress",):
-        if real_group:
-            mcp_params["group"] = real_group
-    if next_tool in ("consumerConnection", "consumerStatus"):
-        if real_group:
-            mcp_params["consumerGroup"] = real_group
-    if next_tool in ("producerConnection",):
-        if real_group:
-            mcp_params["producerGroup"] = real_group
-        if real_topic:
-            mcp_params["topic"] = real_topic
-    if next_tool in ("brokerStatus", "getBrokerConfig"):
-        if broker_addr:
-            mcp_params["brokerAddr"] = broker_addr
-
     tool_def = get_tool_def(next_tool)
-    required_params = list(tool_def.params or [])
-    for auto_param in ("nameserverAddressList", "ak", "sk"):
-        if auto_param in required_params:
-            required_params.remove(auto_param)
+    
+    # 获取系统自动提供的默认参数
+    mcp_defaults = get_mcp_defaults()
+    
+    # 动态构建参数映射，使用工具定义中的参数列表
+    mcp_params: Dict[str, Any] = {}
+    tool_params = tool_def.params or []
+    
+    for param in tool_params:
+        val = intent_data.get(param)
+        if val:
+            mcp_params[param] = val
+
+    # 动态判断必传参数：根据工具定义中的参数列表判断
+    # 排除系统自动提供的参数和用户已跳过的参数
     missing: List[str] = []
-    for param in required_params:
+    for param in tool_params:
+        # 如果参数由系统自动提供，则不需要用户传入
+        if param in mcp_defaults and mcp_defaults[param]:
+            continue
+        # 如果用户已跳过该参数，则不需要检查
         if param in skipped:
             continue
+        # 检查参数是否已提供
         if param not in mcp_params:
             missing.append(param)
+    
     if missing:
         return {
             **state,
@@ -394,12 +372,12 @@ def _admin_tool_node(state: TSState) -> TSState:
             "missing_for_tool": next_tool,
         }
 
+    # 合并系统默认参数
+    for param, default_val in mcp_defaults.items():
+        if param in tool_def.params and param not in mcp_params:
+            mcp_params[param] = default_val
+
     state = {**state}
-    if real_topic or real_group or instance_id or rocketmq_ns:
-        state["resolved_real_topic"] = real_topic or ""
-        state["resolved_real_group"] = real_group or ""
-        state["resolved_instance_id"] = instance_id or ""
-        state["resolved_namespace"] = rocketmq_ns or ""
     res = run_tool(next_tool, **mcp_params)
     results = list(state.get("results", []))
     results.append({"action": next_tool, "result": res})

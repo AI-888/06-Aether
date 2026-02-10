@@ -1,46 +1,48 @@
 # 样例
 -----
- * [目录](#样例)
-      * [1 基本样例](#1-基本样例)
-         * [1.1 加入依赖：](#11-加入依赖)
-         * [1.2 消息发送](#12-消息发送)
+
+* [目录](#样例)
+    * [1 基本样例](#1-基本样例)
+        * [1.1 加入依赖：](#11-加入依赖)
+        * [1.2 消息发送](#12-消息发送)
             * [1、Producer端发送同步消息](#1producer端发送同步消息)
             * [2、发送异步消息](#2发送异步消息)
             * [3、单向发送消息](#3单向发送消息)
-         * [1.3 消费消息](#13-消费消息)
-      * [2 顺序消息样例](#2-顺序消息样例)
-         * [2.1 顺序消息生产](#21-顺序消息生产)
-         * [2.2 顺序消费消息](#22-顺序消费消息)
-      * [3 延时消息样例](#3-延时消息样例)
-         * [3.1 启动消费者等待传入订阅消息](#31-启动消费者等待传入订阅消息)
-         * [3.2 发送延时消息](#32-发送延时消息)
-         * [3.3 验证](#33-验证)
-         * [3.4 延时消息的使用场景](#34-延时消息的使用场景)
-         * [3.5 延时消息的使用限制](#35-延时消息的使用限制)
-      * [4 批量消息样例](#4-批量消息样例)
-         * [4.1 发送批量消息](#41-发送批量消息)
-         * [4.2 消息列表分割](#42-消息列表分割)
-      * [5 过滤消息样例](#5-过滤消息样例)
-         * [5.1 基本语法](#51-基本语法)
-         * [5.2 使用样例](#52-使用样例)
+        * [1.3 消费消息](#13-消费消息)
+    * [2 顺序消息样例](#2-顺序消息样例)
+        * [2.1 顺序消息生产](#21-顺序消息生产)
+        * [2.2 顺序消费消息](#22-顺序消费消息)
+    * [3 延时消息样例](#3-延时消息样例)
+        * [3.1 启动消费者等待传入订阅消息](#31-启动消费者等待传入订阅消息)
+        * [3.2 发送延时消息](#32-发送延时消息)
+        * [3.3 验证](#33-验证)
+        * [3.4 延时消息的使用场景](#34-延时消息的使用场景)
+        * [3.5 延时消息的使用限制](#35-延时消息的使用限制)
+    * [4 批量消息样例](#4-批量消息样例)
+        * [4.1 发送批量消息](#41-发送批量消息)
+        * [4.2 消息列表分割](#42-消息列表分割)
+    * [5 过滤消息样例](#5-过滤消息样例)
+        * [5.1 基本语法](#51-基本语法)
+        * [5.2 使用样例](#52-使用样例)
             * [1、生产者样例](#1生产者样例)
             * [2、消费者样例](#2消费者样例)
-      * [6 消息事务样例](#6-消息事务样例)
-         * [6.1 发送事务消息样例](#61-发送事务消息样例)
+    * [6 消息事务样例](#6-消息事务样例)
+        * [6.1 发送事务消息样例](#61-发送事务消息样例)
             * [1、创建事务性生产者](#1创建事务性生产者)
             * [2、实现事务的监听接口](#2实现事务的监听接口)
-         * [6.2 事务消息使用上的限制](#62-事务消息使用上的限制)
-      * [7 Logappender样例](#7-logappender样例)
-         * [7.1 log4j样例](#71-log4j样例)
-         * [7.2 log4j2样例](#72-log4j2样例)
-         * [7.3 logback样例](#73-logback样例)
-      * [8 OpenMessaging样例](#8-openmessaging样例)
-         * [8.1 OMSProducer样例](#81-omsproducer样例)
-         * [8.2 OMSPullConsumer](#82-omspullconsumer)
-         * [8.3 OMSPushConsumer](#83-omspushconsumer)
------
-## 1 基本样例
+        * [6.2 事务消息使用上的限制](#62-事务消息使用上的限制)
+    * [7 Logappender样例](#7-logappender样例)
+        * [7.1 log4j样例](#71-log4j样例)
+        * [7.2 log4j2样例](#72-log4j2样例)
+        * [7.3 logback样例](#73-logback样例)
+    * [8 OpenMessaging样例](#8-openmessaging样例)
+        * [8.1 OMSProducer样例](#81-omsproducer样例)
+        * [8.2 OMSPullConsumer](#82-omspullconsumer)
+        * [8.3 OMSPushConsumer](#83-omspushconsumer)
 
+-----
+
+## 1 基本样例
 
 在基本样例中我们提供如下的功能场景：
 
@@ -50,6 +52,7 @@
 ### 1.1 加入依赖：
 
 `maven:`
+
 ```
 <dependency>
     <groupId>org.apache.rocketmq</groupId>
@@ -57,15 +60,19 @@
     <version>4.9.1</version>
 </dependency>
 ```
+
 `gradle`
+
 ```
 compile 'org.apache.rocketmq:rocketmq-client:4.3.0'
 ```
+
 ### 1.2 消息发送
 
 #### 1、Producer端发送同步消息
 
 这种可靠性同步地发送方式使用的比较广泛，比如：重要的消息通知，短信通知。
+
 ```java
 public class SyncProducer {
 	public static void main(String[] args) throws Exception {
@@ -91,6 +98,7 @@ public class SyncProducer {
     }
 }
 ```
+
 #### 2、发送异步消息
 
 异步消息通常用在对响应时间敏感的业务场景，即发送端不能容忍长时间地等待Broker的响应。
@@ -205,7 +213,8 @@ public class Consumer {
 
 消息有序指的是可以按照消息的发送顺序来消费(FIFO)。RocketMQ可以严格的保证消息有序，可以分为分区有序或者全局有序。
 
-顺序消费的原理解析，在默认的情况下消息发送会采取Round Robin轮询方式把消息发送到不同的queue(分区队列)；而消费消息的时候从多个queue上拉取消息，这种情况发送和消费是不能保证顺序。但是如果控制发送的顺序消息只依次发送到同一个queue中，消费的时候只从这个queue上依次拉取，则就保证了顺序。当发送和消费参与的queue只有一个，则是全局有序；如果多个queue参与，则为分区有序，即相对每个queue，消息都是有序的。
+顺序消费的原理解析，在默认的情况下消息发送会采取Round Robin轮询方式把消息发送到不同的queue(分区队列)
+；而消费消息的时候从多个queue上拉取消息，这种情况发送和消费是不能保证顺序。但是如果控制发送的顺序消息只依次发送到同一个queue中，消费的时候只从这个queue上依次拉取，则就保证了顺序。当发送和消费参与的queue只有一个，则是全局有序；如果多个queue参与，则为分区有序，即相对每个queue，消息都是有序的。
 
 下面用订单进行分区有序的示例。一个订单的顺序流程是：创建、付款、推送、完成。订单号相同的消息会被先后发送到同一个队列中，消费时，同一个OrderId获取到的肯定是同一个队列。
 
@@ -496,6 +505,7 @@ public class ScheduledMessageProducer {
 您将会看到消息的消费比存储时间晚10秒。
 
 ### 3.4 延时消息的使用场景
+
 比如电商里，提交了一个订单就可以发送一个延时消息，1h后去检查这个订单的状态，如果还是未付款就取消订单释放库存。
 
 ### 3.5 延时消息的使用限制
@@ -505,6 +515,7 @@ public class ScheduledMessageProducer {
 
 private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h";
 ```
+
 现在RocketMq并不支持任意时间的延时，需要设置几个固定的延时等级，从1s到2h分别对应着等级1到18
 消息消费失败会进入延时消息队列，消息发送时间与设置的延时等级和重试次数有关，详见代码`SendMessageProcessor.java`
 
@@ -611,6 +622,7 @@ consumer.subscribe("TOPIC", "TAGA || TAGB || TAGC");
 ```
 
 消费者将接收包含TAGA或TAGB或TAGC的消息。但是限制是一个消息只能有一个标签，这对于复杂的场景可能不起作用。在这种情况下，可以使用SQL表达式筛选消息。SQL特性可以通过发送消息时的属性来进行计算。在RocketMQ定义的语法下，可以实现一些简单的逻辑。下面是一个例子：
+
 ```
 ------------
 | message  |
@@ -627,6 +639,7 @@ consumer.subscribe("TOPIC", "TAGA || TAGB || TAGC");
 | c = true |
 ------------
 ```
+
 ### 5.1 基本语法
 
 RocketMQ只定义了一些基本语法来支持这个特性。你也可以很容易地扩展它。
@@ -644,6 +657,7 @@ RocketMQ只定义了一些基本语法来支持这个特性。你也可以很容
 - 布尔值，**TRUE** 或 **FALSE**
 
 只有使用push模式的消费者才能用使用SQL92标准的sql语句，接口如下：
+
 ```
 public void subscribe(finalString topic, final MessageSelector messageSelector)
 ```
@@ -699,7 +713,8 @@ consumer.start();
 
 #### 1、创建事务性生产者
 
-使用 `TransactionMQProducer`类创建生产者，并指定唯一的 `ProducerGroup`，就可以设置自定义线程池来处理这些检查请求。执行本地事务后、需要根据执行结果对消息队列进行回复。回传的事务状态在请参考前一节。
+使用 `TransactionMQProducer`类创建生产者，并指定唯一的 `ProducerGroup`
+，就可以设置自定义线程池来处理这些检查请求。执行本地事务后、需要根据执行结果对消息队列进行回复。回传的事务状态在请参考前一节。
 
 ```java
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
@@ -744,9 +759,11 @@ public class TransactionProducer {
 }
 
 ```
+
 #### 2、实现事务的监听接口
 
-当发送半消息成功时，我们使用 `executeLocalTransaction` 方法来执行本地事务。它返回前一节中提到的三个事务状态之一。`checkLocalTransaction` 方法用于检查本地事务状态，并回应消息队列的检查请求。它也是返回前一节中提到的三个事务状态之一。
+当发送半消息成功时，我们使用 `executeLocalTransaction`方法来执行本地事务。它返回前一节中提到的三个事务状态之一。
+`checkLocalTransaction`方法用于检查本地事务状态，并回应消息队列的检查请求。它也是返回前一节中提到的三个事务状态之一。
 
 ```java
 public class TransactionListenerImpl implements TransactionListener {
@@ -781,11 +798,17 @@ public class TransactionListenerImpl implements TransactionListener {
 ### 6.2 事务消息使用上的限制
 
 1. 事务消息不支持延时消息和批量消息。
-2. 为了避免单个消息被检查太多次而导致半队列消息累积，我们默认将单个消息的检查次数限制为 15 次，但是用户可以通过 Broker 配置文件的 `transactionCheckMax`参数来修改此限制。如果已经检查某条消息超过 N 次的话（ N = `transactionCheckMax` ） 则 Broker 将丢弃此消息，并在默认情况下同时打印错误日志。用户可以通过重写 `AbstractTransactionalMessageCheckListener` 类来修改这个行为。
-3. 事务消息将在 Broker 配置文件中的参数 transactionTimeout 这样的特定时间长度之后被检查。当发送事务消息时，用户还可以通过设置用户属性 CHECK_IMMUNITY_TIME_IN_SECONDS 来改变这个限制，该参数优先于 `transactionTimeout` 参数。
+2. 为了避免单个消息被检查太多次而导致半队列消息累积，我们默认将单个消息的检查次数限制为 15 次，但是用户可以通过 Broker
+   配置文件的 `transactionCheckMax`参数来修改此限制。如果已经检查某条消息超过 N 次的话（ N = `transactionCheckMax` ） 则
+   Broker 将丢弃此消息，并在默认情况下同时打印错误日志。用户可以通过重写 `AbstractTransactionalMessageCheckListener`
+   类来修改这个行为。
+3. 事务消息将在 Broker 配置文件中的参数 transactionTimeout 这样的特定时间长度之后被检查。当发送事务消息时，用户还可以通过设置用户属性
+   CHECK_IMMUNITY_TIME_IN_SECONDS 来改变这个限制，该参数优先于 `transactionTimeout` 参数。
 4. 事务性消息可能不止一次被检查或消费。
-5. 提交给用户的目标主题消息可能会失败，目前这依日志的记录而定。它的高可用性通过 RocketMQ 本身的高可用性机制来保证，如果希望确保事务消息不丢失、并且事务完整性得到保证，建议使用同步的双重写入机制。
-6. 事务消息的生产者 GroupName 不能与其他类型消息的生产者 GroupName 共享。与其他类型的消息不同，事务消息允许反向查询、MQ服务器能通过它们的生产者 GroupName 查询到生产者。
+5. 提交给用户的目标主题消息可能会失败，目前这依日志的记录而定。它的高可用性通过 RocketMQ
+   本身的高可用性机制来保证，如果希望确保事务消息不丢失、并且事务完整性得到保证，建议使用同步的双重写入机制。
+6. 事务消息的生产者 GroupName 不能与其他类型消息的生产者 GroupName 共享。与其他类型的消息不同，事务消息允许反向查询、MQ服务器能通过它们的生产者
+   GroupName 查询到生产者。
 
 7 Logappender样例
 -----------------
@@ -795,6 +818,7 @@ RocketMQ日志提供log4j、log4j2和logback日志框架作为业务应用，下
 ### 7.1 log4j样例
 
 按下面样例使用log4j属性配置
+
 ```
 log4j.appender.mq=org.apache.rocketmq.logappender.log4j.RocketmqLog4jAppender
 log4j.appender.mq.Tag=yourTag
@@ -804,7 +828,9 @@ log4j.appender.mq.NameServerAddress=yourRocketmqNameserverAddress
 log4j.appender.mq.layout=org.apache.log4j.PatternLayout
 log4j.appender.mq.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %-4r [%t] (%F:%L) %-5p - %m%n
 ```
+
 按下面样例使用log4j xml配置来使用异步添加日志
+
 ```
 <appender name="mqAppender1"class="org.apache.rocketmq.logappender.log4j.RocketmqLog4jAppender">
   <param name="Tag" value="yourTag" />
@@ -821,16 +847,20 @@ log4j.appender.mq.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %-4r [%t] (%F
   <appender-ref ref="mqAppender1"/>
 </appender>
 ```
+
 ### 7.2 log4j2样例
 
 用log4j2时，配置如下，如果想要非阻塞，只需要使用异步添加引用即可
+
 ```
 <RocketMQ name="rocketmqAppender" producerGroup="yourLogGroup" nameServerAddress="yourRocketmqNameserverAddress"
    topic="yourLogTopic" tag="yourTag">
   <PatternLayout pattern="%d [%p] hahahah %c %m%n"/>
 </RocketMQ>
 ```
+
 ### 7.3 logback样例
+
 ```
 <appender name="mqAppender1"class="org.apache.rocketmq.logappender.logback.RocketmqLogbackAppender">
   <tag>yourTag</tag>
@@ -853,7 +883,9 @@ log4j.appender.mq.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %-4r [%t] (%F
 8 OpenMessaging样例
 ---------------
 
- [OpenMessaging](https://www.google.com/url?q=http://openmessaging.cloud/&sa=D&ust=1546524111089000)旨在建立消息和流处理规范，以为金融、电子商务、物联网和大数据领域提供通用框架及工业级指导方案。在分布式异构环境中，设计原则是面向云、简单、灵活和独立于语言。符合这些规范将帮助企业方便的开发跨平台和操作系统的异构消息传递应用程序。提供了openmessaging-api 0.3.0-alpha的部分实现，下面的示例演示如何基于OpenMessaging访问RocketMQ。
+[OpenMessaging](https://www.google.com/url?q=http://openmessaging.cloud/&sa=D&ust=1546524111089000)
+旨在建立消息和流处理规范，以为金融、电子商务、物联网和大数据领域提供通用框架及工业级指导方案。在分布式异构环境中，设计原则是面向云、简单、灵活和独立于语言。符合这些规范将帮助企业方便的开发跨平台和操作系统的异构消息传递应用程序。提供了openmessaging-api
+0.3.0-alpha的部分实现，下面的示例演示如何基于OpenMessaging访问RocketMQ。
 
 ### 8.1 OMSProducer样例
 

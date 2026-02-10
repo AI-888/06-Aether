@@ -1,10 +1,14 @@
-# Basic Sample 
+# Basic Sample
 ------
 基本示例中提供了以下两个功能
+
 * RocketMQ可用于以三种方式发送消息：可靠的同步、可靠的异步和单向传输。前两种消息类型是可靠的，因为无论它们是否成功发送都有响应。
 * RocketMQ可以用来消费消息。
+
 ### 1 添加依赖
+
 maven:
+
 ``` java
 <dependency>
   <groupId>org.apache.rocketmq</groupId>
@@ -12,13 +16,19 @@ maven:
   <version>4.3.0</version>
 </dependency>
 ```
-gradle: 
+
+gradle:
+
 ``` java 
 compile 'org.apache.rocketmq:rocketmq-client:4.3.0'
 ```
+
 ### 2 发送消息
+
 ##### 2.1 使用Producer发送同步消息
+
 可靠的同步传输被广泛应用于各种场景，如重要的通知消息、短消息通知等。
+
 ``` java
 public class SyncProducer {
   public static void main(String[] args) throws Exception {
@@ -44,8 +54,11 @@ public class SyncProducer {
   }
 }
 ```
+
 ##### 2.2 发送异步消息
+
 异步传输通常用于响应时间敏感的业务场景。这意味着发送方无法等待代理的响应太长时间。
+
 ``` java
 public class AsyncProducer {
   public static void main(String[] args) throws Exception {
@@ -82,8 +95,11 @@ public class AsyncProducer {
   }
 }
 ```
+
 ##### 2.3 以单向模式发送消息
+
 单向传输用于需要中等可靠性的情况，如日志收集。
+
 ``` java
 public class OnewayProducer {
   public static void main(String[] args) throws Exception{
@@ -107,7 +123,9 @@ public class OnewayProducer {
   }
 }
 ```
+
 ### 3 消费消息
+
 ``` java
 public class Consumer {
   public static void main(String[] args) throws InterruptedException, MQClientException {

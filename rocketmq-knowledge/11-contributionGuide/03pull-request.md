@@ -1,4 +1,4 @@
-#  Github提交PR
+# Github提交PR
 
 本文将引导您通过 Git 贡献 RocketMQ
 
@@ -93,19 +93,21 @@ head repository / compare : 开发仓库及开发分支
 
 ![1656589498318](../picture/03pull-request/3_Write.png)
 
-​	提交 PR 前，请先做如下确认：
+​ 提交 PR 前，请先做如下确认：
 
-1. 已创建与 PR 对应的 [GitHub Issue]( [apache/rocketmq: Mirror of Apache RocketMQ (github.com)](https://github.com/apache/rocketmq/issues) )
+1. 已创建与 PR
+   对应的 [GitHub Issue]( [apache/rocketmq: Mirror of Apache RocketMQ (github.com)](https://github.com/apache/rocketmq/issues) )
 2. 修改内容符合 [Coding Guidelines](/docs/contributionGuide/02code-guidelines) 编程规范
 3. PR 摘要以 [ISSUE #XXX] 开始并简要描述变更需求
-4. 概述 PR 变更需求，变更日志，验证信息，可参考 [PR Demo](https://github.com/apache/rocketmq/pull/152) 
+4. 概述 PR 变更需求，变更日志，验证信息，可参考 [PR Demo](https://github.com/apache/rocketmq/pull/152)
 5. 提交内容具备完整的测试用例，并确保基本检查，单元测试，集成测试通过
 
 ⑤ 点击 "Create pull request" ，请求合并该分支
 
 ⑥ 至此，PR 已经在 apache/rocketmq-site 远程仓库上可见，所有协作者都可以 Review 该PR 并提供建议
 
-您可以根据评论在本地完成修改并进行多次提交。请求合并和提交修改的相关信息会同步展示在 PR 页面、issue 列表、RocketMQ 的邮件列表中，以便提醒 committer 及时审核 PR
+您可以根据评论在本地完成修改并进行多次提交。请求合并和提交修改的相关信息会同步展示在 PR 页面、issue 列表、RocketMQ
+的邮件列表中，以便提醒 committer 及时审核 PR
 
 ## 合并 PR
 
@@ -123,11 +125,13 @@ $ git pull --squash https://github.com/cuser/rocketmq.git RocketMQ-Vxx.0  # merg
 
 合并前务必要解决合并冲突，并确保当前分支同步于远程分支
 
-请阅读 [Git pull]( [Git - git-pull Documentation (git-scm.com)](https://git-scm.com/docs/git-pull) ) 了解 fast-forward 等相关详情
+请阅读 [Git pull]( [Git - git-pull Documentation (git-scm.com)](https://git-scm.com/docs/git-pull) ) 了解 fast-forward
+等相关详情
 
 ② 合并 committer PR
 
-若 committer 合并自己的 PR , 使用 [Git merge]( [Git - git-merge Documentation (git-scm.com)](https://git-scm.com/docs/git-merge) ) 即可
+若 committer 合并自己的 PR ,
+使用 [Git merge]( [Git - git-merge Documentation (git-scm.com)](https://git-scm.com/docs/git-merge) ) 即可
 
 ```shell
 $ git checkout develop      # switch to local develop branch
@@ -135,7 +139,7 @@ $ git pull apache develop   # fast-forward to current remote HEAD
 $ git merge --squash RocketMQ-Vxx.0	# merge to branch
 ```
 
-③ 进行常规的补丁检查，使用内置的测试用例构建项目，并请务必修改 changelog 
+③ 进行常规的补丁检查，使用内置的测试用例构建项目，并请务必修改 changelog
 
 ④ 若上述工作均已完成，可以执行下面的指令提交合并，回馈开发者分支状态，并关闭 PR
 
@@ -143,7 +147,7 @@ $ git merge --squash RocketMQ-Vxx.0	# merge to branch
 $ git commit --author="contributor_name <contributor_email>" -a -m "RocketMQ-Vxx.0 description closes apache/rocketmq#ZZ"
 ```
 
-关闭 PR 的详情，请参考 [Close PR](https://docs.github.com/cn/issues/tracking-your-work-with-issues/closing-an-issue) 
+关闭 PR 的详情，请参考 [Close PR](https://docs.github.com/cn/issues/tracking-your-work-with-issues/closing-an-issue)
 
 ⑤ 将合并后的分支推送到 apache/rocketmq 远程仓库
 

@@ -35,7 +35,7 @@ public class ScheduledMessageConsumer {
 }
 ```
 
-### 2 发送延迟消息 
+### 2 发送延迟消息
 
 ```java
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
@@ -82,4 +82,4 @@ private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m
 
 当前 RocketMQ 不支持任意时间的延迟。 生产者发送延迟消息前需要设置几个固定的延迟级别，分别对应1s到2h的1到18个延迟级，消息消费失败会进入延迟消息队列，消息发送时间与设置的延迟级别和重试次数有关。
 
- See `SendMessageProcessor.java` 
+See `SendMessageProcessor.java` 

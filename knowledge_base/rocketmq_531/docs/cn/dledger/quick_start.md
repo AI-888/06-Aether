@@ -1,12 +1,16 @@
 # Dledger快速搭建
+
 > 该模式为4.x的切换方式，建议采用 5.x [自动主从切换](../controller/quick_start.md)
 ---
+
 ### 前言
+
 该文档主要介绍如何快速构建和部署基于 DLedger 的可以自动容灾切换的 RocketMQ 集群。
 
 详细的新集群部署和旧集群升级指南请参考 [部署指南](deploy_guide.md)。
 
 ### 1. 源码构建
+
 构建分为两个部分，需要先构建 DLedger，然后 构建 RocketMQ
 
 #### 1.1 构建 DLedger
@@ -58,10 +62,10 @@ $ sh bin/dledger/fast-try.sh stop
 
 快速部署，默认配置在 conf/dledger 里面，默认的存储路径在 /tmp/rmqstore。
 
-
 ### 3. 容灾切换
 
-部署成功，杀掉 Leader 之后（在上面的例子中，杀掉端口 30931 所在的进程），等待约 10s 左右，用 clusterList 命令查看集群，就会发现 Leader 切换到另一个节点了。
+部署成功，杀掉 Leader 之后（在上面的例子中，杀掉端口 30931 所在的进程），等待约 10s 左右，用 clusterList 命令查看集群，就会发现
+Leader 切换到另一个节点了。
 
 
 

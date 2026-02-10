@@ -18,7 +18,8 @@
     <conversionRule conversionWord="pid" converterClass="io.github.aliyunmq.logback.extensions.ProcessIdConverter"/>
     <appender name="CustomConsoleAppender" class="io.github.aliyunmq.logback.extensions.CustomConsoleAppender">
         <encoder>
-            <pattern>%yellow(%d{yyy-MM-dd HH:mm:ss.SSS,GMT+8}) %highlight(%-5p) %boldWhite([%pid]) %magenta([%t]) %boldGreen([%logger{12}#%M:%L]) - %m%n
+            <pattern>%yellow(%d{yyy-MM-dd HH:mm:ss.SSS,GMT+8}) %highlight(%-5p) %boldWhite([%pid]) %magenta([%t])
+                %boldGreen([%logger{12}#%M:%L]) - %m%n
             </pattern>
             <charset class="java.nio.charset.Charset">UTF-8</charset>
         </encoder>

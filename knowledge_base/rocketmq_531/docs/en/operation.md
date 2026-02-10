@@ -1,4 +1,3 @@
-
 # Operation Management
 ---
 
@@ -6,7 +5,8 @@
 
 #### 1.1 Single Master mode
 
-This mode is risky, upon broker restart or broken down, the whole service is unavailable. It's not recommended in production environment, it can be used for local test.
+This mode is risky, upon broker restart or broken down, the whole service is unavailable. It's not recommended in
+production environment, it can be used for local test.
 
 ##### 1）Start NameServer
 
@@ -32,15 +32,21 @@ The broker[broker-a, 192.169.1.2:10911] boot success...
 
 #### 1.2 Multi Master mode
 
-Cluster contains Master node only, no Slave node, eg: 2 Master nodes, 3 Master nodes, advantages and disadvantages of this mode are shown below:
+Cluster contains Master node only, no Slave node, eg: 2 Master nodes, 3 Master nodes, advantages and disadvantages of
+this mode are shown below:
 
-- advantages: simple configuration, single Master node broke down or restart do not impact application. Under RAID10 disk config, even if machine broken down and cannot recover, message do not get lost because of RAID10's high reliable(async flush to disk lost little message, sync to disk do not lost message), this mode get highest performance.
+- advantages: simple configuration, single Master node broke down or restart do not impact application. Under RAID10
+  disk config, even if machine broken down and cannot recover, message do not get lost because of RAID10's high
+  reliable(async flush to disk lost little message, sync to disk do not lost message), this mode get highest
+  performance.
 
-- disadvantages: during the machine's down time, messages have not be consumed on this machine can not be subscribed before recovery. That will impacts message's instantaneity.
+- disadvantages: during the machine's down time, messages have not be consumed on this machine can not be subscribed
+  before recovery. That will impacts message's instantaneity.
 
 ##### 1）Start NameServer
 
-NameServer should be started before broker. If under production environment, we recommend start 3 NameServer nodes for high available. Startup command is equal, as shown below:
+NameServer should be started before broker. If under production environment, we recommend start 3 NameServer nodes for
+high available. Startup command is equal, as shown below:
 
 ```bash
 ### start Name Server
@@ -63,13 +69,17 @@ $ nohup sh mqbroker -n 192.168.1.1:9876 -c $ROCKETMQ_HOME/conf/2m-noslave/broker
 ...
 ```
 
-The above commands only used for single NameServer. In multi NameServer cluster, multi addresses concat by semicolon followed by -n in broker start command. 
+The above commands only used for single NameServer. In multi NameServer cluster, multi addresses concat by semicolon
+followed by -n in broker start command.
 
 #### 1.3 Multi Master Multi Slave mode - async replication
 
-Each Master node is equipped with one Slave node, this mode has many Master-Slave group, using async replication for HA, slaver has a lag(ms level) behind master, advantages and disadvantages of this mode are shown below:
+Each Master node is equipped with one Slave node, this mode has many Master-Slave group, using async replication for HA,
+slaver has a lag(ms level) behind master, advantages and disadvantages of this mode are shown below:
 
-- advantages: message lost a little, even if disk is broken; message instantaneity do not loss; Consumer can still consume from slave when master is down, this process is transparency to user, no human intervention is required; Performance is almost equal to Multi Master mode.
+- advantages: message lost a little, even if disk is broken; message instantaneity do not loss; Consumer can still
+  consume from slave when master is down, this process is transparency to user, no human intervention is required;
+  Performance is almost equal to Multi Master mode.
 
 - disadvantages: message lost a little data, when Master is down and disk broken.
 
@@ -102,11 +112,15 @@ $ nohup sh mqbroker -n 192.168.1.1:9876 -c $ROCKETMQ_HOME/conf/2m-2s-async/broke
 
 #### 1.4 Multi Master Multi Slave mode - synchronous double write
 
-Each Master node is equipped with one Slave node, this mode has many Master-Slave group, using synchronous double write for HA, application's write operation is successful means both master and slave write successful, advantages and disadvantages of this mode are shown below:
+Each Master node is equipped with one Slave node, this mode has many Master-Slave group, using synchronous double write
+for HA, application's write operation is successful means both master and slave write successful, advantages and
+disadvantages of this mode are shown below:
 
-- advantages:both data and service have no single point failure, message has no latency even if Master is down, service available and data available is very high;
+- advantages:both data and service have no single point failure, message has no latency even if Master is down, service
+  available and data available is very high;
 
-- disadvantages:this mode's performance is 10% lower than async replication mode, sending latency is a little high,  in the current version, it do not have auto Master-Slave switch when Master is down.
+- disadvantages:this mode's performance is 10% lower than async replication mode, sending latency is a little high, in
+  the current version, it do not have auto Master-Slave switch when Master is down.
 
 ##### 1）Start NameServer
 
@@ -135,7 +149,9 @@ $ nohup sh mqbroker -n 192.168.1.1:9876 -c $ROCKETMQ_HOME/conf/2m-2s-sync/broker
 $ nohup sh mqbroker -n 192.168.1.1:9876 -c $ROCKETMQ_HOME/conf/2m-2s-sync/broker-b-s.properties &
 ```
 
-The above Broker matches Slave by specifying the same BrokerName, Master's BrokerId must be 0, Slave's BrokerId must larger than 0. Besides, a Master can have multi Slaves that each has a distinct BrokerId. $ROCKETMQ_HOME indicates RocketMQ's install directory, user needs to set this environment parameter.
+The above Broker matches Slave by specifying the same BrokerName, Master's BrokerId must be 0, Slave's BrokerId must
+larger than 0. Besides, a Master can have multi Slaves that each has a distinct BrokerId. $ROCKETMQ_HOME indicates
+RocketMQ's install directory, user needs to set this environment parameter.
 
 ### 2 mqadmin management tool
 
@@ -144,9 +160,14 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
 > 1. execute command: `./mqadmin {command} {args}`
 > 2. almost all commands need -n indicates NameSerer address, format is ip:port
 > 3. almost all commands can get help info by -h
-> 4. if command contains both Broker address(-b) and cluster name(-c), it's prior to use broker address. If command do not contains broker address, it will executed on all hosts in this cluster. Support only one broker host. -b format is ip:port, default port is 10911
-> 5. there are many commands under tools, but not all command can be used, only commands that initialized in MQAdminStartup can be used, you can modify this class, add or self-define command.
-> 6. because of version update, little command do not update timely, please refer to source code directly when occur error.
+> 4. if command contains both Broker address(-b) and cluster name(-c), it's prior to use broker address. If command do
+     not contains broker address, it will executed on all hosts in this cluster. Support only one broker host. -b format
+     is ip:port, default port is 10911
+> 5. there are many commands under tools, but not all command can be used, only commands that initialized in
+     MQAdminStartup can be used, you can modify this class, add or self-define command.
+> 6. because of version update, little command do not update timely, please refer to source code directly when occur
+     error.
+
 #### 2.1 Topic
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -374,8 +395,6 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
  </tr>
 </table>
 
-
-
 #### 2.2 Cluster
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -448,7 +467,6 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
   <td class=xl66 width=185 style='width:139pt'>NameServer Service address, format is ip:port</td>
  </tr>
 </table>
-
 
 #### 2.3 Broker
 
@@ -648,7 +666,6 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
   <td class=xl68 width=87 style='width:65pt'>send count</td>
  </tr>
 </table>
-
 
 #### 2.4 Message
 
@@ -981,7 +998,6 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
  </tr>
 </table>
 
-
 #### 2.5 Consumer, Consumer Group
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -1149,9 +1165,6 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
  </tr>
 </table>
 
-
-
-
 #### 2.6 Connection
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -1202,9 +1215,6 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
   <td class=xl68 width=87 style='width:65pt'>print help info</td>
  </tr>
 </table>
-
-
-
 
 #### 2.7 NameServer
 
@@ -1297,9 +1307,6 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
  </tr>
 </table>
 
-
-
-
 #### 2.8 Other
 
 <table border=0 cellpadding=0 cellspacing=0 width=714>
@@ -1327,12 +1334,11 @@ The above Broker matches Slave by specifying the same BrokerName, Master's Broke
  </tr>
 </table>
 
-
 ### 3   Frequently asked questions about operations
 
 #### 3.1 RocketMQ's mqadmin command error
 
->  question description: execute mqadmin occur below exception after deploy RocketMQ cluster.
+> question description: execute mqadmin occur below exception after deploy RocketMQ cluster.
 >
 > ```java
 > org.apache.rocketmq.remoting.exception.RemotingConnectException: connect to <null> failed
@@ -1342,7 +1348,8 @@ Solution: execute command `export NAMESRV_ADDR=ip:9876` (ip is NameServer's ip a
 
 #### 3.2 RocketMQ consumer cannot consume, because of different version of producer and consumer.
 
-> question description: one producer produce message, consumer A can consume, consume B cannot consume, RocketMQ console print:
+> question description: one producer produce message, consumer A can consume, consume B cannot consume, RocketMQ console
+> print:
 >
 > ```java
 > Not found the consumer group consume stats, because return offset table is empty, maybe the consumer not consume any message.
@@ -1352,23 +1359,28 @@ Solution: make sure that producer and consumer has the same version of rocketmq-
 
 #### 3.3  Consumer cannot consume oldest message, when a new consumer group is added.
 
-> question description: when a new consumer group start, it consumes from current offset, do not fetch oldest message.    
+> question description: when a new consumer group start, it consumes from current offset, do not fetch oldest message.
 
-Solution: rocketmq's default policy is consume from latest, that is skip oldest message. If you want consume oldest message, you need to set `org.apache.rocketmq.client.consumer.DefaultMQPushConsumer#setConsumeFromWhere`. The following is three common configurations:
+Solution: rocketmq's default policy is consume from latest, that is skip oldest message. If you want consume oldest
+message, you need to set `org.apache.rocketmq.client.consumer.DefaultMQPushConsumer#setConsumeFromWhere`. The following
+is three common configurations:
 
-- default configuration, a new consumer group consume from latest position at first startup, then consume from last time's offset at next startup, that is skip oldest message;
+- default configuration, a new consumer group consume from latest position at first startup, then consume from last
+  time's offset at next startup, that is skip oldest message;
 
 ```java
 consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
 ```
 
-- a new consumer group consume from oldest position at first startup, then consume from last time's offset at next startup, that is consume the unexpired message;
+- a new consumer group consume from oldest position at first startup, then consume from last time's offset at next
+  startup, that is consume the unexpired message;
 
 ```java
 consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
 ```
 
-- a new consumer group consume from specified timestamp at first startup, then consume from last time's offset at next startup, cooperate with consumer.setConsumeTimestamp(), default is half an hour before;
+- a new consumer group consume from specified timestamp at first startup, then consume from last time's offset at next
+  startup, cooperate with consumer.setConsumeTimestamp(), default is half an hour before;
 
 ```java
 consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_TIMESTAMP);
@@ -1376,11 +1388,17 @@ consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_TIMESTAMP);
 
 #### 3.4 How to enable consume from Slave
 
-In some cases, consumer need reset offset to a day or two before, if Master Broker has limited memory, it's CommitLog will have a high IO load, then it will impact other message's read and write that on this broker. When `slaveReadEnable=true` is set, and consumer's offset exceeds `accessMessageInMemoryMaxRatio=40%`, Master Broker will recommend consumer consume from Slave Broker to lower Master Broker IO.  
+In some cases, consumer need reset offset to a day or two before, if Master Broker has limited memory, it's CommitLog
+will have a high IO load, then it will impact other message's read and write that on this broker. When
+`slaveReadEnable=true` is set, and consumer's offset exceeds `accessMessageInMemoryMaxRatio=40%`, Master Broker will
+recommend consumer consume from Slave Broker to lower Master Broker IO.
 
 #### 3.5 Performance tuning
 
-A spin lock is recommended for asynchronous disk flush, a reentrant lock is recommended for synchronous disk flush, configuration item is `useReentrantLockWhenPutMessage`, default is false; Enable `TransientStorePoolEnable` is recommended when use asynchronous disk flush; Recommend to close `transferMsgByHeap` to improve fetch efficiency; Set a little larger `sendMessageThreadPoolNums`, when use synchronous disk flush.
+A spin lock is recommended for asynchronous disk flush, a reentrant lock is recommended for synchronous disk flush,
+configuration item is `useReentrantLockWhenPutMessage`, default is false; Enable `TransientStorePoolEnable` is
+recommended when use asynchronous disk flush; Recommend to close `transferMsgByHeap` to improve fetch efficiency; Set a
+little larger `sendMessageThreadPoolNums`, when use synchronous disk flush.
 
 #### 3.6 The meaning and difference between msgId and offsetMsgId in RocketMQ
 
@@ -1390,5 +1408,7 @@ You will usually see the following log print message after sending message by us
 SendResult [sendStatus=SEND_OK, msgId=0A42333A0DC818B4AAC246C290FD0000, offsetMsgId=0A42333A00002A9F000000000134F1F5, messageQueue=MessageQueue [topic=topicTest1, BrokerName=mac.local, queueId=3], queueOffset=4]
 ```
 
-- msgId, is generated by producer sdk. In particular, call method `MessageClientIDSetter.createUniqIDBuffer()` to generate unique Id;
-- offsetMsgId, offsetMsgId is generated by Broker server(format is "Ip Address + port + CommitLog offset"). offsetMsgId is messageId that is RocketMQ console's input.
+- msgId, is generated by producer sdk. In particular, call method `MessageClientIDSetter.createUniqIDBuffer()` to
+  generate unique Id;
+- offsetMsgId, offsetMsgId is generated by Broker server(format is "Ip Address + port + CommitLog offset"). offsetMsgId
+  is messageId that is RocketMQ console's input.

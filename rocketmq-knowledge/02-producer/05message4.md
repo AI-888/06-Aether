@@ -25,5 +25,6 @@ public class SimpleBatchProducer {
 ```
 
 :::note
-这里调用非常简单，将消息打包成 `Collection<Message> msgs` 传入方法中即可，需要注意的是批量消息的大小不能超过 1MiB（否则需要自行分割），其次同一批 batch 中 topic 必须相同。 
+这里调用非常简单，将消息打包成 `Collection<Message> msgs` 传入方法中即可，需要注意的是批量消息的大小不能超过
+1MiB（否则需要自行分割），其次同一批 batch 中 topic 必须相同。
 :::

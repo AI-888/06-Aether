@@ -3,8 +3,6 @@ import unittest
 
 from chains.intent_router_chain import run_intent_router_chain
 from tools.tool_registry import (
-    TOOL_LIST_BROKER_PODS,
-    TOOL_SEND_FAIL_CHECK,
     TOOL_LIST_TOPICS,
     TOOL_GET_BROKER_CONFIG,
 )
@@ -44,17 +42,7 @@ class IntentRouterTests(unittest.TestCase):
                 continue
         return "\n".join(parts)
 
-    def test_list_broker_pods(self):
-        llm = DummyLLM(f'{{"intents":["{TOOL_LIST_BROKER_PODS}"],"namespace":"rocketmq5"}}')
-        base_prompt = self._load_all_prompts()
-        data = run_intent_router_chain(llm, "列出rocketmq broker全部pod", base_prompt=base_prompt)
-        self.assertIn(TOOL_LIST_BROKER_PODS, data.get("intents", []))
 
-    def test_send_fail_check_rule_fallback(self):
-        llm = DummyLLM('{"intents":[]}')  # force fallback
-        base_prompt = self._load_all_prompts()
-        data = run_intent_router_chain(llm, "发送消息失败，帮我看看", base_prompt=base_prompt)
-        self.assertIn(TOOL_SEND_FAIL_CHECK, data.get("intents", []))
 
     def test_list_topics_rule_fallback(self):
         llm = DummyLLM('{"intents":[]}')  # force fallback

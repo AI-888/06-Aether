@@ -1,10 +1,9 @@
 import json
 import os
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 import requests
-from datetime import datetime
-
 
 DEFAULT_CONFIG = {
     "base_url": "http://9.134.241.105:6868/sse",

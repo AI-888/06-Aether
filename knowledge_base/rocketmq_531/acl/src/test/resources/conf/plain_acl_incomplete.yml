@@ -16,7 +16,7 @@
 ## suggested format
 
 - accessKey: rocketmq2
-  secretKey: 
+  secretKey:
   whiteRemoteAddress: 192.168.1.*
   # if it is admin, it could access all resources
   admin: true

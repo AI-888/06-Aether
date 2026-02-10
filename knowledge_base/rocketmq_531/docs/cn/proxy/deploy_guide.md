@@ -19,7 +19,8 @@ RocketMQ Proxy 支持两种代理模式: `Local` and `Cluster`。
 nohup sh mqproxy &
 ```
 
-该命令仅会启动 `Proxy` 组件本身。它假设已经在指定的 `nameSrvAddr` 地址上运行着 `Namesrv` 节点，同时也有 broker 节点通过 `nameSrvAddr` 注册自己并运行。
+该命令仅会启动 `Proxy` 组件本身。它假设已经在指定的 `nameSrvAddr` 地址上运行着 `Namesrv` 节点，同时也有 broker 节点通过
+`nameSrvAddr` 注册自己并运行。
 
 ## `Local` 模式
 

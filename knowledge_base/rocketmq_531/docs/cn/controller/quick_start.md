@@ -47,7 +47,8 @@ $ sh bin/mqadmin getControllerMetaData -a localhost:9878
 $ sh bin/controller/fast-try.sh stop
 ```
 
-对于快速部署，默认配置在 conf/controller/quick-start里面，默认的存储路径在 /tmp/rmqstore，且会开启一个 Controller (嵌入在 Namesrv) 和两个 Broker。
+对于快速部署，默认配置在 conf/controller/quick-start里面，默认的存储路径在 /tmp/rmqstore，且会开启一个 Controller (嵌入在
+Namesrv) 和两个 Broker。
 
 ### 查看 SyncStateSet
 
@@ -100,8 +101,6 @@ $ sh bin/mqadmin getSyncStateSet -a localhost:9878 -b broker-a
 
 ![image-20220605211244128](../image/controller/quick-start/changemaster.png)
 
-
-
 ## Controller内嵌Namesvr集群部署
 
 Controller以插件方式内嵌Namesvr集群(3个Node组成)部署，快速启动：
@@ -145,7 +144,8 @@ $ sh bin/mqadmin getControllerMetaData -a localhost:9878
 $ sh bin/controller/fast-try-namesrv-plugin.sh stop
 ```
 
-使用 fast-try-namesrv-plugin.sh 脚本快速部署，默认配置在 conf/controller/cluster-3n-namesrv-plugin里面并且会启动3个Namesvr和3个Controller(内嵌Namesrv)。
+使用 fast-try-namesrv-plugin.sh 脚本快速部署，默认配置在
+conf/controller/cluster-3n-namesrv-plugin里面并且会启动3个Namesvr和3个Controller(内嵌Namesrv)。
 
 ## Controller独立集群部署
 
@@ -190,9 +190,8 @@ $ sh bin/mqadmin getControllerMetaData -a localhost:9878
 $ sh bin/controller/fast-try-independent-deployment.sh stop
 ```
 
-使用fast-try-independent-deployment.sh 脚本快速部署，默认配置在 conf/controller/cluster-3n-independent里面并且会启动3个Controller(独立部署)组成一个集群。
-
-
+使用fast-try-independent-deployment.sh 脚本快速部署，默认配置在
+conf/controller/cluster-3n-independent里面并且会启动3个Controller(独立部署)组成一个集群。
 
 ## 注意说明
 

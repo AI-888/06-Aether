@@ -1,6 +1,6 @@
 # Schedule example
 
-### 1 Start consumer to wait for incoming subscribed messages 
+### 1 Start consumer to wait for incoming subscribed messages
 
 ```java
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
@@ -37,7 +37,7 @@ public class ScheduledMessageConsumer {
 }
 ```
 
-### 2 Send scheduled messages 
+### 2 Send scheduled messages
 
 ```java
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
@@ -68,13 +68,14 @@ public class ScheduledMessageProducer {
 }
 ```
 
-### 3 Verification 
+### 3 Verification
 
-You should see messages are consumed about 10 seconds later than their storing time. 
+You should see messages are consumed about 10 seconds later than their storing time.
 
 ### 4 Use scenarios for scheduled messages
 
-For example, in e-commerce, if an order is submitted, a delay message can be sent, and the status of the order can be checked after 1 hour. If the order is still unpaid, the order can be cancelled and the inventory released.
+For example, in e-commerce, if an order is submitted, a delay message can be sent, and the status of the order can be
+checked after 1 hour. If the order is still unpaid, the order can be cancelled and the inventory released.
 
 ### 5 Restrictions on the use of scheduled messages
 
@@ -84,6 +85,8 @@ For example, in e-commerce, if an order is submitted, a delay message can be sen
 private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h";
 ```
 
-Nowadays RocketMq does not support any time delay. It needs to set several fixed delay levels, which correspond to level 1 to 18 from 1s to 2h. Message consumption failure will enter the delay message queue. Message sending time is related to the set delay level and the number of retries.
+Nowadays RocketMq does not support any time delay. It needs to set several fixed delay levels, which correspond to level
+1 to 18 from 1s to 2h. Message consumption failure will enter the delay message queue. Message sending time is related
+to the set delay level and the number of retries.
 
- See `SendMessageProcessor.java` 
+See `SendMessageProcessor.java` 

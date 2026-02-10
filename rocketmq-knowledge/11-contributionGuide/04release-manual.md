@@ -24,13 +24,14 @@
 * 通过 `gpg --keyserver keys.openpgp.org --send-key <your key id>` 上传密钥到公钥服务器
 * 通过 `gpg --armor --export <your key id> >> gpgapachekey.txt` 导出公钥到文本文件
 * 获得其他 committer 签名的密钥 ( 可选 )
-* 将生成的密钥添加到[DEV KEYS file](https://dist.apache.org/repos/dist/dev/rocketmq/KEYS) 和 [RELEASE KEYS file](https://dist.apache.org/repos/dist/release/rocketmq/KEYS)
+* 将生成的密钥添加到[DEV KEYS file](https://dist.apache.org/repos/dist/dev/rocketmq/KEYS)
+  和 [RELEASE KEYS file](https://dist.apache.org/repos/dist/release/rocketmq/KEYS)
 
 :::tip 注意
 DEV SVN 仓库可以由 Release Manager 自行添加，Release SVN 仓库需要 PMC 权限，可以由 PMC 协助将 KEY 进行上传。
 :::
 
-**Tips:** 需要设置默认公钥, 若有多个公钥，请修改 `~/.gnupg/gpg.conf` 
+**Tips:** 需要设置默认公钥, 若有多个公钥，请修改 `~/.gnupg/gpg.conf`
 
 参考示例：
 
@@ -170,7 +171,8 @@ gpg: sending key 7DE280AF to hkp server keys.openpgp.org
 </settings>
 ```
 
-**Tips:** 推荐使用 [Maven's password encryption capabilities](http://maven.apache.org/guides/mini/guide-encryption.html) 加密 ```gpg.passphrase``` 
+**Tips:** 推荐使用 [Maven's password encryption capabilities](http://maven.apache.org/guides/mini/guide-encryption.html)
+加密 ```gpg.passphrase```
 
 ③ 构建 Artifacts 并签名
 
@@ -186,14 +188,17 @@ mvn clean install -Papache-release
 
 #### 1.5 发布 Release Notes
 
-通过 [RocketMQ JIRA](https://issues.apache.org/jira/browse/ROCKETMQ/) 生成 Release Notes，推送到 [rocketmq-site](https://github.com/apache/rocketmq-site), 并添加链接至版本选举邮件。
+通过 [RocketMQ JIRA](https://issues.apache.org/jira/browse/ROCKETMQ/) 生成 Release
+Notes，推送到 [rocketmq-site](https://github.com/apache/rocketmq-site), 并添加链接至版本选举邮件。
 
 ## 2.构建 Source Release
 
-使用 [Maven Release plugin](https://maven.apache.org/maven-release/maven-release-plugin/) 版本发布插件，发布 Artifact 至 ASF Nexus 暂存库，完成版本验证和版本投票后，拷贝至 Apache SVN 版本库。
+使用 [Maven Release plugin](https://maven.apache.org/maven-release/maven-release-plugin/) 版本发布插件，发布 Artifact 至
+ASF Nexus 暂存库，完成版本验证和版本投票后，拷贝至 Apache SVN 版本库。
 
 :::tip 注意
-由于当前 develop 为保护分支，因此需要拉出一个新的预发版分支 `prepare-release-x.x.x` 进行操作，并在 2.2 步结束后通过提交 PR 的方式合入到 develop 分支。
+由于当前 develop 为保护分支，因此需要拉出一个新的预发版分支 `prepare-release-x.x.x` 进行操作，并在 2.2 步结束后通过提交 PR
+的方式合入到 develop 分支。
 :::
 
 #### 2.1 检查 RocketMQ  版本
@@ -231,29 +236,33 @@ mvn release:perform
 
 1. `mvn clean release:clean`：清除构建失败及丢弃的版本
 2. `mvn release:prepare -Psigned_release -Darguments="-DskipTests"`：根据 ```SCM``` 属性更新 tag
-3. `mvn -Psigned_release release:perform -Darguments="-DskipTests"`：将生成 artifacts 暂存到 [Nexus repo](https://repository.apache.org/#stagingRepositories)。可添加 ```-DdryRun=true``` 参数执行预演
+3. `mvn -Psigned_release release:perform -Darguments="-DskipTests"`：将生成 artifacts
+   暂存到 [Nexus repo](https://repository.apache.org/#stagingRepositories)。可添加 ```-DdryRun=true``` 参数执行预演
 
-执行完上述流程可在 [Nexus staging repo](https://repository.apache.org/#stagingRepositories) 或本地分支的 ```target``` 目录下找到预发布版本的 Artifacts 
+执行完上述流程可在 [Nexus staging repo](https://repository.apache.org/#stagingRepositories) 或本地分支的 ```target```
+目录下找到预发布版本的 Artifacts
 
 :::tip 注意
-该步结束后，需要将预发版分支 `prepare-release-x.x.x` 内容通过提交PR的方式合入到 develop 分支，并以 develop 被合入的 commit `[maven-release-plugin] prepare release rocketmq-all-4.9.2` 为基准重新打 release Tag。
+该步结束后，需要将预发版分支 `prepare-release-x.x.x` 内容通过提交PR的方式合入到 develop 分支，并以 develop 被合入的 commit
+`[maven-release-plugin] prepare release rocketmq-all-4.9.2` 为基准重新打 release Tag。
 :::
 
 #### 2.3 rc 版本文件
 
-- 预发布版本投票通过前会暂存在 [/dev/rocketmq](https://dist.apache.org/repos/dist/dev/rocketmq/) ，存放于 ```x.x.x-rcx/``` 目录下，需要提供的文件如下：
+- 预发布版本投票通过前会暂存在 [/dev/rocketmq](https://dist.apache.org/repos/dist/dev/rocketmq/) ，存放于
+  ```x.x.x-rcx/``` 目录下，需要提供的文件如下：
 
-> rocketmq-all-x1.x2.x3-bin-release.zip  
+> rocketmq-all-x1.x2.x3-bin-release.zip
 >
-> rocketmq-all-x1.x2.x3-bin-release.zip.asc  
+> rocketmq-all-x1.x2.x3-bin-release.zip.asc
 >
-> rocketmq-all-x1.x2.x3-bin-release.zip.sha512  
+> rocketmq-all-x1.x2.x3-bin-release.zip.sha512
 >
-> rocketmq-all-x1.x2.x3-source-release.zip  
+> rocketmq-all-x1.x2.x3-source-release.zip
 >
-> rocketmq-all-x1.x2.x3-source-release.zip.asc  
+> rocketmq-all-x1.x2.x3-source-release.zip.asc
 >
-> rocketmq-all-x1.x2.x3-source-release.zip.sha512  
+> rocketmq-all-x1.x2.x3-source-release.zip.sha512
 
 通过 ```gpg``` 指令生成签名文件和验证文件：
 
@@ -271,7 +280,9 @@ gpg --print-md SHA512 rocketmq-all-x1.x2.x3-bin-release.zip > rocketmq-all-x1.x2
 gpg --print-md SHA512 rocketmq-all-x1.x2.x3-source-release.zip >  rocketmq-all-x1.x2.x3-source-release.zip.sha512
 ```
 
-**Tips:** 源码版本和二进制版本应以 `rocketmq-all` 开头，以便使用 Docker 构建 <a target="_blank" href="https://github.com/apache/rocketmq-docker/blob/a2672f62cc5171263ffc856ab5657291efba1912/image-build/Dockerfile-centos#L58-L59">RocketMQ Docker Build</a>
+**Tips:** 源码版本和二进制版本应以 `rocketmq-all` 开头，以便使用 Docker
+构建 <a target="_blank" href="https://github.com/apache/rocketmq-docker/blob/a2672f62cc5171263ffc856ab5657291efba1912/image-build/Dockerfile-centos#L58-L59">
+RocketMQ Docker Build</a>
 
 #### 2.4 回滚并重试
 
@@ -279,46 +290,46 @@ gpg --print-md SHA512 rocketmq-all-x1.x2.x3-source-release.zip >  rocketmq-all-x
 
 - 删除在 2.2 步骤中创建的 tag
 
-  - 列出所有 tag ，并找到最新创建的
+    - 列出所有 tag ，并找到最新创建的
 
   ```
   git tag -ln
   ```
-  
-  - 删除本地仓库的 tag, 
+
+    - 删除本地仓库的 tag,
 
   ```
   git tag -d rocketmq-all-x1.x2.x3
   ```
-  
-  - 推送更新至 GitHub
+
+    - 推送更新至 GitHub
 
   ```
   git push origin :refs/tags/rocketmq-all-x1.x2.x3
   ```
-  
+
 - 删除 2.2 步骤中开发分支的提交记录
 
-  - 列出 git 日志
+    - 列出 git 日志
 
   ```
   git log
   ```
 
-  - 找到最新的提交记录，标注类似如下：
+    - 找到最新的提交记录，标注类似如下：
 
-  > des1: [maven-release-plugin] prepare release rocketmq-all-4.9.2 
+  > des1: [maven-release-plugin] prepare release rocketmq-all-4.9.2
   >
   > des2: [maven-release-plugin] prepare for next development iteration
 
-  - revert commits
+    - revert commits
 
   ```
   git revert -n commit-idA..commit-idB
   ```
-  
+
 - 删除 [Nexus](https://repository.apache.org/#welcome) 中待回退版本
-  
+
 - 回退至步骤 2.1 重做
 
 ## 3.构建 binary release
@@ -331,30 +342,30 @@ gpg --print-md SHA512 rocketmq-all-x1.x2.x3-source-release.zip >  rocketmq-all-x
 * 确保所有单元测试均可通过 `mvn clean install`
 * 确保所有集成测试均可通过 `mvn clean install -Pit-test`
 
-成功构建后，同样需要生成 .asc 文件和 .sha512 文件，完成验证和投票后，最终并拷贝到 [svn](https://dist.apache.org/repos/dist/release/rocketmq/) 仓库。
-
+成功构建后，同样需要生成 .asc 文件和 .sha512
+文件，完成验证和投票后，最终并拷贝到 [svn](https://dist.apache.org/repos/dist/release/rocketmq/) 仓库。
 
 ## 4. 版本验证
 
 #### 4.1 binary release 验证清单
 
- *   检查构建依赖包的操作系统，netty-tcnative 操作系统敏感
- *   确保许可证为 Apache V2   
- *   若引入了第三方依赖，需要更新 NOTICE
- *   提取压缩文件检查版本是否正确
- *   验证 ASC 签名, SHA512 摘要
- *   运行 Quick-Start 启动 nameserver 和 broker
- *   运行 clusterList 命令检查版本是否正确
- *   确保没有 nohup.out 文件
+* 检查构建依赖包的操作系统，netty-tcnative 操作系统敏感
+* 确保许可证为 Apache V2
+* 若引入了第三方依赖，需要更新 NOTICE
+* 提取压缩文件检查版本是否正确
+* 验证 ASC 签名, SHA512 摘要
+* 运行 Quick-Start 启动 nameserver 和 broker
+* 运行 clusterList 命令检查版本是否正确
+* 确保没有 nohup.out 文件
 
 #### 4.2 source release 验证清单
 
- * 确保许可证为 Apache V2   
- * 若引入了第三方依赖，需要更新 NOTICE
- * 提取压缩文件检查版本是否正确
- * 验证 ASC 签名, SHA512 摘要
- * 编译源码，运行 Quick-Start 启动 nameserver 和 broker
- * 运行 clusterList 命令判断版本是否正确
+* 确保许可证为 Apache V2
+* 若引入了第三方依赖，需要更新 NOTICE
+* 提取压缩文件检查版本是否正确
+* 验证 ASC 签名, SHA512 摘要
+* 编译源码，运行 Quick-Start 启动 nameserver 和 broker
+* 运行 clusterList 命令判断版本是否正确
 
 #### 4.3 验证工具
 
@@ -370,7 +381,7 @@ gpg --print-md SHA512 rocketmq-all-x1.x2.x3-source-release.zip >  rocketmq-all-x
   done
   ```
 
-  or
+or
 
   ```shell
   gpg --verify rocketmq-all-%version-number%-source-release.zip.asc rocketmq-all-%version-number%-bin-release.zip
@@ -413,84 +424,85 @@ RocketMQ 社区通过 **dev@rocketmq.apache.org** 邮件列表进行版本选举
 
 邮件列表：[dev list](mailto:dev@rocketmq.apache.org)
 
-邮件主题：**[VOTE]: Release Apache RocketMQ \<release-version\> RC\<RC Number\>** 
+邮件主题：**[VOTE]: Release Apache RocketMQ \<release-version\> RC\<RC Number\>**
 
-> Hello RocketMQ Community,  
+> Hello RocketMQ Community,
 >
-> This is the vote for \<release version\> of Apache RocketMQ.  
+> This is the vote for \<release version\> of Apache RocketMQ.
 >
 > ${A brief introduction to RocketMQ and the features of this release.}
 >
-> **The artifacts:**  
+> **The artifacts:**
 >
 > https://dist.apache.org/repos/dist/dev/rocketmq/${release version}
 >
-> **The staging repo:**  
+> **The staging repo:**
 >
 > https://repository.apache.org/content/repositories/orgapacherocketmq-XXX/
 >
-> **Git tag for the release:**  
+> **Git tag for the release:**
 >
-> \<link to the tag of GitHub repo\>  
+> \<link to the tag of GitHub repo\>
 >
-> **Hash for the release tag:**  
+> **Hash for the release tag:**
 >
-> \<Hash value of the release tag\>  
+> \<Hash value of the release tag\>
 >
-> **Release Notes:**  
+> **Release Notes:**
 >
-> \<insert link to the rocketmq release notes\>  
+> \<insert link to the rocketmq release notes\>
 >
-> The artifacts have been signed with Key : \<ID of signing key\>, which can be found in the keys file:  
+> The artifacts have been signed with Key : \<ID of signing key\>, which can be found in the keys file:
 >
-> https://dist.apache.org/repos/dist/dev/rocketmq/KEYS  
+> https://dist.apache.org/repos/dist/dev/rocketmq/KEYS
 >
-> The vote will be open for at least 72 hours or until necessary number of votes are reached.  
+> The vote will be open for at least 72 hours or until necessary number of votes are reached.
 >
-> Please vote accordingly:  
+> Please vote accordingly:
 >
-> [ ] +1  approve    
+> [ ] +1 approve
 >
-> [ ] +0  no opinion    
+> [ ] +0 no opinion
 >
-> [ ] -1  disapprove with the reason    
+> [ ] -1 disapprove with the reason
 >
-> Thanks,  
+> Thanks,
 >
-> The Apache RocketMQ Team  
+> The Apache RocketMQ Team
 
-**Tips:** Hash for the release tag:  可使用 commit id 
+**Tips:** Hash for the release tag:  可使用 commit id
 
 ### 6.2 结果公示
 
 72 小时后，若至少有 3 票通过而没有反对票，则发送如下邮件庆祝版本发布
 
-邮件主题：**[RESULT][VOTE]: Release Apache RocketMQ \<release-version\> RC\<RC Number\>** 
+邮件主题：**[RESULT][VOTE]: Release Apache RocketMQ \<release-version\> RC\<RC Number\>**
 
-> Hello RocketMQ Community,  
+> Hello RocketMQ Community,
 >
-> The Apache RocketMQ `<release version>` vote is now closed and has passed with [number] binding +1s, [number] non-binding +1s and no 0 or -1:  
+> The Apache RocketMQ `<release version>` vote is now closed and has passed with [number] binding +1s, [number]
+> non-binding +1s and no 0 or -1:
 >
-> **Binding votes +1s:**  
+> **Binding votes +1s:**
 >
-> User Name (Apache ID)    
+> User Name (Apache ID)
 >
-> User Name (Apache ID)    
+> User Name (Apache ID)
 >
-> User Name (Apache ID)    
+> User Name (Apache ID)
 >
 > ....
 >
-> **Non-binding votes +1s:**  
+> **Non-binding votes +1s:**
 >
-> User Name (Apache ID) 
+> User Name (Apache ID)
 >
 >
-> ....  
+> ....
 >
-> The release will be published soon.  
+> The release will be published soon.
 >
-> Thanks,   
+> Thanks,
 >
 > The Apache RocketMQ Team
 
@@ -498,53 +510,53 @@ RocketMQ 社区通过 **dev@rocketmq.apache.org** 邮件列表进行版本选举
 
 更新邮件主题：**[RESTART][VOTE][#\]: Release Apache RocketMQ \<release-version\> RC\<RC Number\>**
 
-
 ## 7. 版本发布
 
 投票通过后, 发布版本到 Maven Nexus 仓库和 Apache 版本仓库
 
 1. 发布到 Nexus 仓库, 选择暂存区的  **orgapacherocketmq-XXX** 点击 `Release` 图标发布
 2. 发布到 Apache 版本仓库, 使用 SVN 拷贝版本至 [/release/rocketmq](https://dist.apache.org/repos/dist/release/rocketmq/)
-:::tip 注意
-Release SVN 仓库需要 PMC 权限，若没有权限，可以由 PMC 协助将 KEY 进行上传。
-:::
+   :::tip 注意
+   Release SVN 仓库需要 PMC 权限，若没有权限，可以由 PMC 协助将 KEY 进行上传。
+   :::
 3. 合并 [Apache RocketMQ](https://github.com/apache/rocketmq) ```develop``` 分支至 ```master``` 分支
-4. 添加 release notes 到 [Releases · apache/rocketmq](https://github.com/apache/rocketmq/releases) 
+4. 添加 release notes 到 [Releases · apache/rocketmq](https://github.com/apache/rocketmq/releases)
 5. 创建新分支，并命名为 `release-x.x.x`
-:::tip 注意
-请将该分支的 commit 重置回`[maven-release-plugin] prepare release rocketmq-all-x.x.x`处。
-:::
+   :::tip 注意
+   请将该分支的 commit 重置回`[maven-release-plugin] prepare release rocketmq-all-x.x.x`处。
+   :::
 6. 更新 [apache/rocketmq-site](https://github.com/apache/rocketmq-site) 官网主页
-   - 添加 release note，参考 [4.9.3 release notes](https://github.com/apache/rocketmq-site/commit/4b662a197a0a77fd460614df9e231e6ffdd7c622) 
-   - 更新 release note，参考 [docs updates for 4.9.3](https://github.com/apache/rocketmq-site/commit/0fd4d231c06f1d641a0cc30f8ffe22775043e89d)
-
+    - 添加 release
+      note，参考 [4.9.3 release notes](https://github.com/apache/rocketmq-site/commit/4b662a197a0a77fd460614df9e231e6ffdd7c622)
+    - 更新 release
+      note，参考 [docs updates for 4.9.3](https://github.com/apache/rocketmq-site/commit/0fd4d231c06f1d641a0cc30f8ffe22775043e89d)
 
 ## 8. 版本公示
 
-邮件列表：**announce@apache.org**, **users@rocketmq.apache.org**, 
+邮件列表：**announce@apache.org**, **users@rocketmq.apache.org**,
 
-​				 **private@rocketmq.apache.org**, **dev@rocketmq.apache.org** 
+​                 **private@rocketmq.apache.org**, **dev@rocketmq.apache.org**
 
 邮件主题： **[ANNOUNCE] Release Apache RocketMQ \<release-version\>**
 
 > Hi all,
 >
-> The Apache RocketMQ team would like to announce the release of Apache RocketMQ \<release version\>.  
+> The Apache RocketMQ team would like to announce the release of Apache RocketMQ \<release version\>.
 >
 > ${A brief introduction to RocketMQ and the features of this release.}
 >
-> More details regarding Apache RocketMQ can be found at:  
+> More details regarding Apache RocketMQ can be found at:
 >
-> http://rocketmq.apache.org/  
+> http://rocketmq.apache.org/
 >
-> The release artifacts can be downloaded here:  
+> The release artifacts can be downloaded here:
 >
-> https://dist.apache.org/repos/dist/release/rocketmq/${release-version}  
+> https://dist.apache.org/repos/dist/release/rocketmq/${release-version}
 >
-> The release notes can be found here:  
+> The release notes can be found here:
 >
-> \<insert link to the rocketmq release notes\>  
+> \<insert link to the rocketmq release notes\>
 >
-> Thanks,  
+> Thanks,
 >
 > The Apache RocketMQ Team  

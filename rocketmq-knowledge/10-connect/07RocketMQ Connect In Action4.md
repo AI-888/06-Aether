@@ -51,6 +51,7 @@ mvn clean package -Dmaven.test.skip=true
 ```
 
 将 SFTP RocketMQ Connector 编译好的包放入Runtime加载的Plugin目录
+
 ```
 mkdir -p /Users/YourUsername/rocketmqconnect/connector-plugins
 cp target/rocketmq-connect-sftp-0.0.1-SNAPSHOT-jar-with-dependencies.jar /Users/YourUsername/rocketmqconnect/connector-plugins
@@ -67,6 +68,7 @@ vim conf/connect-standalone.conf
 ```
 
 示例配置信息如下
+
 ```
 workerId=standalone-worker
 storePathRootDir=/Users/YourUsername/rocketmqconnect/storeRoot
@@ -89,22 +91,28 @@ pluginPaths=/Users/YourUsername/rocketmqconnect/connector-plugins
 ```
 
 单机模式（standalone）下，RocketMQ Connect 会把同步位点信息持久化到本地文件目录 storePathRootDir
->storePathRootDir=/Users/YourUsername/rocketmqconnect/storeRoot
+> storePathRootDir=/Users/YourUsername/rocketmqconnect/storeRoot
 
 如果想重置同步位点，则需要删除持久化的位点信息文件
+
 ```shell
 rm -rf /Users/YourUsername/rocketmqconnect/storeRoot/*
 ```
 
 采用单机模式启动Connector Worker
+
 ```
 sh bin/connect-standalone.sh -c conf/connect-standalone.conf &
 ```
 
 ### 搭建 SFTP 服务器
-SFTP（SSH File Transfer Protocol）是一个文件传输协议，用于在计算机之间进行安全的文件传输。SFTP建立在SSH连接之上，它是通过SSH（Secure Shell）协议进行加密和身份验证的。
 
-这里为了方便演示，使用 MAC OS 自带的 SFTP 服务（只需开启“远程登录”即可访问），详细参见[允许远程电脑访问你的 Mac](https://support.apple.com/zh-cn/guide/mac-help/mchlp1066/mac)文档。
+SFTP（SSH File Transfer Protocol）是一个文件传输协议，用于在计算机之间进行安全的文件传输。SFTP建立在SSH连接之上，它是通过SSH（Secure
+Shell）协议进行加密和身份验证的。
+
+这里为了方便演示，使用 MAC OS 自带的 SFTP
+服务（只需开启“远程登录”即可访问），详细参见[允许远程电脑访问你的 Mac](https://support.apple.com/zh-cn/guide/mac-help/mchlp1066/mac)
+文档。
 
 ### 创建源端测试文件
 
@@ -123,10 +131,12 @@ echo '张三|100000202211290001|20221129001|30000.00|2022-11-28|03:00:00|7.00
 ```
 
 登录 SFTP 服务，验证是否能正常访问。输入下面命令，输入密码后即可进入SFTP服务器
+
 ```shell
 # sftp -P port YourUsername@hostname
 sftp -P 22 YourUsername@127.0.0.1
 ```
+
 **说明**：由于是本机MAC OS提供的SFTP服务，所以地址是 127.0.0.1， 端口是默认的22。
 
 ```shell
@@ -161,14 +171,15 @@ curl -X POST --location "http://localhost:8082/connectors/SftpSourceConnector" -
 ```
 
 curl请求返回status:200则表示创建成功，返回样例：
->{"status":200,"body":{"connector.class":"...
+> {"status":200,"body":{"connector.class":"...
 
 看到以下日志说明 file source connector 启动成功了
+
 ```shell
 tail -100f ~/logs/rocketmqconnect/connect_runtime.log
 ```
 
->Start connector SftpSourceConnector and set target state STARTED successed!!
+> Start connector SftpSourceConnector and set target state STARTED successed!!
 
 ### 启动 SFTP sink connector
 
@@ -193,17 +204,19 @@ curl -X POST --location "http://localhost:8082/connectors/SftpSinkConnector" --h
 ```
 
 curl请求返回status:200则表示创建成功，返回样例：
->{"status":200,"body":{"connector.class":"...
+> {"status":200,"body":{"connector.class":"...
 
 看到以下日志说明 file source connector 启动成功了
+
 ```shell
 tail -100f ~/logs/rocketmqconnect/connect_runtime.log
 ```
 
->Start connector SftpSinkConnector and set target state STARTED successed!!
+> Start connector SftpSinkConnector and set target state STARTED successed!!
 
 
 查看sink connector是否将数据写入了目的端文件：
+
 ```shell
 cat /Users/YourUsername/rocketmqconnect/sftp-test/sink.txt
 ```
@@ -211,6 +224,7 @@ cat /Users/YourUsername/rocketmqconnect/sftp-test/sink.txt
 如果生成了 sink.txt 文件，并且与 source.txt 内容一样则说明整个流程正常运行。
 
 继续向源端文件 source.txt 中写入测试数据，
+
 ```shell
 cd /Users/YourUsername/rocketmqconnect/sftp-test/
 
@@ -223,4 +237,5 @@ sleep 10
 cat /Users/YourUsername/rocketmqconnect/sftp-test/sink.txt
 ```
 
-**注意**：文件内容可能顺序不一样，这是因为`rocketmq-connect-sftp`向RocketMQ Topic中收发消息时，使用的消息类型是普通消息，区别于顺序消息，消费普通消息时是不保证顺序的。
+**注意**：文件内容可能顺序不一样，这是因为`rocketmq-connect-sftp`向RocketMQ
+Topic中收发消息时，使用的消息类型是普通消息，区别于顺序消息，消费普通消息时是不保证顺序的。

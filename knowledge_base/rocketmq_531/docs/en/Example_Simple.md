@@ -1,10 +1,16 @@
-# Basic Sample 
+# Basic Sample
 ------
 Two functions below are provided in the basic sample:
-* The RocketMQ can be utilized to send messages in three ways: reliable synchronous, reliable asynchronous, and one-way transmission.  The first two message types are reliable because there is a response whether they were sent successfully.
+
+* The RocketMQ can be utilized to send messages in three ways: reliable synchronous, reliable asynchronous, and one-way
+  transmission. The first two message types are reliable because there is a response whether they were sent
+  successfully.
 * The RocketMQ can be utilized to consume messages.
+
 ### 1 Add Dependency
+
 maven:
+
 ``` java
 <dependency>
   <groupId>org.apache.rocketmq</groupId>
@@ -12,13 +18,20 @@ maven:
   <version>4.3.0</version>
 </dependency>
 ```
-gradle: 
+
+gradle:
+
 ``` java 
 compile 'org.apache.rocketmq:rocketmq-client:4.3.0'
 ```
+
 ### 2 Send Messages
+
 ##### 2.1 Use Producer to Send Synchronous Messages
-Reliable synchronous transmission is used in extensive scenes, such as important notification messages, SMS notification.
+
+Reliable synchronous transmission is used in extensive scenes, such as important notification messages, SMS
+notification.
+
 ``` java
 public class SyncProducer {
   public static void main(String[] args) throws Exception {
@@ -44,8 +57,12 @@ public class SyncProducer {
   }
 }
 ```
+
 ##### 2.2 Send Asynchronous Messages
-Asynchronous transmission is generally used in response time sensitive business scenarios. It means that it is unable for the sender to wait the response of the Broker too long.
+
+Asynchronous transmission is generally used in response time sensitive business scenarios. It means that it is unable
+for the sender to wait the response of the Broker too long.
+
 ``` java
 public class AsyncProducer {
   public static void main(String[] args) throws Exception {
@@ -82,8 +99,11 @@ public class AsyncProducer {
   }
 }
 ```
+
 ##### 2.3 Send Messages in One-way Mode
+
 One-way transmission is used for cases requiring moderate reliability, such as log collection.
+
 ``` java
 public class OnewayProducer {
   public static void main(String[] args) throws Exception{
@@ -107,7 +127,9 @@ public class OnewayProducer {
   }
 }
 ```
+
 ### 3 Consume Messages
+
 ``` java
 public class Consumer {
   public static void main(String[] args) throws InterruptedException, MQClientException {

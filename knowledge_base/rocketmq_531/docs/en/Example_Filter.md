@@ -8,8 +8,11 @@ DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("CID_EXAMPLE");
 consumer.subscribe("TOPIC", "TAGA || TAGB || TAGC");
 ```
 
-The consumer will receive messages that contains TAGA or TAGB or TAGC. But the limitation is that one message only can have one tag, and this may not work for sophisticated scenarios. In this case, you can use SQL expression to filter out messages.
-SQL feature could do some calculation through the properties you put in when sending messages. Under the grammars defined by RocketMQ, you can implement some interesting logic. Here is an example:
+The consumer will receive messages that contains TAGA or TAGB or TAGC. But the limitation is that one message only can
+have one tag, and this may not work for sophisticated scenarios. In this case, you can use SQL expression to filter out
+messages.
+SQL feature could do some calculation through the properties you put in when sending messages. Under the grammars
+defined by RocketMQ, you can implement some interesting logic. Here is an example:
 
 ```
 ------------
@@ -29,6 +32,7 @@ SQL feature could do some calculation through the properties you put in when sen
 ```
 
 ## 1 Grammars
+
 RocketMQ only defines some basic grammars to support this feature. You could also extend it easily.
 
 - Numeric comparison, like **>**, **>=**, **<**, **<=**, **BETWEEN**, **=**;
@@ -44,12 +48,15 @@ Constant types are:
 - Boolean, **TRUE** or **FALSE**;
 
 ## 2 Usage constraints
+
 Only push consumer could select messages by SQL92. The interface is:
+
 ```
 public void subscribe(finalString topic, final MessageSelector messageSelector)
 ```
 
 ## 3 Producer example
+
 You can put properties in message through method putUserProperty when sending.
 
 ```java
@@ -68,8 +75,8 @@ producer.shutdown();
 ```
 
 ## 4 Consumer example
-Use `MessageSelector.bySql` to select messages through SQL when consuming.
 
+Use `MessageSelector.bySql` to select messages through SQL when consuming.
 
 ```java
 DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("please_rename_unique_group_name_4");
