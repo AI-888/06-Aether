@@ -54,3 +54,10 @@ Desktop.ini
 .codebuddy
 .github
 .idea
+.idea_modules
+dependencies
+
+*.zip
+packaging_info.txt
+test_pack.sh
+=*

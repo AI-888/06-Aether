@@ -79,16 +79,24 @@ def _dispatch_node(state: TSState) -> TSState:
     next_tool = queue.pop(0)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] [Step 2] dispatch: next_tool={next_tool}, remain={queue}")
-    if not state.get("skills_content"):
-        skills_content = load_skills_from_dir()
-        if skills_content:
-            print(f"[{ts}] [Step 2] Skills loaded before tool call")
-        return {**state, "tool_queue": queue, "next_tool": next_tool, "skills_content": skills_content}
     return {**state, "tool_queue": queue, "next_tool": next_tool}
+
+
+def _ensure_skills(state: TSState) -> TSState:
+    """在工具调用前加载 skills，仅加载一次。"""
+    if state.get("skills_content"):
+        return state
+    skills_content = load_skills_from_dir()
+    if skills_content:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{ts}] [Step 2] Skills loaded before tool call")
+    return {**state, "skills_content": skills_content}
 
 
 def _list_broker_pods_node(state: TSState) -> TSState:
     """工具节点：调用 kubectl 列出所有 broker pods。"""
+    state = _ensure_skills(state)
     results = list(state.get("results", []))
     res = run_tool(TOOL_LIST_BROKER_PODS, execute=True)
     results.append({"action": res.get("command"), "result": res})
@@ -97,6 +105,7 @@ def _list_broker_pods_node(state: TSState) -> TSState:
 
 def _list_namesrv_pods_node(state: TSState) -> TSState:
     """工具节点：调用 kubectl 列出所有 namesrv pods。"""
+    state = _ensure_skills(state)
     results = list(state.get("results", []))
     res = run_tool(TOOL_LIST_NAMESRV_PODS, execute=True)
     results.append({"action": res.get("command"), "result": res})
@@ -105,6 +114,7 @@ def _list_namesrv_pods_node(state: TSState) -> TSState:
 
 def _list_proxy_pods_node(state: TSState) -> TSState:
     """工具节点：调用 kubectl 列出所有 proxy pods。"""
+    state = _ensure_skills(state)
     results = list(state.get("results", []))
     res = run_tool(TOOL_LIST_PROXY_PODS, execute=True)
     results.append({"action": res.get("command"), "result": res})
@@ -113,6 +123,7 @@ def _list_proxy_pods_node(state: TSState) -> TSState:
 
 def _list_topics_node(state: TSState) -> TSState:
     """工具节点：调用 MCP admin API 列出全部主题。"""
+    state = _ensure_skills(state)
     res = run_tool(TOOL_LIST_TOPICS)
     results = list(state.get("results", []))
     results.append({"action": TOOL_LIST_TOPICS, "result": res})
@@ -121,6 +132,7 @@ def _list_topics_node(state: TSState) -> TSState:
 
 def _get_broker_config_node(state: TSState) -> TSState:
     """工具节点：调用 MCP admin API 查询 Broker 配置。"""
+    state = _ensure_skills(state)
     intent_data = state.get("intent_data", {})
     broker_addr = intent_data.get("broker") or intent_data.get("broker_addr")
     if not broker_addr:
@@ -133,6 +145,7 @@ def _get_broker_config_node(state: TSState) -> TSState:
 
 def _send_fail_check_node(state: TSState) -> TSState:
     """工具节点：根据实例类型构造 topic 查询命令，判断 topic 是否存在。"""
+    state = _ensure_skills(state)
 
     user_msg = state["user_msg"]
     intent_data = state.get("intent_data", {})
@@ -254,6 +267,7 @@ def _admin_tool_node(state: TSState) -> TSState:
     """通用 admin 工具节点：执行 MCP admin API 工具。"""
     from tools.tool_registry import get_tool_def
 
+    state = _ensure_skills(state)
     next_tool = state.get("next_tool", "")
     intent_data = state.get("intent_data", {})
     user_msg = state.get("user_msg", "")

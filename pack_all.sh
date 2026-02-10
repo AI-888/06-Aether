@@ -165,38 +165,23 @@ analyze_dependencies() {
     return 0
 }
 
-# 构建依赖包目录（如果存在虚拟环境）
-build_dependency_package() {
-    local deps_dir="$PROJECT_ROOT/dependencies"
+# 本地依赖配置文件打包
+package_local_dependencies() {
+    log_info "打包本地依赖配置文件..."
     
-    if [ -d "$PROJECT_ROOT/.venv" ] || [ -d "$PROJECT_ROOT/venv" ]; then
-        log_info "检测到虚拟环境，构建依赖包..."
-        
-        # 创建依赖目录
-        mkdir -p "$deps_dir"
-        
-        # 导出依赖列表
-        if [ -f "$PROJECT_ROOT/.venv/bin/pip" ] || [ -f "$PROJECT_ROOT/venv/bin/pip" ]; then
-            local pip_cmd=""
-            if [ -f "$PROJECT_ROOT/.venv/bin/pip" ]; then
-                pip_cmd="$PROJECT_ROOT/.venv/bin/pip"
-            else
-                pip_cmd="$PROJECT_ROOT/venv/bin/pip"
-            fi
-            
-            # 导出依赖列表
-            "$pip_cmd" freeze > "$deps_dir/requirements_frozen.txt"
-            
-            # 下载依赖包（可选）
-            if [ "$VERBOSE" = true ]; then
-                log_info "下载依赖包到 dependencies/ 目录..."
-                "$pip_cmd" download -r "$deps_dir/requirements_frozen.txt" -d "$deps_dir/packages" 2>/dev/null || log_warning "依赖包下载失败，跳过此步骤"
-            fi
-            
-            log_success "依赖包构建完成"
+    # 检查并打包依赖配置文件
+    local deps_found=false
+    for dep_file in "${DEPENDENCY_FILES[@]}"; do
+        if [ -f "$PROJECT_ROOT/$dep_file" ]; then
+            log_info "找到依赖配置文件: $dep_file"
+            deps_found=true
         fi
+    done
+    
+    if [ "$deps_found" = true ]; then
+        log_success "依赖配置文件已包含在打包中"
     else
-        log_info "未检测到虚拟环境，跳过依赖包构建"
+        log_warning "未找到依赖配置文件，建议创建 requirements.txt"
     fi
 }
 
@@ -213,8 +198,8 @@ log_info "输出文件: $ZIP_NAME"
 # 分析依赖关系
 analyze_dependencies
 
-# 构建依赖包（如果存在虚拟环境）
-build_dependency_package
+# 打包本地依赖配置文件
+package_local_dependencies
 
 # 构建排除参数
 EXCLUDE_ARGS=()
@@ -274,8 +259,8 @@ if [ $? -eq 0 ]; then
 
 依赖安装说明:
 1. 使用 pip install -r requirements.txt 安装依赖
-2. 如需离线安装，可使用 dependencies/ 目录中的包
-3. 建议使用虚拟环境: python -m venv venv && source venv/bin/activate
+2. 此包仅包含依赖配置文件，不包含虚拟环境
+3. 建议在目标环境直接安装依赖
 EOF
     
     log_info "打包信息已保存到: packaging_info.txt"
