@@ -1,0 +1,23 @@
+{
+  "providers": {
+    "ollama": {
+      "apiKey": "dummy",
+      "apiBase": "http://127.0.0.1:11434"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": "qwen2.5:1.5b",
+      "max_tokens": 4096,
+      "temperature": 0.7
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": false
+    },
+    "discord": {
+      "enabled": false
+    }
+  }
+}

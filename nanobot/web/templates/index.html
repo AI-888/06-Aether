@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>RocketMQ AI Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+
+        .chat-container {
+            width: 100%;
+            height: 100vh;
+            background: white;
+            border-radius: 0;
+            box-shadow: none;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #f8fafc;
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            background: white;
+            text-align: center;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            padding: 40px 20px;
+            color: #718096;
+            font-size: 0.9rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: #2d3748;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .chat-header .subtitle {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+
+        .input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 25px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #messageInput:focus {
+            border-color: #4299e1;
+        }
+
+        #sendButton {
+            padding: 15px 25px;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s;
+        }
+
+        #sendButton:hover {
+            background: #3182ce;
+        }
+
+        #sendButton:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+
+        .message {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .message.user {
+            align-items: flex-end;
+        }
+
+        .message.ai {
+            align-items: flex-start;
+        }
+
+        .message-timestamp {
+            font-size: 0.8rem;
+            color: #a0aec0;
+            margin-bottom: 5px;
+            padding: 0 10px;
+        }
+
+        .message.user .message-timestamp {
+            text-align: right;
+        }
+
+        .message.ai .message-timestamp {
+            text-align: left;
+        }
+
+        .message-wrapper {
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user .message-wrapper {
+            justify-content: flex-end;
+        }
+
+        .message.ai .message-wrapper {
+            justify-content: flex-start;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin: 0 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .user .avatar {
+            background: #4299e1;
+            color: white;
+        }
+
+        .ai .avatar {
+            background: #48bb78;
+            color: white;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 15px 20px;
+            border-radius: 20px;
+            position: relative;
+        }
+
+        .user .message-content {
+            background: #4299e1;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .ai .message-content {
+            background: white;
+            color: #2d3748;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .iteration-info {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #4a5568;
+            background: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .duration-info {
+            font-size: 0.8rem;
+            color: #718096;
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: #a0aec0;
+            /* 移除原有的timestamp样式，因为现在时间显示在外部 */
+        }
+
+        /* 流式内容分类显示样式 */
+        .streaming-sections {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .streaming-section {
+            border-left: 4px solid #e2e8f0;
+            padding-left: 15px;
+            margin: 5px 0;
+        }
+
+        .streaming-section-reasoning {
+            border-left-color: #4299e1;
+            background: rgba(66, 153, 225, 0.05);
+        }
+
+        .streaming-section-thinking {
+            border-left-color: #4299e1;
+            background: rgba(66, 153, 225, 0.05);
+        }
+
+        .streaming-section-tool {
+            border-left-color: #48bb78;
+            background: rgba(72, 187, 120, 0.05);
+        }
+
+        .streaming-section-answer {
+            border-left-color: #ed8936;
+            background: rgba(237, 137, 54, 0.05);
+        }
+
+        .streaming-section-knowledge {
+            border-left-color: #9f7aea;
+            background: rgba(159, 122, 234, 0.05);
+        }
+
+        /* Reasoning内容样式 */
+        .reasoning-duration {
+            font-size: 0.8rem;
+            color: #718096;
+            margin-top: 5px;
+            padding: 3px 8px;
+            background: rgba(66, 153, 225, 0.1);
+            border-radius: 4px;
+            display: inline-block;
+            border-left: 2px solid #4299e1;
+        }
+
+        /* 工具执行区域样式 */
+        .tool-section {
+            border-left: 4px solid #48bb78;
+            background: rgba(72, 187, 120, 0.05);
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .tool-status-start {
+            color: #3182ce;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .tool-status-completed {
+            color: #38a169;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .tool-status-error {
+            color: #e53e3e;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .tool-details {
+            margin-top: 8px;
+            padding-left: 10px;
+            border-left: 2px solid #e2e8f0;
+        }
+
+        .tool-duration {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-bottom: 3px;
+        }
+
+        .tool-result, .tool-error {
+            font-size: 0.9rem;
+            color: #4a5568;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* 知识库查询区域样式 */
+        .knowledge-section {
+            border-left: 4px solid #9f7aea;
+            background: rgba(159, 122, 234, 0.05);
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .knowledge-status-start {
+            color: #805ad5;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .knowledge-status-searching {
+            color: #6b46c1;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .knowledge-status-success {
+            color: #38a169;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .knowledge-status-no-results {
+            color: #d69e2e;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .knowledge-status-error {
+            color: #e53e3e;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .knowledge-status-skipped {
+            color: #718096;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .knowledge-details {
+            margin-top: 8px;
+            padding-left: 10px;
+            border-left: 2px solid #e2e8f0;
+        }
+
+        .knowledge-query-info {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-bottom: 3px;
+        }
+
+        .knowledge-result {
+            font-size: 0.9rem;
+            color: #4a5568;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+
+        .knowledge-count {
+            display: inline-block;
+            background: #9f7aea;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .section-header {
+            margin-bottom: 8px;
+        }
+
+        .section-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #4a5568;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .streaming-content {
+            font-size: 1rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #48bb78;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: scale(1); opacity: 1; }
+            30% { transform: scale(1.2); opacity: 0.7; }
+        }
+
+        .processing-time {
+            font-size: 0.8rem;
+            color: #48bb78;
+            font-weight: 600;
+            margin-top: 3px;
+            padding: 4px 8px;
+            background: rgba(72, 187, 120, 0.1);
+            border-radius: 6px;
+            display: inline-block;
+            border-left: 3px solid #48bb78;
+        }
+
+        .processing-time div {
+            margin: 2px 0;
+        }
+
+        .processing-time div:first-child {
+            color: #4299e1;
+            font-weight: 700;
+        }
+
+        .processing-time div:last-child {
+            color: #ed8936;
+            font-weight: 600;
+        }
+
+        .streaming {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+<div class="chat-container">
+    <!-- 左侧边栏 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>🤖 Taether</h2>
+            <div class="subtitle">RocketMQ AI Agent</div>
+        </div>
+        <div class="sidebar-content">
+            <div>
+                <p style="font-size: 0.8rem; margin-top: 10px;">1. 当前是小模型，无记忆，无上下文联系</p>
+                <p style="font-size: 0.8rem; margin-top: 10px;">2. 目前用于RocketMQ相关问题处理</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧主内容区 -->
+    <div class="main-content">
+        <div class="chat-header">
+            <h1>🤖 RocketMQ AI Agent</h1>
+            <div class="subtitle">for tce and tcs</div>
+        </div>
+
+        <div class="messages-container" id="messages">
+            <div class="message ai">
+                <div class="message-timestamp">Just now</div>
+                <div class="message-wrapper">
+                    <div class="avatar">AI</div>
+                    <div class="message-content">
+                        Hello! I'm Taether, your rocketmq assistant. How can I help you today?
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-wrapper">
+                <input autocomplete="off" id="messageInput" placeholder="Ask me about rocketmq..." type="text">
+                <button id="sendButton" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const ws = new WebSocket("ws://localhost:8001/ws");
+    const messagesDiv = document.getElementById("messages");
+    const messageInput = document.getElementById("messageInput");
+    const sendButton = document.getElementById("sendButton");
+    let isTyping = false;
+    let isProcessing = false; // 标记是否正在处理请求
+
+    // Auto-scroll to bottom
+    function scrollToBottom() {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Add user message
+    function addUserMessage(content) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message user';
+        messageDiv.innerHTML = `
+            <div class="message-timestamp">${new Date().toLocaleTimeString()}</div>
+            <div class="message-wrapper">
+                <div class="message-content">
+                    ${content}
+                </div>
+                <div class="avatar">U</div>
+            </div>
+        `;
+        messagesDiv.appendChild(messageDiv);
+        scrollToBottom();
+    }
+
+    // Add AI message
+    function addAIMessage(content, totalTime = null, llmTime = null) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ai';
+
+        // 将\\n替换为实际的换行符
+        const formattedContent = content.replace(/\\n/g, '<br />');
+
+        let timeInfo = `<div class=\"timestamp\">${new Date().toLocaleTimeString()}</div>`;
+        if (totalTime && llmTime) {
+            timeInfo += `
+                <div class=\"processing-time\">
+                    <div>总耗时: ${totalTime}秒</div>
+                    <div>LLM执行耗时: ${llmTime}秒</div>
+                </div>
+            `;
+        } else if (totalTime) {
+            timeInfo += `<div class=\"processing-time\">总耗时: ${totalTime}秒</div>`;
+        }
+
+        messageDiv.innerHTML = `
+            <div class=\"avatar\">AI</div>
+            <div class=\"message-content\">
+                ${formattedContent}
+                ${timeInfo}
+            </div>
+        `;
+        messagesDiv.appendChild(messageDiv);
+        scrollToBottom();
+    }
+
+    // Show typing indicator
+    function showTypingIndicator() {
+        if (isTyping) return;
+        isTyping = true;
+
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message ai';
+        typingDiv.id = 'typing-indicator';
+        typingDiv.innerHTML = `
+            <div class="avatar">AI</div>
+            <div class="message-content">
+                <div class="typing-indicator">
+                    <div class="typing-dots">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        messagesDiv.appendChild(typingDiv);
+        scrollToBottom();
+    }
+
+    // Hide typing indicator
+    function hideTypingIndicator() {
+        const typingDiv = document.getElementById('typing-indicator');
+        if (typingDiv) {
+            typingDiv.remove();
+        }
+        isTyping = false;
+    }
+
+    // WebSocket message handling for streaming responses
+    let currentAIMessage = null;
+    let isStreaming = false;
+    let currentStreamingSections = {}; // 存储不同类型的流式内容
+
+    ws.onmessage = function(event) {
+        const response = event.data;
+
+        // 检查是否是JSON格式的流式响应数据
+        try {
+            const data = JSON.parse(response);
+            if (data.type === 'stream_chunk' || data.content_type || data.is_tool_call) {
+                handleStreamChunk(data);
+                return;
+            }
+        } catch (e) {
+            // 不是JSON格式，按原逻辑处理
+        }
+
+        // Check if this is the start of a new response
+        if (response.includes("🤖 AI Agent is processing your request")) {
+            hideTypingIndicator();
+            isStreaming = true;
+            currentStreamingSections = {}; // 重置流式内容分类
+            currentAIMessage = document.createElement('div');
+            currentAIMessage.className = 'message ai streaming';
+            currentAIMessage.innerHTML = `
+                <div class="avatar">AI</div>
+                <div class="message-content">
+                    <div class="streaming-sections">${response}</div>
+                    <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            messagesDiv.appendChild(currentAIMessage);
+            return;
+        }
+
+        // Check if this is processing time info
+        if (response.includes("总耗时:")) {
+            isStreaming = false;
+            const timeMatch = response.match(/\*总耗时: ([0-9.]+)秒 \| LLM执行耗时: ([0-9.]+)秒\*/);
+            if (timeMatch && currentAIMessage) {
+                const totalTime = timeMatch[1];
+                const llmTime = timeMatch[2];
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'processing-time';
+                timeDiv.innerHTML = `
+                    <div>总耗时: ${totalTime}秒</div>
+                    <div>LLM执行耗时: ${llmTime}秒</div>
+                `;
+                currentAIMessage.querySelector('.message-content').appendChild(timeDiv);
+            }
+            currentAIMessage = null;
+            currentStreamingSections = {};
+
+            // Re-enable input after processing completes
+            isProcessing = false;
+            sendButton.disabled = false;
+            messageInput.disabled = false;
+            messageInput.focus();
+
+            scrollToBottom();
+            return;
+        }
+
+        // Handle streaming content
+        if (isStreaming && currentAIMessage) {
+            const sectionsDiv = currentAIMessage.querySelector('.streaming-sections');
+            if (sectionsDiv) {
+                // 创建默认的流式内容区域
+                if (!currentStreamingSections.default) {
+                    const defaultSection = createStreamingSection('thinking', '思考过程');
+                    sectionsDiv.appendChild(defaultSection);
+                    currentStreamingSections.default = defaultSection.querySelector('.streaming-content');
+                }
+                // 将\\n替换为实际的换行符
+                const formattedResponse = response.replace(/\\n/g, '<br />');
+                currentStreamingSections.default.textContent += formattedResponse;
+                scrollToBottom();
+            }
+        } else if (response.includes("🤖 AI Agent is processing your request")) {
+            // Start of streaming output
+            hideTypingIndicator();
+            isStreaming = true;
+            currentStreamingSections = {};
+            currentAIMessage = document.createElement('div');
+            currentAIMessage.className = 'message ai streaming';
+            currentAIMessage.innerHTML = `
+                <div class="avatar">AI</div>
+                <div class="message-content">
+                    <div class="streaming-sections"></div>
+                    <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            messagesDiv.appendChild(currentAIMessage);
+        } else if (isStreaming && currentAIMessage) {
+            // Streaming content
+            const sectionsDiv = currentAIMessage.querySelector('.streaming-sections');
+            if (sectionsDiv) {
+                // 创建默认的流式内容区域
+                if (!currentStreamingSections.default) {
+                    const defaultSection = createStreamingSection('thinking', '思考过程');
+                    sectionsDiv.appendChild(defaultSection);
+                    currentStreamingSections.default = defaultSection.querySelector('.streaming-content');
+                }
+                currentStreamingSections.default.textContent += response;
+                scrollToBottom();
+            }
+        } else {
+            // Fallback for non-streaming responses
+            hideTypingIndicator();
+            const timeMatch = response.match(/\\n\\n---\\n\*总耗时: ([0-9.]+)秒 \| LLM执行耗时: ([0-9.]+)秒\*/);
+            let messageContent = response;
+            let totalTime = null;
+            let llmTime = null;
+
+            if (timeMatch) {
+                totalTime = timeMatch[1];
+                llmTime = timeMatch[2];
+                messageContent = response.replace(/\\n\\n---\\n\*总耗时: [0-9.]+秒 \| LLM执行耗时: [0-9.]+秒\*/, '');
+            }
+
+            addAIMessage(messageContent, totalTime, llmTime);
+
+            // Re-enable input after processing completes
+            isProcessing = false;
+            sendButton.disabled = false;
+            messageInput.disabled = false;
+            messageInput.focus();
+        }
+    };
+
+    // 处理流式分块数据
+    function handleStreamChunk(data) {
+        // 检查是否是新的agent响应（迭代开始或最终答案）
+        const isNewResponse = data.is_iteration_start || data.is_final_answer;
+
+        // 如果是新的agent响应或者还没有开始流式传输，创建新消息
+        if (isNewResponse || !isStreaming) {
+            hideTypingIndicator();
+            isStreaming = true;
+            currentStreamingSections = {};
+            currentAIMessage = document.createElement('div');
+            currentAIMessage.className = 'message ai streaming';
+
+            // 添加迭代和耗时信息到消息标题
+            const iterationCount = data.iteration_count || 0;
+            const duration = data.duration_from_start || 0;
+            const timestamp = new Date().toLocaleTimeString();
+
+            currentAIMessage.innerHTML = `
+                <div class=\"avatar\">AI</div>
+                <div class=\"message-content\">
+                    <div class=\"message-header\">
+                        <span class=\"iteration-info\">迭代 ${iterationCount}</span>
+                        <span class=\"duration-info\">耗时: ${duration.toFixed(3)}秒</span>
+                        <span class=\"timestamp\">${timestamp}</span>
+                    </div>
+                    <div class=\"streaming-sections\"></div>
+                </div>
+            `;
+            messagesDiv.appendChild(currentAIMessage);
+        }
+
+        const sectionsDiv = currentAIMessage.querySelector('.streaming-sections');
+        if (!sectionsDiv) return;
+
+        // 处理工具执行结果
+        if (data.is_tool_call) {
+            handleToolCallData(data, sectionsDiv);
+            return;
+        }
+
+        // 处理知识库查询结果
+        if (data.content_type === 'knowledge' || data.is_knowledge_query) {
+            handleKnowledgeQueryData(data, sectionsDiv);
+            return;
+        }
+
+        const contentType = data.content_type || 'reasoning';
+        const content = data.content || '';
+        const duration = data.duration_from_start || 0;
+
+        // 根据内容类型创建或获取对应的区域
+        if (!currentStreamingSections[contentType]) {
+            const sectionTitle = getSectionTitle(contentType);
+            const section = createStreamingSection(contentType, sectionTitle);
+            sectionsDiv.appendChild(section);
+            currentStreamingSections[contentType] = section.querySelector('.streaming-content');
+        }
+
+        // 添加内容到对应的区域
+        if (currentStreamingSections[contentType]) {
+            // 对于reasoning类型，添加耗时信息
+            let displayContent = content;
+            if (contentType === 'reasoning') {
+                // 直接使用duration_from_start字段作为每次reasoning的耗时
+                const reasoningDuration = duration.toFixed(3);
+
+                // 清理内容，移除重复的耗时信息
+                console.log('Original reasoning content:', content);
+                const cleanContent = content.replace(/\\n\\*\\(迭代: \\d+, 耗时: [0-9.]+秒\\*\\)/, '');
+
+                displayContent = `${cleanContent}<div class=\"reasoning-duration\">思考耗时: ${reasoningDuration}秒</div>`;
+            }
+
+            // 将\\n替换为实际的换行符
+            const formattedContent = displayContent.replace(/\\n/g, '<br />');
+            currentStreamingSections[contentType].innerHTML += formattedContent;
+            scrollToBottom();
+        }
+    }
+
+    // 处理工具执行数据
+    function handleToolCallData(data, sectionsDiv) {
+        // 确保tool_name正确获取，添加调试信息
+        const toolName = data.tool_name || data.toolName || data.name || data.function_name || data.command || '工具';
+        const toolStatus = data.tool_status || 'start';
+
+        // 更智能的工具命令获取逻辑
+        let tool_command = 'server not response';
+        if (data.tool_args) {
+            // 尝试多种可能的命令字段
+            tool_command = data.tool_args.command || data.tool_args.query || data.tool_args.path ||
+                         data.tool_args.file || data.tool_args.function_name ||
+                         JSON.stringify(data.tool_args, null, 2);
+        }
+
+        // 调试日志
+        console.log('Tool call data:', JSON.stringify(data, null, 2));
+        console.log('Tool name:', toolName);
+        console.log('Tool status:', toolStatus);
+        console.log('Tool command:', tool_command);
+
+        // 创建或获取工具执行区域
+        if (!currentStreamingSections['tool_' + toolName]) {
+            const toolSection = createToolSection(toolName);
+            sectionsDiv.appendChild(toolSection);
+            currentStreamingSections['tool_' + toolName] = toolSection.querySelector('.tool-content');
+        }
+
+        const toolContentDiv = currentStreamingSections['tool_' + toolName];
+        if (!toolContentDiv) return;
+
+        // 根据工具状态更新显示
+        switch (toolStatus) {
+            case 'start':
+                // 直接使用已经智能处理过的工具命令
+                toolContentDiv.innerHTML += `<div class=\"tool-status-start\">🔧 开始执行工具: <strong>${tool_command}</strong></div>`;
+                break;
+            case 'completed':
+                const duration = data.tool_duration ? data.tool_duration.toFixed(3) : '未知';
+                const result = data.tool_result || '无结果';
+                // 将\\n替换为实际的换行符
+                const formattedResult = result.replace(/\\n/g, '\\n');
+                toolContentDiv.innerHTML += `
+                    <div class=\"tool-status-completed\">
+                        ✅ 工具执行完成: <strong>${toolName}</strong>
+                        <div class=\"tool-details\">
+                            <div class=\"tool-duration\">执行耗时: ${duration}秒</div>
+                            <div class=\"tool-result\">执行结果: ${formattedResult}</div>
+                        </div>
+                    </div>
+                `;
+                break;
+            case 'error':
+                const errorMsg = data.tool_error || '未知错误';
+                const errorDuration = data.tool_duration ? data.tool_duration.toFixed(3) : '未知';
+                // 将\\n替换为实际的换行符
+                const formattedErrorMsg = errorMsg.replace(/\\n/g, '<br />');
+                toolContentDiv.innerHTML += `
+                    <div class=\"tool-status-error\">
+                        ❌ 工具执行失败: <strong>${toolName}</strong>
+                        <div class=\"tool-details\">
+                            <div class=\"tool-duration\">执行耗时: ${errorDuration}秒</div>
+                            <div class=\"tool-error\">错误信息: ${formattedErrorMsg}</div>
+                        </div>
+                    </div>
+                `;
+                break;
+        }
+
+        scrollToBottom();
+    }
+
+    // 创建工具执行区域
+    function createToolSection(toolName) {
+        const section = document.createElement('div');
+        section.className = 'streaming-section streaming-section-tool';
+        section.innerHTML = `
+            <div class=\"section-header\">
+                <span class=\"section-title\">工具执行: ${toolName}</span>
+            </div>
+            <div class=\"tool-content\"></div>
+        `;
+        return section;
+    }
+
+    // 处理知识库查询数据
+    function handleKnowledgeQueryData(data, sectionsDiv) {
+        const knowledgeStatus = data.knowledge_status || 'start';
+        const knowledgeDomain = data.knowledge_domain || '';
+        const knowledgeQuery = data.knowledge_query || '';
+        const knowledgeCount = data.knowledge_count || 0;
+        const knowledgeResult = data.knowledge_result || '';
+
+        // 调试日志
+        console.log('Knowledge query data:', JSON.stringify(data, null, 2));
+        console.log('Knowledge status:', knowledgeStatus);
+        console.log('Knowledge domain:', knowledgeDomain);
+        console.log('Knowledge query:', knowledgeQuery);
+
+        // 创建或获取知识库查询区域
+        if (!currentStreamingSections['knowledge']) {
+            const knowledgeSection = createKnowledgeSection();
+            sectionsDiv.appendChild(knowledgeSection);
+            currentStreamingSections['knowledge'] = knowledgeSection.querySelector('.knowledge-content');
+        }
+
+        const knowledgeContentDiv = currentStreamingSections['knowledge'];
+        if (!knowledgeContentDiv) return;
+
+        // 根据知识库查询状态更新显示
+        switch (knowledgeStatus) {
+            case 'start':
+                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-start\">📚 ${data.content}</div>`;
+                break;
+            case 'searching':
+                knowledgeContentDiv.innerHTML += `
+                    <div class=\"knowledge-status-searching\">
+                        🔍 ${data.content}
+                        <div class=\"knowledge-details\">
+                            <div class=\"knowledge-query-info\">查询领域: ${knowledgeDomain}</div>
+                            <div class=\"knowledge-query-info\">查询关键词: ${knowledgeQuery}</div>
+                        </div>
+                    </div>
+                `;
+                break;
+            case 'success':
+                const formattedResult = knowledgeResult.replace(/\\n/g, '\\n');
+                const previewLinksId = `knowledge-preview-links-${Date.now()}`;
+                knowledgeContentDiv.innerHTML += `
+                    <div class=\"knowledge-status-success\">
+                        ✅ ${data.content} <span class=\"knowledge-count\">${knowledgeCount}</span>
+                        <div class=\"knowledge-details\">
+                            <div class=\"knowledge-result\">${formattedResult}</div>
+                            <div class=\"knowledge-preview-links\" id=\"${previewLinksId}\"></div>
+                        </div>
+                    </div>
+                `;
+                
+                // 使用新的预览项目数组生成预览链接
+                setTimeout(() => {
+                    if (data.preview_items && data.preview_items.length > 0) {
+                        createPreviewLinksFromArray(data.preview_items, previewLinksId);
+                    } else {
+                        // 兼容旧的解析方式
+                        parseKnowledgeResultsForPreview(formattedResult, previewLinksId);
+                    }
+                }, 100);
+                break;
+            case 'no_results':
+                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-no-results\">📭 ${data.content}</div>`;
+                break;
+            case 'error':
+                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-error\">❌ ${data.content}</div>`;
+                break;
+            case 'skipped':
+                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-skipped\">⚠️ ${data.content}</div>`;
+                break;
+            default:
+                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-start\">📚 ${data.content}</div>`;
+                break;
+        }
+
+        scrollToBottom();
+    }
+
+    // 创建知识库查询区域
+    function createKnowledgeSection() {
+        const section = document.createElement('div');
+        section.className = 'streaming-section streaming-section-knowledge';
+        section.innerHTML = `
+            <div class=\"section-header\">
+                <span class=\"section-title\">知识库查询</span>
+            </div>
+            <div class=\"knowledge-content\"></div>
+        `;
+        return section;
+    }
+
+    // 获取内容类型的显示标题
+    function getSectionTitle(contentType) {
+        const titles = {
+            'reasoning': '思考过程',
+            'thinking': '思考过程',
+            'tool': '工具执行',
+            'answer': '最终回答',
+            'knowledge': '知识库查询',
+            'default': '处理过程'
+        };
+        return titles[contentType] || titles['default'];
+    }
+
+    // 解析知识库结果中的文档链接并添加预览功能
+    function parseKnowledgeResultsForPreview(resultHtml, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        // 创建临时元素来解析HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = resultHtml;
+        
+        // 查找所有包含预览信息的知识条目
+        const knowledgeItems = tempDiv.querySelectorAll('h3');
+        
+        knowledgeItems.forEach((item, index) => {
+            // 获取整个知识条目的文本内容
+            let currentElement = item;
+            let itemText = '';
+            
+            // 收集从h3开始到下一个h3或结束的所有文本
+            while (currentElement && currentElement.nextSibling) {
+                currentElement = currentElement.nextSibling;
+                if (currentElement.nodeType === Node.TEXT_NODE) {
+                    itemText += currentElement.textContent;
+                } else if (currentElement.nodeType === Node.ELEMENT_NODE) {
+                    if (currentElement.tagName === 'H3') {
+                        break; // 遇到下一个h3就停止
+                    }
+                    itemText += currentElement.textContent || '';
+                }
+            }
+            
+            // 检查各种类型的预览信息
+            const docLinkMatch = itemText.match(/📄 文档链接[:：]\s*([^\n|]+)/);
+            const filePathMatch = itemText.match(/📁 文件路径[:：]\s*([^\n|]+)/);
+            const itemIdMatch = itemText.match(/🆔 条目ID[:：]\s*([^\n|]+)/);
+            const previewAvailableMatch = itemText.match(/🔍 支持预览/);
+            
+            // 创建预览链接容器
+            const previewContainer = document.createElement('div');
+            previewContainer.className = 'preview-links-container';
+            previewContainer.style.cssText = `
+                margin-top: 10px;
+                padding: 8px;
+                background: rgba(66, 153, 225, 0.1);
+                border-radius: 4px;
+                border-left: 3px solid #4299e1;
+            `;
+            
+            let hasPreviewOptions = false;
+            
+            // 添加文档链接预览
+            if (docLinkMatch) {
+                const linkText = docLinkMatch[1].trim();
+                const previewLink = createPreviewLink('📄 预览文档链接', linkText, 'url', index);
+                previewContainer.appendChild(previewLink);
+                hasPreviewOptions = true;
+            }
+            
+            // 添加文件路径预览
+            if (filePathMatch) {
+                const pathText = filePathMatch[1].trim();
+                const previewLink = createPreviewLink('📁 预览文件内容', pathText, 'file', index);
+                previewContainer.appendChild(previewLink);
+                hasPreviewOptions = true;
+            }
+            
+            // 添加知识条目完整内容预览
+            if (itemIdMatch && previewAvailableMatch) {
+                const itemId = itemIdMatch[1].trim();
+                const previewLink = createPreviewLink('🔍 预览完整内容', itemId, 'item', index);
+                previewContainer.appendChild(previewLink);
+                hasPreviewOptions = true;
+            }
+            
+            // 如果有预览选项，添加到容器中
+            if (hasPreviewOptions) {
+                container.appendChild(previewContainer);
+            }
+        });
+    }
+    
+    // 使用预览项目数组创建预览链接
+    function createPreviewLinksFromArray(previewItems, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container || !previewItems || previewItems.length === 0) return;
+        
+        // 创建预览链接容器
+        const previewContainer = document.createElement('div');
+        previewContainer.className = 'preview-links-container';
+        previewContainer.style.cssText = `
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(66, 153, 225, 0.1);
+            border-radius: 4px;
+            border-left: 3px solid #4299e1;
+        `;
+        
+        // 为每个预览项目创建链接
+        previewItems.forEach((item, index) => {
+            const previewLink = document.createElement('a');
+            previewLink.href = '#';
+            previewLink.className = 'doc-preview-link';
+            previewLink.style.cssText = `
+                display: inline-block;
+                margin: 2px 5px 2px 0;
+                padding: 4px 8px;
+                background: #4299e1;
+                color: white;
+                text-decoration: none;
+                border-radius: 3px;
+                font-size: 0.85rem;
+                transition: background-color 0.2s;
+            `;
+            
+            previewLink.textContent = item.label;
+            previewLink.dataset.type = item.type;
+            previewLink.dataset.id = item.id;
+            previewLink.dataset.index = index;
+            
+            // 根据类型设置额外的数据属性
+            if (item.type === 'file' && item.path) {
+                previewLink.dataset.path = item.path;
+            } else if (item.type === 'url' && item.url) {
+                previewLink.dataset.url = item.url;
+            } else if (item.type === 'item' && item.item_id) {
+                previewLink.dataset.itemId = item.item_id;
+            }
+            
+            previewLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                showDocumentPreviewFromArray(this.dataset);
+            });
+            
+            previewLink.addEventListener('mouseenter', function() {
+                this.style.background = '#3182ce';
+            });
+            
+            previewLink.addEventListener('mouseleave', function() {
+                this.style.background = '#4299e1';
+            });
+            
+            previewContainer.appendChild(previewLink);
+        });
+        
+        container.appendChild(previewContainer);
+    }
+    
+    // 创建预览链接
+    function createPreviewLink(text, link, type, index) {
+        const previewLink = document.createElement('a');
+        previewLink.href = '#';
+        previewLink.className = 'doc-preview-link';
+        previewLink.style.cssText = `
+            display: inline-block;
+            margin: 2px 5px 2px 0;
+            padding: 4px 8px;
+            background: #4299e1;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        `;
+        previewLink.textContent = text;
+        previewLink.dataset.link = link;
+        previewLink.dataset.type = type;
+        previewLink.dataset.index = index;
+        
+        previewLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            showDocumentPreview(this.dataset.link, this.dataset.type, this.dataset.index);
+        });
+        
+        previewLink.addEventListener('mouseenter', function() {
+            this.style.background = '#3182ce';
+        });
+        
+        previewLink.addEventListener('mouseleave', function() {
+            this.style.background = '#4299e1';
+        });
+        
+        return previewLink;
+    }
+
+    // 显示文档预览模态框
+    function showDocumentPreview(link, type, index) {
+        // 创建模态框
+        const modal = document.createElement('div');
+        modal.className = 'doc-preview-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.2s ease-out;
+        `;
+        
+        // 创建内容区域
+        const content = document.createElement('div');
+        content.className = 'doc-preview-content';
+        content.style.cssText = `
+            background: white;
+            padding: 0;
+            border-radius: 12px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        `;
+        
+        // 创建头部
+        const header = document.createElement('div');
+        header.style.cssText = `
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: 12px 12px 0 0;
+        `;
+        
+        // 添加关闭按钮
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '×';
+        closeBtn.style.cssText = `
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #718096;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        `;
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.background = '#e2e8f0';
+            closeBtn.style.color = '#2d3748';
+        });
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.background = 'none';
+            closeBtn.style.color = '#718096';
+        });
+        closeBtn.addEventListener('click', () => {
+            modal.style.animation = 'fadeOut 0.2s ease-out';
+            setTimeout(() => document.body.removeChild(modal), 200);
+        });
+        
+        // 添加标题和来源信息
+        const title = document.createElement('h3');
+        title.style.cssText = `
+            margin: 0 40px 10px 0;
+            color: #2d3748;
+            font-size: 1.2rem;
+        `;
+        
+        const typeNames = {
+            'url': '文档链接',
+            'file': '本地文件',
+            'item': '知识条目'
+        };
+        title.textContent = `${typeNames[type] || '文档'}预览`;
+        
+        const linkInfo = document.createElement('p');
+        linkInfo.style.cssText = `
+            margin: 0;
+            color: #718096;
+            font-size: 0.9rem;
+            word-break: break-all;
+        `;
+        linkInfo.textContent = `来源: ${link}`;
+        
+        // 创建内容区域
+        const contentArea = document.createElement('div');
+        contentArea.className = 'doc-preview-text';
+        contentArea.style.cssText = `
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: white;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        `;
+        
+        // 添加加载状态
+        contentArea.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #718096;">
+                <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top: 2px solid #4299e1; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px;"></div>
+                <div>正在加载文档内容...</div>
+            </div>
+        `;
+        
+        // 组装模态框
+        header.appendChild(title);
+        header.appendChild(linkInfo);
+        content.appendChild(closeBtn);
+        content.appendChild(header);
+        content.appendChild(contentArea);
+        modal.appendChild(content);
+        
+        // 添加CSS动画
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeIn {
+                from { opacity: 0; transform: scale(0.9); }
+                to { opacity: 1; transform: scale(1); }
+            }
+            @keyframes fadeOut {
+                from { opacity: 1; transform: scale(1); }
+                to { opacity: 0; transform: scale(0.9); }
+            }
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // 添加到页面
+        document.body.appendChild(modal);
+        
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.animation = 'fadeOut 0.2s ease-out';
+                setTimeout(() => document.body.removeChild(modal), 200);
+            }
+        });
+        
+        // ESC键关闭
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                modal.style.animation = 'fadeOut 0.2s ease-out';
+                setTimeout(() => document.body.removeChild(modal), 200);
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+        
+        // 加载文档内容
+        loadDocumentContent(link, type, contentArea);
+    }
+
+    // 加载文档内容（需要后端API支持）
+    function loadDocumentContent(link, type, contentArea) {
+        // 调用后端API获取文档内容
+        const params = new URLSearchParams();
+        
+        if (type === 'url') {
+            params.append('source_url', link);
+        } else if (type === 'file') {
+            params.append('file_path', link);
+        } else if (type === 'item') {
+            params.append('item_id', link);
+        }
+        
+        fetch(`/api/knowledge/preview?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // 成功加载内容
+                    contentArea.innerHTML = '';
+                    
+                    // 如果有元数据，显示元数据信息
+                    if (data.metadata && type === 'item') {
+                        const metadataDiv = document.createElement('div');
+                        metadataDiv.style.cssText = `
+                            background: #f8fafc;
+                            padding: 15px;
+                            border-radius: 6px;
+                            margin-bottom: 15px;
+                            border-left: 4px solid #4299e1;
+                        `;
+                        
+                        const metadataHtml = `
+                            <div style="font-weight: 600; color: #2d3748; margin-bottom: 8px;">📋 文档信息</div>
+                            <div style="font-size: 0.9rem; color: #4a5568; line-height: 1.4;">
+                                <div><strong>标题:</strong> ${data.metadata.title || '无标题'}</div>
+                                <div><strong>领域:</strong> ${data.metadata.domain || '未知'}</div>
+                                <div><strong>分类:</strong> ${data.metadata.category || '未知'}</div>
+                                <div><strong>标签:</strong> ${(data.metadata.tags || []).join(', ') || '无标签'}</div>
+                                <div><strong>创建时间:</strong> ${data.metadata.created_at ? new Date(data.metadata.created_at).toLocaleString() : '未知'}</div>
+                                ${data.metadata.source_url ? `<div><strong>原始链接:</strong> ${data.metadata.source_url}</div>` : ''}
+                                ${data.metadata.file_path ? `<div><strong>文件路径:</strong> ${data.metadata.file_path}</div>` : ''}
+                            </div>
+                        `;
+                        metadataDiv.innerHTML = metadataHtml;
+                        contentArea.appendChild(metadataDiv);
+                    }
+                    
+                    // 显示文档内容
+                    const contentDiv = document.createElement('div');
+                    contentDiv.style.cssText = `
+                        background: #ffffff;
+                        padding: 15px;
+                        border-radius: 6px;
+                        border: 1px solid #e2e8f0;
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        line-height: 1.6;
+                    `;
+                    
+                    // 简单的内容格式化
+                    let formattedContent = data.content;
+                    
+                    // 检测并高亮代码块
+                    if (formattedContent.includes('```')) {
+                        formattedContent = formattedContent.replace(
+                            /```(\w+)?\n([\s\S]*?)```/g,
+                            '<div style="background: #f1f5f9; padding: 10px; border-radius: 4px; margin: 10px 0; border-left: 3px solid #64748b;"><code style="font-family: Monaco, monospace; font-size: 0.9rem;">$2</code></div>'
+                        );
+                    }
+                    
+                    // 高亮标题
+                    formattedContent = formattedContent.replace(
+                        /^(#{1,6})\s+(.+)$/gm,
+                        '<div style="font-weight: 600; color: #2d3748; margin: 15px 0 8px 0; font-size: 1.1rem;">$2</div>'
+                    );
+                    
+                    // 高亮重要信息
+                    formattedContent = formattedContent.replace(
+                        /\*\*(.*?)\*\*/g,
+                        '<strong style="color: #2d3748;">$1</strong>'
+                    );
+                    
+                    contentDiv.innerHTML = formattedContent;
+                    contentArea.appendChild(contentDiv);
+                    
+                } else {
+                    // 显示错误信息
+                    contentArea.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #e53e3e;">
+                            <div style="font-size: 48px; margin-bottom: 15px;">⚠️</div>
+                            <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">文档预览失败</div>
+                            <div style="color: #718096;">${data.message || '未知错误'}</div>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                contentArea.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #e53e3e;">
+                        <div style="font-size: 48px; margin-bottom: 15px;">🔌</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">网络请求失败</div>
+                        <div style="color: #718096;">${error.message}</div>
+                    </div>
+                `;
+            });
+    }
+
+    // 使用预览项目数组显示文档预览
+    function showDocumentPreviewFromArray(dataset) {
+        const type = dataset.type;
+        const id = dataset.id;
+        
+        // 创建模态框
+        const modal = document.createElement('div');
+        modal.className = 'doc-preview-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            animation: fadeIn 0.3s ease-out;
+        `;
+        
+        // 创建内容容器
+        const content = document.createElement('div');
+        content.className = 'doc-preview-content';
+        content.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 900px;
+            height: 80%;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        // 创建头部
+        const header = document.createElement('div');
+        header.style.cssText = `
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+            border-radius: 8px 8px 0 0;
+        `;
+        
+        const title = document.createElement('h3');
+        title.style.cssText = `
+            margin: 0;
+            color: #2d3748;
+            font-size: 1.2rem;
+        `;
+        
+        const typeNames = {
+            'file': '文件',
+            'url': '文档链接',
+            'item': '完整内容'
+        };
+        title.textContent = `${typeNames[type] || '文档'}预览`;
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '✕';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #718096;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        `;
+        
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+        
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.background = '#e2e8f0';
+            closeBtn.style.color = '#2d3748';
+        });
+        
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.background = 'none';
+            closeBtn.style.color = '#718096';
+        });
+        
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        
+        // 创建内容区域
+        const contentArea = document.createElement('div');
+        contentArea.className = 'doc-preview-text';
+        contentArea.style.cssText = `
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #2d3748;
+            background: #fafafa;
+        `;
+        
+        // 显示加载状态
+        contentArea.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 200px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 2rem; margin-bottom: 10px;">📄</div>
+                    <div style="color: #718096;">正在加载文档内容...</div>
+                </div>
+            </div>
+        `;
+        
+        content.appendChild(header);
+        content.appendChild(contentArea);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        // 点击模态框外部关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
+        
+        // ESC键关闭
+        const handleEsc = (e) => {
+            if (e.key === 'Escape') {
+                document.body.removeChild(modal);
+                document.removeEventListener('keydown', handleEsc);
+            }
+        };
+        document.addEventListener('keydown', handleEsc);
+        
+        // 加载文档内容
+        loadDocumentContentFromArray(dataset, contentArea);
+    }
+
+    // 使用预览项目数据加载文档内容
+    function loadDocumentContentFromArray(dataset, contentArea) {
+        const type = dataset.type;
+        const params = new URLSearchParams();
+        
+        // 根据类型设置不同的参数
+        if (type === 'file' && dataset.path) {
+            params.append('file_path', dataset.path);
+        } else if (type === 'url' && dataset.url) {
+            params.append('source_url', dataset.url);
+        } else if (type === 'item' && dataset.itemId) {
+            params.append('item_id', dataset.itemId);
+        } else {
+            contentArea.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #e53e3e;">
+                    <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">参数错误</div>
+                    <div style="color: #718096;">无效的预览参数</div>
+                </div>
+            `;
+            return;
+        }
+        
+        fetch(`/api/knowledge/preview?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // 格式化内容显示
+                    const formattedContent = data.content
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/\\n/g, '<br>')
+                        .replace(/\\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
+                    
+                    contentArea.innerHTML = `<pre style="white-space: pre-wrap; margin: 0;">${formattedContent}</pre>`;
+                    
+                    // 如果有元数据，显示元数据信息
+                    if (data.metadata && type === 'item') {
+                        const metadataDiv = document.createElement('div');
+                        metadataDiv.style.cssText = `
+                            background: #f8fafc;
+                            padding: 15px;
+                            border-radius: 6px;
+                            margin-bottom: 15px;
+                            border-left: 4px solid #4299e1;
+                        `;
+                        
+                        const metadataHtml = `
+                            <div style="font-weight: 600; color: #2d3748; margin-bottom: 8px;">📋 文档信息</div>
+                            <div style="font-size: 0.9rem; color: #4a5568; line-height: 1.4;">
+                                <div><strong>标题:</strong> ${data.metadata.title || '无标题'}</div>
+                                <div><strong>领域:</strong> ${data.metadata.domain || '未知'}</div>
+                                <div><strong>分类:</strong> ${data.metadata.category || '未知'}</div>
+                                <div><strong>标签:</strong> ${(data.metadata.tags || []).join(', ') || '无标签'}</div>
+                                <div><strong>创建时间:</strong> ${data.metadata.created_at ? new Date(data.metadata.created_at).toLocaleString() : '未知'}</div>
+                                ${data.metadata.source_url ? `<div><strong>原始链接:</strong> ${data.metadata.source_url}</div>` : ''}
+                                ${data.metadata.file_path ? `<div><strong>文件路径:</strong> ${data.metadata.file_path}</div>` : ''}
+                            </div>
+                        `;
+                        
+                        metadataDiv.innerHTML = metadataHtml;
+                        contentArea.insertBefore(metadataDiv, contentArea.firstChild);
+                    }
+                } else {
+                    contentArea.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #e53e3e;">
+                            <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">文档预览失败</div>
+                            <div style="color: #718096;">${data.message || '未知错误'}</div>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                contentArea.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #e53e3e;">
+                        <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">网络请求失败</div>
+                        <div style="color: #718096;">${error.message}</div>
+                    </div>
+                `;
+            });
+    }
+
+    // 创建流式内容区域
+    function createStreamingSection(type, title) {
+        const section = document.createElement('div');
+        section.className = `streaming-section streaming-section-${type}`;
+        section.innerHTML = `
+            <div class="section-header">
+                <span class="section-title">${title}</span>
+            </div>
+            <div class="streaming-content"></div>
+        `;
+        return section;
+    }
+    function sendMessage() {
+        if (isProcessing) {
+            return; // 正在处理中，不允许发送新消息
+        }
+
+        const message = messageInput.value.trim();
+        if (message && ws.readyState === WebSocket.OPEN) {
+            isProcessing = true; // 标记为正在处理
+            sendButton.disabled = true; // 禁用发送按钮
+            messageInput.disabled = true; // 禁用输入框
+
+            addUserMessage(message);
+            showTypingIndicator();
+            ws.send(message);
+            messageInput.value = '';
+        }
+    }
+
+    // Enter key to send
+    messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    // Auto-focus input
+    messageInput.focus();
+
+    // Handle WebSocket connection status
+    ws.onopen = function() {
+        sendButton.disabled = false;
+    };
+
+    ws.onclose = function() {
+        sendButton.disabled = true;
+        messageInput.disabled = true;
+        addAIMessage("Connection lost. Please refresh the page.");
+
+        // 连接断开时重置处理状态
+        isProcessing = false;
+    };
+</script>
+</body>
+</html>
