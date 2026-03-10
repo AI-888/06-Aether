@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="nanobot_logo.png" alt="nanobot" width="500">
+  <img src="aether_logo.png" alt="nanobot" width="500">
   <h1>nanobot: Ultra-Lightweight Personal AI Assistant</h1>
   <p>
     <a href="https://pypi.org/project/nanobot-ai/"><img src="https://img.shields.io/pypi/v/nanobot-ai" alt="PyPI"></a>
@@ -12,7 +12,7 @@
   </p>
 </div>
 
-🐈 **nanobot** is an **ultra-lightweight** personal AI assistant designed for **resource-constrained edge AI environments**
+🐈 **Aether** is an **ultra-lightweight** personal AI assistant designed for **resource-constrained edge AI environments**， comes from @https://github.com/HKUDS/nanobot
 
 ⚡️ Delivers core agent functionality in just **~4,000** lines of code — **99% smaller** than Clawdbot's 430k+ lines.
 
