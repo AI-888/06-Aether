@@ -1,0 +1,301 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aether-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aether-k8s-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/exec"]
+  verbs: ["get", "list", "watch", "create"]
+- apiGroups: [""]
+  resources: ["namespaces", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aether-k8s-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: aether-sa
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: aether-k8s-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aether-deployment
+  namespace: default
+  labels:
+    app: aether
+    component: ai-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aether
+      component: ai-agent
+  template:
+    metadata:
+      labels:
+        app: aether
+        component: ai-agent
+    spec:
+      serviceAccountName: aether-sa
+      initContainers:
+      - name: init-config
+        image: busybox:1.36
+        command: ["/bin/sh", "/scripts/init-config.sh"]
+        env:
+        - name: OLLAMA_API_BASE_HOST_PORT
+          value: "http://9.134.241.105:11434"
+        - name: SLM_MODEL_NAME
+          value: "qwen2.5:1.5b"
+        - name: AETHER_HOME
+          value: "/root/.nanobot"
+        - name: EMBEDDING_MODEL_NAME
+          value: "BAAI--bge-large-zh-v1.5"
+        - name: ROCKETMQ_MCP_SERVER_URL
+          value: "http://9.134.241.105:6868/sse"
+        - name: RERANK_MODEL_NAME
+          value: "bge-reranker-v2-m3"
+        - name: TEMPLATE_FILE
+          value: "/app/config-template.json"
+        - name: OUTPUT_FILE
+          value: "/root/.nanobot/config.json"
+        volumeMounts:
+        - name: nanobot-data
+          mountPath: /root/.nanobot
+        - name: init-script
+          mountPath: /scripts
+        - name: config-template
+          mountPath: /app/config-template.json
+          subPath: config-template.json
+      containers:
+      - name: aether
+        image: mirrors.tencent.com/slm/aether:177-322-224-0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http-webui
+          protocol: TCP
+        env:
+        # 来自config-template.json的环境变量
+        - name: OLLAMA_API_BASE_HOST_PORT
+          value: "http://9.134.241.105:11434"
+        - name: SLM_MODEL_NAME
+          value: "qwen2.5:1.5b"  # 默认模型，根据实际环境修改
+        - name: AETHER_HOME
+          value: "/root/.nanobot"  # Dockerfile中创建的目录
+        - name: EMBEDDING_MODEL_NAME
+          value: "BAAI--bge-large-zh-v1.5"  # 默认嵌入模型，根据实际环境修改
+        - name: ROCKETMQ_MCP_SERVER_URL
+          value: "http://9.134.241.105:6868/sse"  # 默认值，根据实际环境修改
+        - name: RERANK_MODEL_NAME
+          value: "bge-reranker-v2-m3"  # 默认重排序模型，根据实际环境修改
+        # 其他通用环境变量
+        - name: NODE_ENV
+          value: "production"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: UV_SYSTEM_PYTHON
+          value: "1"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: nanobot-data
+          mountPath: /root/.nanobot
+          readOnly: false
+        # 挂载宿主机 kubeconfig，用于在 pod 内访问 k8s 集群（list/exec pod 等）
+        - name: kubeconfig
+          mountPath: /root/.kube
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8001
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8001
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      # init container 和主容器共享的 .nanobot 目录（init写入config.json，主容器读取）
+      - name: nanobot-data
+        emptyDir: {}
+      # 挂载宿主机 ~/.kube 目录到 pod，使 pod 内可使用 kubectl 访问集群
+      - name: kubeconfig
+        hostPath:
+          path: /Users/tigerweili/.kube   # 宿主机 kubeconfig 路径，按实际情况修改（如 /home/user/.kube）
+          type: DirectoryOrCreate
+      # 挂载 init-config.sh 脚本
+      - name: init-script
+        configMap:
+          name: aether-init-script
+          defaultMode: 0755
+      # 挂载 config-template.json 模板
+      - name: config-template
+        configMap:
+          name: aether-config
+          items:
+          - key: config-template.json
+            path: config-template.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aether-service
+  namespace: default
+  labels:
+    app: aether
+    component: ai-agent
+spec:
+  selector:
+    app: aether
+    component: ai-agent
+  ports:
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aether-config
+  namespace: default
+data:
+  # 可选：可以直接包含config-template.json内容
+  config-template.json: |
+    {
+      "providers": {
+        "ollama": {
+          "apiKey": "dummy",
+          "apiBase": "${OLLAMA_API_BASE_HOST_PORT}"
+        }
+      },
+      "agents": {
+        "defaults": {
+          "model": "${SLM_MODEL_NAME}",
+          "max_tokens": 4096,
+          "temperature": 0.7,
+          "workspace": "${AETHER_HOME}/workspace",
+          "embedding_model": "${AETHER_HOME}/models/${EMBEDDING_MODEL_NAME}",
+          "chunk_size": 1000,
+          "chunk_overlap": 100,
+          "top_k": 5,
+          "similarity_threshold": 0.0,
+          "batch_size": 32,
+          "timeout": 5
+        }
+      },
+      "mcp": {
+        "servers": {
+          "rocketmq_mcp": {
+            "server_name": "rocketmq_mcp",
+            "server_url": "${ROCKETMQ_MCP_SERVER_URL}",
+            "message_path": "/mcp/message",
+            "auth_token": "dummy",
+            "enabled": true
+          }
+        },
+        "auto_discover": true,
+        "discovery_path": "{AETHER_HOME}/servers"
+      },
+      "rerank": {
+        "model_path": "${AETHER_HOME}/models/${RERANK_MODEL_NAME}",
+        "threshold": 70.0
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aether-init-script
+  namespace: default
+data:
+  init-config.sh: |
+    #!/bin/sh
+    # 将环境变量渲染到 config-template.json，生成 config.json
+
+    set -e
+
+    TEMPLATE_FILE="${TEMPLATE_FILE:-/app/config-template.json}"
+    OUTPUT_FILE="${OUTPUT_FILE:-/root/.nanobot/config.json}"
+    OUTPUT_DIR=$(dirname "$OUTPUT_FILE")
+
+    echo "=== Aether 配置初始化 ==="
+    echo "模板文件: $TEMPLATE_FILE"
+    echo "输出文件: $OUTPUT_FILE"
+
+    mkdir -p "$OUTPUT_DIR"
+
+    if [ ! -f "$TEMPLATE_FILE" ]; then
+        echo "❌ 错误: 模板文件不存在: $TEMPLATE_FILE"
+        exit 1
+    fi
+
+    # 设置默认值
+    OLLAMA_API_BASE_HOST_PORT="${OLLAMA_API_BASE_HOST_PORT:-http://localhost:11434}"
+    SLM_MODEL_NAME="${SLM_MODEL_NAME:-qwen2.5:7b}"
+    AETHER_HOME="${AETHER_HOME:-/root/.nanobot}"
+    EMBEDDING_MODEL_NAME="${EMBEDDING_MODEL_NAME:-bge-small-en-v1.5}"
+    ROCKETMQ_MCP_SERVER_URL="${ROCKETMQ_MCP_SERVER_URL:-http://rocketmq-mcp-server:8080}"
+    RERANK_MODEL_NAME="${RERANK_MODEL_NAME:-bge-reranker-v2-m3}"
+
+    echo "当前环境变量:"
+    echo "  OLLAMA_API_BASE_HOST_PORT = $OLLAMA_API_BASE_HOST_PORT"
+    echo "  SLM_MODEL_NAME            = $SLM_MODEL_NAME"
+    echo "  AETHER_HOME               = $AETHER_HOME"
+    echo "  EMBEDDING_MODEL_NAME      = $EMBEDDING_MODEL_NAME"
+    echo "  ROCKETMQ_MCP_SERVER_URL   = $ROCKETMQ_MCP_SERVER_URL"
+    echo "  RERANK_MODEL_NAME         = $RERANK_MODEL_NAME"
+
+    # 对 sed 替换值中的特殊字符进行转义
+    escape_sed() {
+        echo "$1" | sed 's/[\/&]/\\&/g'
+    }
+
+    OLLAMA_ESCAPED=$(escape_sed "$OLLAMA_API_BASE_HOST_PORT")
+    SLM_ESCAPED=$(escape_sed "$SLM_MODEL_NAME")
+    AETHER_ESCAPED=$(escape_sed "$AETHER_HOME")
+    EMBEDDING_ESCAPED=$(escape_sed "$EMBEDDING_MODEL_NAME")
+    ROCKETMQ_ESCAPED=$(escape_sed "$ROCKETMQ_MCP_SERVER_URL")
+    RERANK_ESCAPED=$(escape_sed "$RERANK_MODEL_NAME")
+
+    sed \
+        -e "s/\${OLLAMA_API_BASE_HOST_PORT}/$OLLAMA_ESCAPED/g" \
+        -e "s/\${SLM_MODEL_NAME}/$SLM_ESCAPED/g" \
+        -e "s/\${AETHER_HOME}/$AETHER_ESCAPED/g" \
+        -e "s/\${EMBEDDING_MODEL_NAME}/$EMBEDDING_ESCAPED/g" \
+        -e "s/\${ROCKETMQ_MCP_SERVER_URL}/$ROCKETMQ_ESCAPED/g" \
+        -e "s/\${RERANK_MODEL_NAME}/$RERANK_ESCAPED/g" \
+        "$TEMPLATE_FILE" > "$OUTPUT_FILE"
+
+    echo "✅ 配置文件生成成功: $OUTPUT_FILE"
+    echo "--- 生成内容 ---"
+    cat "$OUTPUT_FILE"
+    echo "--- 配置初始化完成 ---"

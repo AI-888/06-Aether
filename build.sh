@@ -109,25 +109,43 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# 将 ~/.nanobot 复制到构建上下文（Dockerfile COPY 不支持 ~ 路径）
+NANOBOT_SRC="$HOME/.nanobot"
+NANOBOT_CONTEXT="$(pwd)/.nanobot"
+if [ -d "$NANOBOT_SRC" ]; then
+    echo "复制 ~/.nanobot 到构建上下文..."
+    cp -R "$NANOBOT_SRC" "$NANOBOT_CONTEXT"
+    echo "复制 ~/.nanobot 到构建上下文完成..."
+else
+    echo "⚠️  警告: ~/.nanobot 目录不存在，将创建空目录"
+    mkdir -p "$NANOBOT_CONTEXT"
+fi
+
 # 构建镜像
 echo "开始构建Docker镜像..."
 # 检测操作系统，在macOS上去除--progress=plain参数
+BUILD_SUCCESS=false
 if [ "$(uname)" = "Darwin" ]; then
     echo "检测到macOS系统，移除--progress=plain参数"
     if docker build -t "$IMAGE_NAME" .; then
-        echo "✅ Docker镜像构建成功: $IMAGE_NAME"
-    else
-        echo "❌ Docker镜像构建失败"
-        exit 1
+        BUILD_SUCCESS=true
     fi
 else
     echo "检测到Linux系统，使用--progress=plain参数"
     if docker build --progress=plain -t "$IMAGE_NAME" .; then
-        echo "✅ Docker镜像构建成功: $IMAGE_NAME"
-    else
-        echo "❌ Docker镜像构建失败"
-        exit 1
+        BUILD_SUCCESS=true
     fi
+fi
+
+# 清理构建上下文中的临时 .nanobot 目录
+echo "清理构建上下文中的临时 .nanobot 目录..."
+rm -rf "$NANOBOT_CONTEXT"
+
+if [ "$BUILD_SUCCESS" = true ]; then
+    echo "✅ Docker镜像构建成功: $IMAGE_NAME"
+else
+    echo "❌ Docker镜像构建失败"
+    exit 1
 fi
 
 # 如果不在仅构建模式，则推送镜像

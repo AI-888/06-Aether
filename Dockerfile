@@ -12,6 +12,11 @@ RUN apt-get update && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
+# Install kubectl
+RUN curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl && \
+    chmod +x /usr/local/bin/kubectl && \
+    kubectl version --client
+
 WORKDIR /app
 
 # Install Python dependencies first (cached layer)
@@ -26,7 +31,7 @@ COPY bridge/ bridge/
 RUN uv pip install --system --no-cache .
 
 # 验证nanobot模块可以正常导入
-RUN python -c "import nanobot.cli.commands; print('nanobot模块导入成功')"
+RUN python -c "import nanobot.cli.commands; print('nanobot import success')"
 
 RUN ls -l bridge
 RUN ls -l nanobot
@@ -36,8 +41,12 @@ WORKDIR /app/bridge
 RUN npm install && npm run build
 WORKDIR /app
 
-# Create config directory
+# Create config directory and copy local ~/.nanobot contents
+# 注意：.nanobot 目录由 build.sh 在构建前从 ~/.nanobot 复制到构建上下文
 RUN mkdir -p /root/.nanobot
+COPY --chown=root:root .nanobot/ /root/.nanobot/
+COPY --chown=root:root config-template.json /root/.nanobot/
+RUN ls -l /root/.nanobot
 
 # Gateway default port
 EXPOSE 8001
