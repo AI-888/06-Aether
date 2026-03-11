@@ -1424,3 +1424,6 @@ Combine local and cloud models:
 - [RAG Requirements](doc/rag-knowledge-base/requirements.md) - Feature specifications
 - [Agent Architecture](doc/) - Detailed architecture documentation
 - [Performance Tuning](doc/) - Optimization guides
+
+---
+
