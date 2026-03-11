@@ -556,7 +556,9 @@
 </div>
 
 <script>
-    const ws = new WebSocket("ws://localhost:8001/ws");
+    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${wsProtocol}://${window.location.host}/ws`;
+    const ws = new WebSocket(wsUrl);
     const messagesDiv = document.getElementById("messages");
     const messageInput = document.getElementById("messageInput");
     const sendButton = document.getElementById("sendButton");
