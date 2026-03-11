@@ -150,4 +150,4 @@ echo "大小: $(docker images "$IMAGE_NAME" --format "table {{.Size}}" | tail -n
 # 显示使用示例
 echo ""
 echo "使用示例:"
-echo "  docker run -p 18790:18790 -v ~/.nanobot:/root/.nanobot $IMAGE_NAME"
+echo " docker run -d --rm --name aether-bot -p 8001:8001 -v /data3/.nanobot:/root/.nanobot $IMAGE_NAME"

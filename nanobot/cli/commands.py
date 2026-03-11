@@ -885,7 +885,7 @@ def cron_run(
 
 @cli_app.command()
 def webui(
-        host: str = typer.Option("127.0.0.1", "--host", help="Host to bind"),
+        host: str = typer.Option("0.0.0.0", "--host", help="Host to bind"),
         port: int = typer.Option(8001, "--port", help="Port to bind"),
 ):
     """Start the nanobot Web UI."""

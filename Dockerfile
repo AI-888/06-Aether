@@ -40,7 +40,7 @@ WORKDIR /app
 RUN mkdir -p /root/.nanobot
 
 # Gateway default port
-EXPOSE 18790
+EXPOSE 8001
 
 # 使用Python模块直接运行，避免PATH环境变量问题
 ENTRYPOINT ["python", "-m", "nanobot.cli.commands"]
