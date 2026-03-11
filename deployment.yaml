@@ -56,7 +56,7 @@ spec:
         command: ["/bin/sh", "/scripts/init-config.sh"]
         env:
         - name: OLLAMA_API_BASE_HOST_PORT
-          value: "http://9.134.241.105:11434"
+          value: "http://127.0.0.1:11434"
         - name: SLM_MODEL_NAME
           value: "qwen2.5:1.5b"
         - name: AETHER_HOME
@@ -64,7 +64,7 @@ spec:
         - name: EMBEDDING_MODEL_NAME
           value: "BAAI--bge-large-zh-v1.5"
         - name: ROCKETMQ_MCP_SERVER_URL
-          value: "http://9.134.241.105:6868/sse"
+          value: "http://127.0.0.1:6868/sse"
         - name: RERANK_MODEL_NAME
           value: "bge-reranker-v2-m3"
         - name: TEMPLATE_FILE
@@ -90,7 +90,7 @@ spec:
         env:
         # 来自config-template.json的环境变量
         - name: OLLAMA_API_BASE_HOST_PORT
-          value: "http://9.134.241.105:11434"
+          value: "http://127.0.0.1:11434"
         - name: SLM_MODEL_NAME
           value: "qwen2.5:1.5b"  # 默认模型，根据实际环境修改
         - name: AETHER_HOME
@@ -98,7 +98,7 @@ spec:
         - name: EMBEDDING_MODEL_NAME
           value: "BAAI--bge-large-zh-v1.5"  # 默认嵌入模型，根据实际环境修改
         - name: ROCKETMQ_MCP_SERVER_URL
-          value: "http://9.134.241.105:6868/sse"  # 默认值，根据实际环境修改
+          value: "http://127.0.0.1:6868/sse"  # 默认值，根据实际环境修改
         - name: RERANK_MODEL_NAME
           value: "bge-reranker-v2-m3"  # 默认重排序模型，根据实际环境修改
         # 其他通用环境变量
