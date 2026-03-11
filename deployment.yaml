@@ -81,7 +81,7 @@ spec:
           subPath: config-template.json
       containers:
       - name: aether
-        image: mirrors.tencent.com/slm/aether:177-322-224-0
+        image: hub.docker.com/slm/aether:177-322-224-0
         imagePullPolicy: Always
         ports:
         - containerPort: 8001
