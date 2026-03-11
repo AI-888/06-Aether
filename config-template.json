@@ -31,7 +31,7 @@
       }
     },
     "auto_discover": true,
-    "discovery_path": "{AETHER_HOME}/servers"
+    "discovery_path": "${AETHER_HOME}/servers"
   },
   "rerank": {
     "model_path": "${AETHER_HOME}/models/${RERANK_MODEL_NAME}",
