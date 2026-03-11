@@ -63,8 +63,33 @@ done
 if [ -z "$TAG" ]; then
     # 获取当前时间戳
     TIMESTAMP=$(date +%s)
-    # 格式化为每3位数字添加横线分割（兼容macOS和Linux）
-    TAG=$(echo "$TIMESTAMP" | sed 's/\(...\)/\1-/g' | sed 's/-$//')
+    
+    # 纯shell函数：每3位数字添加横线分割（兼容macOS和Linux）
+    format_timestamp() {
+        local input="$1"
+        local result=""
+        local count=0
+        
+        # 遍历每个字符
+        while [ ${#input} -gt 0 ]; do
+            # 每次取3个字符
+            local chunk="${input:0:3}"
+            # 更新剩余字符
+            input="${input:3}"
+            
+            # 添加横线（除非是第一次迭代）
+            if [ ${#result} -gt 0 ]; then
+                result="${result}-${chunk}"
+            else
+                result="${chunk}"
+            fi
+        done
+        
+        echo "$result"
+    }
+    
+    # 调用格式化函数
+    TAG=$(format_timestamp "$TIMESTAMP")
 fi
 
 # 构建完整的镜像名称
@@ -86,11 +111,23 @@ fi
 
 # 构建镜像
 echo "开始构建Docker镜像..."
-if docker build -t "$IMAGE_NAME" .; then
-    echo "✅ Docker镜像构建成功: $IMAGE_NAME"
+# 检测操作系统，在macOS上去除--progress=plain参数
+if [ "$(uname)" = "Darwin" ]; then
+    echo "检测到macOS系统，移除--progress=plain参数"
+    if docker build -t "$IMAGE_NAME" .; then
+        echo "✅ Docker镜像构建成功: $IMAGE_NAME"
+    else
+        echo "❌ Docker镜像构建失败"
+        exit 1
+    fi
 else
-    echo "❌ Docker镜像构建失败"
-    exit 1
+    echo "检测到Linux系统，使用--progress=plain参数"
+    if docker build --progress=plain -t "$IMAGE_NAME" .; then
+        echo "✅ Docker镜像构建成功: $IMAGE_NAME"
+    else
+        echo "❌ Docker镜像构建失败"
+        exit 1
+    fi
 fi
 
 # 如果不在仅构建模式，则推送镜像
@@ -113,4 +150,4 @@ echo "大小: $(docker images "$IMAGE_NAME" --format "table {{.Size}}" | tail -n
 # 显示使用示例
 echo ""
 echo "使用示例:"
-echo "  docker run -p 18790:18790 $IMAGE_NAME"
+echo "  docker run -p 18790:18790 -v ~/.nanobot:/root/.nanobot $IMAGE_NAME"

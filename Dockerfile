@@ -25,6 +25,12 @@ COPY nanobot/ nanobot/
 COPY bridge/ bridge/
 RUN uv pip install --system --no-cache .
 
+# 验证nanobot模块可以正常导入
+RUN python -c "import nanobot.cli.commands; print('nanobot模块导入成功')"
+
+RUN ls -l bridge
+RUN ls -l nanobot
+
 # Build the WhatsApp bridge
 WORKDIR /app/bridge
 RUN npm install && npm run build
@@ -36,5 +42,7 @@ RUN mkdir -p /root/.nanobot
 # Gateway default port
 EXPOSE 18790
 
-ENTRYPOINT ["nanobot webui"]
-CMD ["status"]
+# 使用Python模块直接运行，避免PATH环境变量问题
+ENTRYPOINT ["python", "-m", "nanobot.cli.commands"]
+# 默认运行webui命令
+CMD ["webui"]
