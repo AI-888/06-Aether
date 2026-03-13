@@ -1,6 +1,3 @@
-.assets
-.env
-*.pyc
 dist/
 build/
 docs/
@@ -16,17 +13,7 @@ docs/
 .venv/
 __pycache__/
 poetry.lock
-.pytest_cache/
 tests/
 botpy.log
-.hypothesis
-.idea
-.vscode
 models
-.nanobot
-.vscode/
-.nanobot/
-.venv/
-.codebuddy/
-.home
-.deployment.yaml
+.*
