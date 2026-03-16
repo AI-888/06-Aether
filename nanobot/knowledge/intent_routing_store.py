@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+import time
+from datetime import datetime
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
@@ -185,17 +188,21 @@ class IntentRoutingStore:
             settings=Settings(anonymized_telemetry=False, allow_reset=True),
         )
 
+        # skills 初始化状态文件
+        self.skills_init_status_file = self.skills_dir / "init_status.json"
+
     @staticmethod
     def _build_rag_config(cfg: Any) -> RAGConfig:
+        # 如果传入的本身就是 RAGConfig，直接使用
+        if isinstance(cfg, RAGConfig):
+            return cfg
         rag = RAGConfig()
         if hasattr(cfg, "agents") and hasattr(cfg.agents, "defaults"):
             d = cfg.agents.defaults
-            if hasattr(d, "embedding_model"):
-                rag.embedding_model = d.embedding_model
-            if hasattr(d, "chunk_size"):
-                rag.chunk_size = d.chunk_size
-            if hasattr(d, "chunk_overlap"):
-                rag.chunk_overlap = d.chunk_overlap
+            for attr in ("embedding_model", "chunk_size", "chunk_overlap",
+                         "top_k", "similarity_threshold", "batch_size", "timeout"):
+                if hasattr(d, attr):
+                    setattr(rag, attr, getattr(d, attr))
         return rag
 
     def _get_or_create(self, client: chromadb.ClientAPI, name: str):
@@ -301,7 +308,26 @@ class IntentRoutingStore:
         return len(docs)
 
     def init_skills_index(self, skills_loader: SkillsLoader) -> int:
-        """Build/refresh skills collection from SKILL.md content."""
+        """Build/refresh skills collection from SKILL.md content.
+
+        如果 init_status.json 已存在，则跳过初始化直接返回。
+        """
+        # 已初始化则跳过
+        if self.skills_init_status_file.exists():
+            try:
+                status = json.loads(self.skills_init_status_file.read_text(encoding="utf-8"))
+                chunk_count = status.get("chunk_count", 0)
+                initialized_at = status.get("initialized_at", "")
+                logger.info(f"[ROUTING] ✅ skills 索引已初始化，跳过本次初始化")
+                logger.info(f"   - 向量化分块数: {chunk_count}")
+                logger.info(f"   - 初始化时间: {initialized_at}")
+                return chunk_count
+            except Exception as e:
+                logger.warning(f"[ROUTING] 读取 skills 初始化状态文件失败: {e}，将重新初始化")
+
+        logger.info("[ROUTING] 🚀 开始初始化 skills 索引...")
+        start_time = time.time()
+
         collection = self._get_or_create(self.skills_client, SKILLS_COLLECTION)
         docs: list[str] = []
         ids: list[str] = []
@@ -310,16 +336,21 @@ class IntentRoutingStore:
         skills = skills_loader.list_skills(filter_unavailable=False)
         for skill in skills:
             skill_name = skill["name"]
+            skill_path = skill["path"]
             raw = skills_loader.load_skill(skill_name) or ""
             content = _strip_frontmatter(raw)
             if not content.strip():
+                logger.info(f"[ROUTING] 📄 skill 文件: {skill_path}  (内容为空，跳过)")
                 continue
             chunks = self.chunker.chunk_text(
                 content,
-                metadata={"skill_name": skill_name, "path": skill["path"], "source": skill["source"]},
+                metadata={"skill_name": skill_name, "path": skill_path, "source": skill["source"]},
             )
+            valid_chunks = []
             for chunk in chunks:
-                text = chunk["text"]
+                text = chunk["text"].replace("CHUNK_BOUNDARY", "").strip()
+                if not text:
+                    continue
                 meta = chunk["metadata"]
                 idx = int(meta.get("chunk_index", 0))
                 doc_id = f"skill::{skill_name}::{idx}"
@@ -334,6 +365,13 @@ class IntentRoutingStore:
                         "chunk_index": idx,
                     }
                 )
+                valid_chunks.append((idx, text))
+
+            # 打印文件名和分块摘要
+            logger.info(f"[ROUTING] 📄 skill 文件: {skill_path}  共 {len(valid_chunks)} 个分块")
+            for idx, text in valid_chunks:
+                preview = text[:80].replace("\n", " ")
+                logger.info(f"   [{idx}] {preview}...")
 
         if not docs:
             logger.warning("[ROUTING] skills index has no docs to index")
@@ -341,7 +379,28 @@ class IntentRoutingStore:
 
         embeddings = self.embedder.embed_batch(docs)
         collection.upsert(ids=ids, documents=docs, metadatas=metas, embeddings=embeddings)
-        logger.info(f"[ROUTING] skills index initialized: {len(docs)} chunks")
+
+        elapsed = time.time() - start_time
+
+        # 写入初始化状态文件
+        try:
+            status = {
+                "initialized_at": datetime.now().isoformat(),
+                "chunk_count": len(docs),
+                "skill_count": len(skills),
+                "elapsed_seconds": round(elapsed, 2),
+            }
+            self.skills_init_status_file.write_text(
+                json.dumps(status, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.warning(f"[ROUTING] 保存 skills 初始化状态文件失败: {e}")
+
+        logger.info(f"[ROUTING] ✅ skills 索引初始化完成:")
+        logger.info(f"   - skill 数量: {len(skills)}")
+        logger.info(f"   - 向量化分块数: {len(docs)}")
+        logger.info(f"   - 耗时: {elapsed:.2f} 秒")
         return len(docs)
 
     def search_tools(self, query: str, limit: int = 2) -> list[dict[str, Any]]:

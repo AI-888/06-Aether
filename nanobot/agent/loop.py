@@ -16,6 +16,8 @@ from nanobot.agent.tools.knowledge import KnowledgeSearchTool
 from nanobot.agent.tools.mcp import MCPTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.registry import ToolRegistry
+
+from nanobot.agent.tools.kubectl import KubectlGetPodsTool, KubectlExecLogTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
@@ -123,6 +125,10 @@ class AgentLoop:
         # self.tools.register(KnowledgeAddTool())
         # self.tools.register(DomainKnowledgeTool())
         # self.tools.register(KnowledgeExportTool())
+
+        # kubectl 通用工具
+        self.tools.register(KubectlGetPodsTool())
+        self.tools.register(KubectlExecLogTool())
 
     async def run(self) -> None:
         """Run the agent loop, processing messages from the bus."""

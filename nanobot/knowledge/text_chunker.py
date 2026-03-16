@@ -88,8 +88,8 @@ class TextChunker:
                     logger.info(f"{marker} 标记数量: {chunk_count}")
                     break
 
-        # 如果文本长度不超过 chunk_size，不需要分块
-        if len(text) <= self.chunk_size:
+        # 如果文本长度不超过 chunk_size，且不含手动分块标记，不需要分块
+        if len(text) <= self.chunk_size and not has_chunk_marker:
             logger.debug(f"文本长度 {len(text)} 不超过 chunk_size {self.chunk_size}，不分块")
             return [{
                 "text": text,
