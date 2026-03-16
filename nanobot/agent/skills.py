@@ -14,7 +14,7 @@ class SkillsLoader:
     """
     Loader for agent skills.
     
-    Skills are markdown files (SKILL.md) that teach the agent how to use
+    Skills are markdown files (SKILL*.md) that teach the agent how to use
     specific tools or perform certain tasks.
     """
 
@@ -39,17 +39,17 @@ class SkillsLoader:
         if self.workspace_skills.exists():
             for skill_dir in self.workspace_skills.iterdir():
                 if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists():
-                        skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "workspace"})
+                    skill_files = sorted(skill_dir.glob("SKILL*.md"))
+                    if skill_files:
+                        skills.append({"name": skill_dir.name, "path": str(skill_files[0]), "source": "workspace"})
 
         # Built-in skills
         if self.builtin_skills and self.builtin_skills.exists():
             for skill_dir in self.builtin_skills.iterdir():
                 if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists() and not any(s["name"] == skill_dir.name for s in skills):
-                        skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "builtin"})
+                    skill_files = sorted(skill_dir.glob("SKILL*.md"))
+                    if skill_files and not any(s["name"] == skill_dir.name for s in skills):
+                        skills.append({"name": skill_dir.name, "path": str(skill_files[0]), "source": "builtin"})
 
         # Filter by requirements
         if filter_unavailable:
@@ -67,15 +67,19 @@ class SkillsLoader:
             Skill content or None if not found.
         """
         # Check workspace first
-        workspace_skill = self.workspace_skills / name / "SKILL.md"
-        if workspace_skill.exists():
-            return workspace_skill.read_text(encoding="utf-8")
+        workspace_skill_dir = self.workspace_skills / name
+        if workspace_skill_dir.exists():
+            skill_files = sorted(workspace_skill_dir.glob("SKILL*.md"))
+            if skill_files:
+                return "\n\n".join(f.read_text(encoding="utf-8") for f in skill_files)
 
         # Check built-in
         if self.builtin_skills:
-            builtin_skill = self.builtin_skills / name / "SKILL.md"
-            if builtin_skill.exists():
-                return builtin_skill.read_text(encoding="utf-8")
+            builtin_skill_dir = self.builtin_skills / name
+            if builtin_skill_dir.exists():
+                skill_files = sorted(builtin_skill_dir.glob("SKILL*.md"))
+                if skill_files:
+                    return "\n\n".join(f.read_text(encoding="utf-8") for f in skill_files)
 
         return None
 

@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-
 from fastapi.responses import HTMLResponse
 from loguru import logger
 
@@ -405,66 +404,43 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
         'A' 表示知识问答，'B' 表示运维操作，'C' 表示故障排查
     """
     intent_prompt = f"""
-    你是一个意图路由分类器。请判断用户问题的意图，仅回复单个字母（A、B、C）。
+    你是一个意图分类器。
 
-    分类定义：
+    任务：根据用户问题判断意图，只输出一个字母：
 
-    A: 【知识问答】
-    包括：
-    - 概念定义
-    - 架构原理
-    - 参数说明
-    - 配置教程
-    - 版本特性
-    - 产品对比 / vs / 区别 / 选型
-    - 最佳实践
-    - 静态文档内容
+    A = 知识问答
+    概念、原理、配置、参数、教程、文档、对比、选型
 
-    示例关键词：
-    是什么、原理、配置、参数、vs、对比、区别、选型、教程、文档
+    B = 运维查询
+    查询当前系统状态，例如 pod、日志、集群状态、运行情况
 
-
-    B: 【运维操作 / 查询执行】
-    包括：
-    - 查询某个具体资源状态
-    - 执行命令获取实时信息
-    - 查看 pod / 日志 / 集群状态
-    - 需要调用工具执行命令
+    C = 故障排查
+    系统报错、异常、超时、连接失败、消息积压等问题
 
     示例：
-    查询 XXX pod
-    查看 XXX 日志
-    检查集群状态
-    执行命令
-    获取当前运行情况
 
+    Q: rocketmq broker 是什么
+    A
 
-    C: 【故障排查】
-    包括：
-    - 系统报错
-    - 异常堆栈
-    - 连接失败
-    - 超时
-    - 消息积压
-    - 服务异常
-    - 明确表示系统出问题
-    - 需要分析“为什么出错”
+    Q: kafka 和 rocketmq 区别
+    A
 
-    示例关键词：
-    报错、错误、Exception、连不上、超时、积压、挂了、重启后异常、为什么报错、怎么解决
+    Q: 查看 rocketmq broker pod
+    B
 
+    Q: 查询 broker 日志
+    B
 
-    判断规则：
+    Q: rocketmq 消息积压怎么办
+    C
 
-    1. 如果问题涉及两个产品的比较（如 "vs", "对比", "区别"），必须归为 A。
-    2. 如果用户只是想“获取当前状态”，但未描述异常，归为 B。
-    3. 只有当用户明确描述正在发生的异常或错误，才归为 C。
-    4. 如果无法判断是否真实故障，优先归为 A。
+    Q: broker 报 timeout 错误
+    C
 
     用户问题：
     {user_input}
 
-    请只输出 A、B 或 C：
+    只输出 A、B 或 C：
     """
 
     try:
@@ -598,7 +574,6 @@ def _rerank_route_candidates(query: str, results: list[dict[str, Any]]) -> list[
 
 
 async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: float):
-
     """处理运维操作意图：tools/skills 联合检索并重排后进入 loop。"""
     import json
     import time
