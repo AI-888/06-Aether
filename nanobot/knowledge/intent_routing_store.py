@@ -23,6 +23,12 @@ from nanobot.knowledge.rag_config import RAGConfig
 from nanobot.knowledge.text_chunker import TextChunker
 from nanobot.knowledge.vector_embedder import VectorEmbedder
 from nanobot.utils.helpers import ensure_dir
+from nanobot.metrics import (
+    RAG_QUERY_DURATION,
+    RAG_EMBEDDING_DURATION,
+    RAG_QUERY_RESULTS_COUNT,
+    RAG_QUERY_TOTAL,
+)
 
 TOOLS_COLLECTION = "ops_tools"
 SKILLS_COLLECTION = "skills_docs"
@@ -405,19 +411,28 @@ class IntentRoutingStore:
 
     def search_tools(self, query: str, limit: int = 2) -> list[dict[str, Any]]:
         collection = self._get_or_create(self.tools_client, TOOLS_COLLECTION)
-        return self._query_collection(collection, query, limit)
+        return self._query_collection(collection, query, limit, operation="intent_routing_tools")
 
     def search_skills(self, query: str, limit: int = 2) -> list[dict[str, Any]]:
         collection = self._get_or_create(self.skills_client, SKILLS_COLLECTION)
-        return self._query_collection(collection, query, limit)
+        return self._query_collection(collection, query, limit, operation="intent_routing_skills")
 
-    def _query_collection(self, collection: Any, query: str, limit: int) -> list[dict[str, Any]]:
+    def _query_collection(self, collection: Any, query: str, limit: int, operation: str = "intent_routing") -> list[dict[str, Any]]:
+        query_start = time.time()
         emb = self.embedder.embed_text(query)
+        embed_duration = time.time() - query_start
+
+        # Prometheus: 记录向量化耗时
+        RAG_EMBEDDING_DURATION.labels(operation=operation).observe(embed_duration)
+
+        search_start = time.time()
         res = collection.query(
             query_embeddings=[emb],
             n_results=max(1, limit),
             include=["documents", "metadatas", "distances"],
         )
+        search_duration = time.time() - search_start
+
         docs = (res.get("documents") or [[]])[0]
         metas = (res.get("metadatas") or [[]])[0]
         dists = (res.get("distances") or [[]])[0]
@@ -432,6 +447,14 @@ class IntentRoutingStore:
                     "distance": dists[i] if i < len(dists) else None,
                 }
             )
+
+        total_duration = time.time() - query_start
+
+        # Prometheus: 记录向量数据库查询耗时、结果数和计数
+        RAG_QUERY_DURATION.labels(operation=operation, domain="intent_routing", status="success").observe(search_duration)
+        RAG_QUERY_RESULTS_COUNT.labels(operation=operation, domain="intent_routing").observe(len(results))
+        RAG_QUERY_TOTAL.labels(operation=operation, domain="intent_routing", status="success").inc()
+
         return results
 
 

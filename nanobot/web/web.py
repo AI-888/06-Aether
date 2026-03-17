@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from loguru import logger
 
 from nanobot.agent import AgentLoop
@@ -107,6 +107,18 @@ config: Config = None
 intent_routing_store: IntentRoutingStore = None
 
 
+# ---------------------------------------------------------------------------
+# Prometheus metrics endpoint
+# ---------------------------------------------------------------------------
+@web_app.get("/metrics")
+async def prometheus_metrics():
+    """暴露 Prometheus 指标端点，供 Prometheus server 抓取。"""
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    # 导入 metrics 模块确保所有指标已注册
+    import nanobot.metrics  # noqa: F401
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 def initialize_webui_resources():
     """Initialize resources for webui."""
     global provider, agent_loop, config, intent_routing_store
@@ -159,6 +171,14 @@ def initialize_webui_resources():
         )
     except Exception as e:
         logger.error(f"[WEB] ❌ 意图路由索引初始化失败: {e}")
+
+    # 启动定时指标打印（每3秒写入日志，按日期自动分割）
+    try:
+        from nanobot.metrics import start_metrics_logging
+        start_metrics_logging(log_dir="logs", interval_seconds=3)
+        logger.info("[WEB] 📊 定时指标打印已启动（间隔3秒，日志目录: logs/）")
+    except Exception as e:
+        logger.warning(f"[WEB] ⚠️ 定时指标打印启动失败: {e}")
 
     return True
 
@@ -456,7 +476,8 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
             messages=[{"role": "user", "content": intent_prompt}],
             model=config.agents.defaults.model,
             max_tokens=1000,  # 只需要返回A/B/C
-            temperature=0.1  # 低温度确保稳定输出
+            temperature=0.1,  # 低温度确保稳定输出
+            purpose="intent_classification",
         )
 
         intent = response.content.strip().upper()
@@ -897,6 +918,7 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
                     model=config.agents.defaults.model,
                     max_tokens=1200,
                     temperature=0.2,
+                    purpose="qa_answer",
                 )
                 answer_markdown = (llm_resp.content or "").strip()
         except Exception as e:

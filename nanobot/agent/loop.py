@@ -268,7 +268,8 @@ class AgentLoop:
                 tools=self.tools.get_definitions(),
                 model=self.model,
                 stream=bool(stream_callback),
-                stream_callback=stream_callback
+                stream_callback=stream_callback,
+                purpose="agent_loop",
             )
 
             # 记录LLM调用结束时间并计算耗时
@@ -525,7 +526,8 @@ class AgentLoop:
             response = await self.provider.chat(
                 messages=messages,
                 tools=self.tools.get_definitions(),
-                model=self.model
+                model=self.model,
+                purpose="agent_loop_system",
             )
 
             # 记录LLM调用结束时间并计算耗时

@@ -430,6 +430,14 @@ def gateway(
 
     console.print(f"[green]✓[/green] Heartbeat: every 30m")
 
+    # 启动定时指标打印（每3秒写入日志，按日期自动分割）
+    try:
+        from nanobot.metrics import start_metrics_logging
+        start_metrics_logging(log_dir="logs", interval_seconds=3)
+        console.print("[green]✓[/green] Metrics logging: every 3s → logs/metrics.log")
+    except Exception as e:
+        console.print(f"[yellow]⚠️  定时指标打印启动失败: {str(e)}[/yellow]")
+
     async def run():
         try:
             await cron.start()

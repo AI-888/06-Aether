@@ -13,6 +13,13 @@ from loguru import logger
 
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
 from nanobot.providers.registry import find_by_model, find_gateway
+from nanobot.metrics import (
+    LLM_REQUEST_DURATION,
+    LLM_OUTPUT_TEXT_LENGTH,
+    LLM_REQUEST_TOTAL,
+    calc_messages_text_length,
+    get_input_length_range,
+)
 
 
 class LiteLLMProvider(LLMProvider):
@@ -112,6 +119,7 @@ class LiteLLMProvider(LLMProvider):
             temperature: float = 0.7,
             stream: bool = False,
             stream_callback: Callable | None = None,
+            purpose: str = "general",
     ) -> LLMResponse:
         """
         Send a chat completion request via LiteLLM.
@@ -124,6 +132,8 @@ class LiteLLMProvider(LLMProvider):
             temperature: Sampling temperature.
             stream: Whether to stream the response.
             stream_callback: Callback function for streaming chunks.
+            purpose: 调用目的标签，用于 Prometheus 监控区分场景
+                     (e.g. "intent_classification", "qa_answer", "agent_loop", "troubleshooting", "general")
         
         Returns:
             LLMResponse with content and/or tool calls.
@@ -159,6 +169,10 @@ class LiteLLMProvider(LLMProvider):
         # 记录LLM入参
         logger.info(f"[LLM] 调用模型: {model}")
         logger.info(f"[LLM] 入参: {json.dumps(kwargs, ensure_ascii=False)}")
+
+        # Prometheus: 计算输入文本长度区间标签
+        input_text_length = calc_messages_text_length(messages)
+        input_length_range = get_input_length_range(input_text_length)
 
         # 记录开始时间
         start_time = time.time()
@@ -208,6 +222,10 @@ class LiteLLMProvider(LLMProvider):
                 # 记录LLM出参和耗时
                 logger.info(f"[LLM] 流式调用耗时: {duration:.3f}秒")
                 logger.info(f"[LLM] 流式输出内容长度: {len(full_content)}字符")
+
+                # Prometheus: 记录流式调用指标
+                LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="success", input_length_range=input_length_range).observe(duration)                LLM_OUTPUT_TEXT_LENGTH.labels(model=model, purpose=purpose).observe(len(full_content))
+                LLM_REQUEST_TOTAL.labels(model=model, purpose=purpose, status="success").inc()
 
                 # 创建一个模拟的response对象用于解析
                 class MockResponse:
@@ -275,6 +293,11 @@ class LiteLLMProvider(LLMProvider):
                 logger.info(
                     f"[LLM] 出参: {json.dumps(response.model_dump() if hasattr(response, 'model_dump') else str(response), ensure_ascii=False)}")
 
+                # Prometheus: 记录非流式调用指标
+                LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="success", input_length_range=input_length_range).observe(duration)                output_len = len(response.choices[0].message.content or "") if hasattr(response, 'choices') and response.choices else 0
+                LLM_OUTPUT_TEXT_LENGTH.labels(model=model, purpose=purpose).observe(output_len)
+                LLM_REQUEST_TOTAL.labels(model=model, purpose=purpose, status="success").inc()
+
                 return self._parse_response(response, tools)
         except Exception as e:
             # 计算失败时的耗时
@@ -282,6 +305,11 @@ class LiteLLMProvider(LLMProvider):
             duration = end_time - start_time
 
             logger.error(f"[LLM] 调用失败，耗时: {duration:.3f}秒，错误: {str(e)}")
+
+            # Prometheus: 记录失败调用指标
+            LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="error", input_length_range=input_length_range).observe(duration)
+            LLM_REQUEST_TOTAL.labels(model=model, purpose=purpose, status="error").inc()
+
             # Return error as content for graceful handling
             return LLMResponse(
                 content=f"Error calling LLM: {str(e)}",

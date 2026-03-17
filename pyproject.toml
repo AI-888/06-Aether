@@ -44,6 +44,7 @@ dependencies = [
     "fastapi>=0.68.0",
     "uvicorn[standard]>=0.15.0",
     "mcp==1.26.0",
+    "prometheus-client>=0.20.0",
 ]
 
 [project.optional-dependencies]

@@ -21,6 +21,13 @@ except ImportError as e:
     logger.warning(f"sentence_transformers 库未安装，CrossEncoder 重排序功能将不可用: {e}")
 
 from nanobot.utils.helpers import ensure_dir
+from nanobot.metrics import (
+    RAG_QUERY_DURATION,
+    RAG_EMBEDDING_DURATION,
+    RAG_QUERY_RESULTS_COUNT,
+    RAG_QUERY_TOTAL,
+    RERANK_DURATION,
+)
 from .rag_config import RAGConfig
 from .text_chunker import TextChunker
 from .vector_embedder import VectorEmbedder
@@ -305,6 +312,9 @@ class ChromaKnowledgeStore:
 
             elapsed = (datetime.now() - start_time).total_seconds()
             logger.info(f"✅ 重排序完成，耗时: {elapsed:.3f}秒")
+
+            # Prometheus: 记录重排序耗时
+            RERANK_DURATION.labels(status="success").observe(elapsed)
             logger.info(
                 f"   - 原始结果数: {len([r for r in results if 'rerank_score' in r]) + len([r for r in results if 'rerank_score' not in r])}")
             logger.info(f"   - 过滤后结果数: {len(results)} (阈值: {rerank_threshold}分)")
@@ -317,6 +327,8 @@ class ChromaKnowledgeStore:
             return results
         except Exception as e:
             logger.error(f"❌ 重排序失败: {str(e)}")
+            # Prometheus: 记录重排序失败
+            RERANK_DURATION.labels(status="error").observe(0)
             return results
 
     def _save_init_status(self) -> None:
@@ -631,6 +643,9 @@ class ChromaKnowledgeStore:
             logger.info(
                 f"[KNOWLEDGE_STORE] ✅ 查询向量化完成，耗时: {vectorize_time:.3f}秒，向量维度: {len(query_vector)}")
 
+            # Prometheus: 记录向量化耗时
+            RAG_EMBEDDING_DURATION.labels(operation="semantic_search").observe(vectorize_time)
+
             # 2. 构建元数据过滤条件
             where_filter = {}
             if category:
@@ -719,6 +734,11 @@ class ChromaKnowledgeStore:
             logger.info(
                 f"[KNOWLEDGE_STORE] 🔎 相似度搜索完成，耗时: {search_time:.3f}秒，找到 {len(all_results)} 个分块结果")
 
+            # Prometheus: 记录向量搜索耗时和结果数
+            search_domain_label = domain or "all"
+            RAG_QUERY_DURATION.labels(operation="semantic_search", domain=search_domain_label, status="success").observe(search_time)
+            RAG_QUERY_RESULTS_COUNT.labels(operation="semantic_search", domain=search_domain_label).observe(len(all_results))
+
             # 5. 按相似度分数降序排序
             all_results.sort(key=lambda x: x["similarity_score"], reverse=True)
 
@@ -787,6 +807,9 @@ class ChromaKnowledgeStore:
             logger.info(f"[KNOWLEDGE_STORE]   - 返回结果数: {len(knowledge_items)}")
             logger.info(f"[KNOWLEDGE_STORE]   - 总耗时: {total_time:.3f}秒")
 
+            # Prometheus: 记录语义检索总计数
+            RAG_QUERY_TOTAL.labels(operation="semantic_search", domain=domain or "all", status="success").inc()
+
             # 记录前3个结果的标题和分数
             for i, item in enumerate(knowledge_items[:3], 1):
                 result = reranked_results[i - 1] if i - 1 < len(reranked_results) else {}
@@ -809,6 +832,8 @@ class ChromaKnowledgeStore:
 
         except Exception as e:
             logger.error(f"语义检索失败: {str(e)}", exc_info=True)
+            # Prometheus: 记录语义检索失败
+            RAG_QUERY_TOTAL.labels(operation="semantic_search", domain=domain or "all", status="error").inc()
             return []
 
     def _search_by_metadata(
