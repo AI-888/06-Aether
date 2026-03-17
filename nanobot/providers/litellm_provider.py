@@ -224,7 +224,8 @@ class LiteLLMProvider(LLMProvider):
                 logger.info(f"[LLM] 流式输出内容长度: {len(full_content)}字符")
 
                 # Prometheus: 记录流式调用指标
-                LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="success", input_length_range=input_length_range).observe(duration)                LLM_OUTPUT_TEXT_LENGTH.labels(model=model, purpose=purpose).observe(len(full_content))
+                LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="success", input_length_range=input_length_range).observe(duration)
+                LLM_OUTPUT_TEXT_LENGTH.labels(model=model, purpose=purpose).observe(len(full_content))
                 LLM_REQUEST_TOTAL.labels(model=model, purpose=purpose, status="success").inc()
 
                 # 创建一个模拟的response对象用于解析
@@ -294,7 +295,8 @@ class LiteLLMProvider(LLMProvider):
                     f"[LLM] 出参: {json.dumps(response.model_dump() if hasattr(response, 'model_dump') else str(response), ensure_ascii=False)}")
 
                 # Prometheus: 记录非流式调用指标
-                LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="success", input_length_range=input_length_range).observe(duration)                output_len = len(response.choices[0].message.content or "") if hasattr(response, 'choices') and response.choices else 0
+                LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="success", input_length_range=input_length_range).observe(duration)
+                output_len = len(response.choices[0].message.content or "") if hasattr(response, 'choices') and response.choices else 0
                 LLM_OUTPUT_TEXT_LENGTH.labels(model=model, purpose=purpose).observe(output_len)
                 LLM_REQUEST_TOTAL.labels(model=model, purpose=purpose, status="success").inc()
 
