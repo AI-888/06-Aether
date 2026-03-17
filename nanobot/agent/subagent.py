@@ -116,68 +116,48 @@ class SubagentManager:
                 {"role": "user", "content": task},
             ]
 
-            # Run agent loop (limited iterations)
-            max_iterations = 15
-            iteration = 0
+            # 单轮交互模式：LLM 调用一次，如有 tool_calls 则执行工具并直接返回结果
             final_result: str | None = None
 
-            while iteration < max_iterations:
-                iteration += 1
+            response = await self.provider.chat(
+                messages=messages,
+                tools=tools.get_definitions(),
+                model=self.model,
+            )
 
-                response = await self.provider.chat(
-                    messages=messages,
-                    tools=tools.get_definitions(),
-                    model=self.model,
-                )
+            if response.has_tool_calls:
+                tool_results = []
 
-                if response.has_tool_calls:
-                    # Add assistant message with tool calls
-                    tool_call_dicts = [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.name,
-                                "arguments": json.dumps(tc.arguments),
-                            },
-                        }
-                        for tc in response.tool_calls
-                    ]
-                    messages.append({
-                        "role": "assistant",
-                        "content": response.content or "",
-                        "tool_calls": tool_call_dicts,
-                    })
+                for tool_call in response.tool_calls:
+                    args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
+                    logger.info(f"[SUBAGENT-{task_id}] 🔧 执行工具: {tool_call.name}")
+                    logger.info(f"[SUBAGENT-{task_id}] 🔧 工具输入: {args_str[:200]}...")
 
-                    # Execute tools
-                    for tool_call in response.tool_calls:
-                        args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
-                        logger.info(f"[SUBAGENT-{task_id}] 🔧 执行工具: {tool_call.name}")
-                        logger.info(f"[SUBAGENT-{task_id}] 🔧 工具输入: {args_str[:200]}...")
+                    # 记录开始时间
+                    import time
+                    start_time = time.time()
 
-                        # 记录开始时间
-                        import time
-                        start_time = time.time()
+                    result = await tools.execute(tool_call.name, tool_call.arguments)
 
-                        result = await tools.execute(tool_call.name, tool_call.arguments)
+                    # 计算执行耗时
+                    end_time = time.time()
+                    duration = end_time - start_time
 
-                        # 计算执行耗时
-                        end_time = time.time()
-                        duration = end_time - start_time
+                    result_preview = str(result)[:300] if result else "(empty result)"
+                    logger.info(f"[SUBAGENT-{task_id}] 🔧 工具输出: {result_preview}...")
+                    logger.info(f"[SUBAGENT-{task_id}] ⏱️  工具执行耗时: {duration:.3f}秒")
 
-                        result_preview = str(result)[:300] if result else "(empty result)"
-                        logger.info(f"[SUBAGENT-{task_id}] 🔧 工具输出: {result_preview}...")
-                        logger.info(f"[SUBAGENT-{task_id}] ⏱️  工具执行耗时: {duration:.3f}秒")
+                    tool_results.append(f"[工具: {tool_call.name}]\n{result}")
 
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "name": tool_call.name,
-                            "content": result,
-                        })
+                # 拼接工具结果为最终回答
+                assistant_text = response.content or ""
+                tools_output = "\n\n".join(tool_results)
+                if assistant_text:
+                    final_result = f"{assistant_text}\n\n{tools_output}"
                 else:
-                    final_result = response.content
-                    break
+                    final_result = tools_output
+            else:
+                final_result = response.content
 
             if final_result is None:
                 final_result = "Task completed but no final response was generated."

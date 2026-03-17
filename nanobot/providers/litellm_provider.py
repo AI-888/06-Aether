@@ -240,43 +240,9 @@ class LiteLLMProvider(LLMProvider):
                 class MockMessage:
                     def __init__(self, content):
                         self.content = content
-                        # 解析content中的工具调用
-                        self.tool_calls = self._parse_tool_calls_from_content(content)
-
-                    def _parse_tool_calls_from_content(self, content: str):
-                        """从流式输出的完整内容中解析工具调用。"""
-                        import re
-                        import json
-
-                        # 查找JSON格式的工具调用
-                        tool_call_pattern = r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(\{[^}]+\})\s*\}'
-                        matches = re.findall(tool_call_pattern, content)
-
-                        if not matches:
-                            return None
-
-                        tool_calls = []
-                        for name, args_str in matches:
-                            try:
-                                # 解析参数
-                                args = json.loads(args_str)
-
-                                # 创建模拟的ToolCall对象
-                                class ToolCall:
-                                    def __init__(self, name, args):
-                                        self.function = Function(name, args)
-                                        self.id = f"call_{len(tool_calls)}"
-
-                                class Function:
-                                    def __init__(self, name, args):
-                                        self.name = name
-                                        self.arguments = args
-
-                                tool_calls.append(ToolCall(name, args))
-                            except json.JSONDecodeError:
-                                continue
-
-                        return tool_calls if tool_calls else None
+                        # 单轮模式下不再从文本内容中解析 function 调用
+                        # 避免 function 类型 JSON 污染 SLM 输入
+                        self.tool_calls = None
 
                 mock_response = MockResponse(full_content)
                 return self._parse_response(mock_response, tools)

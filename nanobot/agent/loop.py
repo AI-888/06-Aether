@@ -44,7 +44,7 @@ class AgentLoop:
             provider: LLMProvider,
             workspace: Path,
             model: str | None = None,
-            max_iterations: int = 3,
+            max_iterations: int = 3,  # 当前单轮模式下未使用，保留以备后续扩展
             brave_api_key: str | None = None,
             exec_config: "ExecToolConfig | None" = None,
             cron_service: "CronService | None" = None,
@@ -219,220 +219,167 @@ class AgentLoop:
             additional_context=knowledge_context  # 添加知识库查询结果作为额外上下文
         )
 
-        # Agent loop
-        iteration = 0
+        # 单轮交互模式：LLM 调用一次，如有 tool_calls 则执行工具并直接返回结果
+        # （不再将 tool 结果回传 LLM 做多轮迭代，避免 function 类型 JSON 污染 SLM 输入）
         final_content = None
 
         # 记录整个消息处理的开始时间
         process_start_time = time.time()
 
-        while iteration < self.max_iterations:
-            iteration += 1
+        logger.info(f"[LOOP] 📝 Context messages count: {len(messages)}")
 
-            logger.info(f"[LOOP] 🔄 Agent iteration {iteration}/{self.max_iterations}")
-            logger.info(f"[LOOP] 📝 Context messages count: {len(messages)}")
+        # Log the last user message for context
+        for msg_item in reversed(messages):
+            if msg_item.get("role") == "user":
+                content_preview = str(msg_item.get("content", ""))[:200]
+                logger.info(f"[LOOP] 💬 Last user message: {content_preview}...")
+                break
 
-            # Log the last user message for context
-            for msg_item in reversed(messages):
-                if msg_item.get("role") == "user":
-                    content_preview = str(msg_item.get("content", ""))[:200]
-                    logger.info(f"[LOOP] 💬 Last user message: {content_preview}...")
-                    break
+        # Call LLM (单次调用)
+        logger.info(f"[LOOP] 🤖 Calling LLM with model: {self.model}")
 
-            # Call LLM
-            logger.info(f"[LOOP] 🤖 Calling LLM with model: {self.model}")
+        # 记录LLM调用开始时间
+        llm_start_time = time.time()
 
-            # 记录LLM调用开始时间
-            llm_start_time = time.time()
+        # 检查是否有流式回调函数
+        stream_callback = getattr(self, 'stream_callback', None)
 
-            # 检查是否有流式回调函数
-            stream_callback = getattr(self, 'stream_callback', None)
+        response = await self.provider.chat(
+            messages=messages,
+            tools=self.tools.get_definitions(),
+            model=self.model,
+            stream=bool(stream_callback),
+            stream_callback=stream_callback,
+            purpose="agent_loop",
+        )
 
-            # 如果存在流式回调，传递迭代计数信息
-            if stream_callback:
-                # 发送迭代开始信息
-                iteration_info = {
-                    "content": f"🔄 第{iteration}次迭代开始处理...\\n",
-                    "is_iteration_start": True,
-                    "iteration_count": iteration,
-                    "timestamp": llm_start_time,
-                    "duration_from_start": round(llm_start_time - process_start_time, 3)
-                }
-                if asyncio.iscoroutinefunction(stream_callback):
-                    await stream_callback(iteration_info)
-                else:
-                    stream_callback(iteration_info)
+        # 记录LLM调用结束时间并计算耗时
+        llm_end_time = time.time()
+        llm_duration = llm_end_time - llm_start_time
+        logger.info(f"[LOOP] ⏱️  LLM调用耗时: {llm_duration:.3f}秒")
 
-            response = await self.provider.chat(
-                messages=messages,
-                tools=self.tools.get_definitions(),
-                model=self.model,
-                stream=bool(stream_callback),
-                stream_callback=stream_callback,
-                purpose="agent_loop",
-            )
+        # Log LLM response
+        response_preview = response.content if response.content else "(no content)"
+        logger.info(f"[LOOP] 🤖 LLM response content: {response_preview}")
+        logger.info(f"[LOOP] 🤖 LLM response has_tool_calls: {response.has_tool_calls}")
 
-            # 记录LLM调用结束时间并计算耗时
-            llm_end_time = time.time()
-            llm_duration = llm_end_time - llm_start_time
-            logger.info(f"[LOOP] ⏱️  LLM调用耗时: {llm_duration:.3f}秒")
+        if response.has_tool_calls:
+            logger.info(f"[LOOP] 🔧 LLM requested {len(response.tool_calls)} tool call(s)")
+            for tc in response.tool_calls:
+                logger.info(f"[LOOP] 🔧   - Tool: {tc.name}")
+        else:
+            logger.info(f"[LOOP] ✅ LLM provided final response (no tool calls)")
 
-            # Log LLM response
-            response_preview = response.content if response.content else "(no content)"
-            logger.info(f"[LOOP] 🤖 LLM response content: {response_preview}")
-            logger.info(f"[LOOP] 🤖 LLM response has_tool_calls: {response.has_tool_calls}")
+        # Handle tool calls（单轮执行：执行工具后直接将结果拼接为最终回答）
+        if response.has_tool_calls:
+            tool_results = []
 
-            if response.has_tool_calls:
-                logger.info(f"[LOOP] 🔧 LLM requested {len(response.tool_calls)} tool call(s)")
-                for tc in response.tool_calls:
-                    logger.info(f"[LOOP] 🔧   - Tool: {tc.name}")
-            else:
-                logger.info(f"[LOOP] ✅ LLM provided final response (no tool calls)")
-
-            # Handle tool calls
-            if response.has_tool_calls:
-                # Add assistant message with tool calls
-                tool_call_dicts = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": json.dumps(tc.arguments)  # Must be JSON string
-                        }
-                    }
-                    for tc in response.tool_calls
-                ]
-                messages = self.context.add_assistant_message(
-                    messages, response.content, tool_call_dicts,
-                    reasoning_content=response.reasoning_content,
+            for tool_call in response.tool_calls:
+                tool_name, tool_args = self._repair_tool_call(
+                    tool_call.name,
+                    tool_call.arguments,
+                    msg.content,
                 )
+                args_str = json.dumps(tool_args, ensure_ascii=False)
+                logger.info(f"[LOOP] 🔧 执行工具: {tool_name}")
+                logger.info(f"[LOOP] 🔧 工具输入: {args_str[:500]}...")
 
-                # Execute tools
-                for tool_call in response.tool_calls:
-                    tool_name, tool_args = self._repair_tool_call(
-                        tool_call.name,
-                        tool_call.arguments,
-                        msg.content,
-                    )
-                    args_str = json.dumps(tool_args, ensure_ascii=False)
-                    logger.info(f"[LOOP] 🔧 执行工具: {tool_name}")
-                    logger.info(f"[LOOP] 🔧 工具输入: {args_str[:500]}...")
+                # 记录开始时间
+                start_time = time.time()
 
-                    # 记录开始时间
-                    start_time = time.time()
+                # 构建显示名称
+                display_tool_name = tool_name
+                if tool_name == "exec" and isinstance(tool_args, dict):
+                    command = tool_args.get("command", "")
+                    if command:
+                        command_parts = command.strip().split()
+                        if command_parts:
+                            display_tool_name = f"exec: {command_parts[0]}"
 
-                    # 发送工具开始执行的信息到前端
+                # 发送工具开始执行的信息到前端
+                if stream_callback:
+                    tool_start_info = {
+                        "content": f"🔧 开始执行工具: {display_tool_name}\n工具参数: {args_str[:1000]}...\n",
+                        "is_tool_call": True,
+                        "tool_args": tool_args,
+                        "tool_name": display_tool_name,
+                        "tool_status": "start"
+                    }
+                    if asyncio.iscoroutinefunction(stream_callback):
+                        await stream_callback(tool_start_info)
+                    else:
+                        stream_callback(tool_start_info)
+
+                try:
+                    result = await self.tools.execute(tool_name, tool_args)
+
+                    # 计算执行耗时
+                    end_time = time.time()
+                    duration = end_time - start_time
+
+                    result_preview = str(result)[:300] if result else "(empty result)"
+                    logger.info(f"[LOOP] 🔧 工具输出: {result_preview}...")
+                    logger.info(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
+
+                    # 发送工具执行结果到前端
                     if stream_callback:
-                        # 如果是exec工具，显示具体的命令而不是"exec"
-                        display_tool_name = tool_name
-                        if tool_name == "exec" and isinstance(tool_args, dict):
-                            command = tool_args.get("command", "")
-                            if command:
-                                # 提取命令的第一个单词作为显示名称
-                                command_parts = command.strip().split()
-                                if command_parts:
-                                    display_tool_name = f"exec: {command_parts[0]}"
-
-                        tool_start_info = {
-                            "content": f"🔧 开始执行工具: {display_tool_name}\\n工具参数: {args_str[:1000]}...\\n",
+                        tool_result_info = {
+                            "content": f"✅ 工具执行完成: {display_tool_name}\n执行耗时: {duration:.3f}秒\n执行结果: {result_preview}\n",
                             "is_tool_call": True,
-                            "tool_args": tool_args,
                             "tool_name": display_tool_name,
-                            "tool_status": "start"
+                            "tool_args": tool_args,
+                            "tool_status": "completed",
+                            "tool_duration": duration,
+                            "tool_result": result_preview
                         }
                         if asyncio.iscoroutinefunction(stream_callback):
-                            await stream_callback(tool_start_info)
+                            await stream_callback(tool_result_info)
                         else:
-                            stream_callback(tool_start_info)
+                            stream_callback(tool_result_info)
 
-                    try:
-                        result = await self.tools.execute(tool_name, tool_args)
+                    tool_results.append(f"[工具: {tool_name}]\n{result}")
 
-                        # 计算执行耗时
-                        end_time = time.time()
-                        duration = end_time - start_time
+                except Exception as e:
+                    # 计算执行耗时
+                    end_time = time.time()
+                    duration = end_time - start_time
 
-                        result_preview = str(result)[:300] if result else "(empty result)"
-                        logger.info(f"[LOOP] 🔧 工具输出: {result_preview}...")
-                        logger.info(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
+                    error_msg = f"工具执行失败: {str(e)}"
+                    logger.error(f"[LOOP] ❌ {error_msg}")
+                    logger.error(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
 
-                        # 发送工具执行结果到前端
-                        if stream_callback:
-                            # 如果是exec工具，显示具体的命令而不是"exec"
-                            display_tool_name = tool_name
-                            if tool_name == "exec" and isinstance(tool_args, dict):
-                                command = tool_args.get("command", "")
-                                if command:
-                                    # 提取命令的第一个单词作为显示名称
-                                    command_parts = command.strip().split()
-                                    if command_parts:
-                                        display_tool_name = f"exec: {command_parts[0]}"
+                    # 发送工具执行错误到前端
+                    if stream_callback:
+                        tool_error_info = {
+                            "content": f"❌ 工具执行失败: {display_tool_name}\n错误信息: {error_msg}\n执行耗时: {duration:.3f}秒\n",
+                            "is_tool_call": True,
+                            "tool_name": display_tool_name,
+                            "tool_args": tool_args,
+                            "tool_status": "error",
+                            "tool_duration": duration,
+                            "tool_error": error_msg
+                        }
+                        if asyncio.iscoroutinefunction(stream_callback):
+                            await stream_callback(tool_error_info)
+                        else:
+                            stream_callback(tool_error_info)
 
-                            tool_result_info = {
-                                "content": f"✅ 工具执行完成: {display_tool_name}\\n执行耗时: {duration:.3f}秒\\n执行结果: {result_preview}\\n",
-                                "is_tool_call": True,
-                                "tool_name": display_tool_name,
-                                "tool_args": tool_args,
-                                "tool_status": "completed",
-                                "tool_duration": duration,
-                                "tool_result": result_preview
-                            }
-                            if asyncio.iscoroutinefunction(stream_callback):
-                                await stream_callback(tool_result_info)
-                            else:
-                                stream_callback(tool_result_info)
+                    tool_results.append(f"[工具: {tool_name}]\n{error_msg}")
 
-                        messages = self.context.add_tool_result(
-                            messages, tool_call.id, tool_name, result
-                        )
-                    except Exception as e:
-                        # 计算执行耗时
-                        end_time = time.time()
-                        duration = end_time - start_time
-
-                        error_msg = f"工具执行失败: {str(e)}"
-                        logger.error(f"[LOOP] ❌ {error_msg}")
-                        logger.error(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
-
-                        # 发送工具执行错误到前端
-                        if stream_callback:
-                            # 如果是exec工具，显示具体的命令而不是"exec"
-                            display_tool_name = tool_name
-                            if tool_name == "exec" and isinstance(tool_args, dict):
-                                command = tool_args.get("command", "")
-                                if command:
-                                    # 提取命令的第一个单词作为显示名称
-                                    command_parts = command.strip().split()
-                                    if command_parts:
-                                        display_tool_name = f"exec: {command_parts[0]}"
-
-                            tool_error_info = {
-                                "content": f"❌ 工具执行失败: {display_tool_name}\\n错误信息: {error_msg}\\n执行耗时: {duration:.3f}秒\\n",
-                                "is_tool_call": True,
-                                "tool_name": display_tool_name,
-                                "tool_args": tool_args,
-                                "tool_status": "error",
-                                "tool_duration": duration,
-                                "tool_error": error_msg
-                            }
-                            if asyncio.iscoroutinefunction(stream_callback):
-                                await stream_callback(tool_error_info)
-                            else:
-                                stream_callback(tool_error_info)
-
-                        # 添加错误结果到消息中
-                        messages = self.context.add_tool_result(
-                            messages, tool_call.id, tool_name, error_msg
-                        )
+            # 将所有工具执行结果拼接为最终回答（不再回传 LLM）
+            assistant_text = response.content or ""
+            tools_output = "\n\n".join(tool_results)
+            if assistant_text:
+                final_content = f"{assistant_text}\n\n{tools_output}"
             else:
-                # No tool calls, we're done
-                fallback_content = await self._fallback_exec_on_empty_response(
-                    msg.content,
-                    response.content,
-                )
-                final_content = fallback_content if fallback_content is not None else response.content
-                break
+                final_content = tools_output
+        else:
+            # No tool calls, 直接使用 LLM 回答
+            fallback_content = await self._fallback_exec_on_empty_response(
+                msg.content,
+                response.content,
+            )
+            final_content = fallback_content if fallback_content is not None else response.content
 
         if final_content is None:
             final_content = "I've completed processing but have no response to give."
@@ -449,9 +396,8 @@ class AgentLoop:
 
         # 记录详细的耗时统计
         logger.info(f"[LOOP] 📊 耗时统计详情:")
-        logger.info(f"[LOOP] 📊 - LLM调用总耗时: {llm_duration:.3f}秒")
-        logger.info(f"[LOOP] 📊 - 工具执行总耗时: {process_duration - llm_duration:.3f}秒")
-        logger.info(f"[LOOP] 📊 - 总迭代次数: {iteration}次")
+        logger.info(f"[LOOP] 📊 - LLM调用耗时: {llm_duration:.3f}秒")
+        logger.info(f"[LOOP] 📊 - 工具执行耗时: {process_duration - llm_duration:.3f}秒")
 
         # Save to session
         session.add_message("user", msg.content)
@@ -509,91 +455,74 @@ class AgentLoop:
             chat_id=origin_chat_id,
         )
 
-        # Agent loop (limited for announce handling)
-        iteration = 0
+        # 单轮交互模式（与 _process_message 一致）
         final_content = None
 
         # 记录整个系统消息处理的开始时间
         process_start_time = time.time()
-        llm_duration = 0.0
 
-        while iteration < self.max_iterations:
-            iteration += 1
+        # 记录LLM调用开始时间
+        llm_start_time = time.time()
 
-            # 记录LLM调用开始时间
-            llm_start_time = time.time()
+        response = await self.provider.chat(
+            messages=messages,
+            tools=self.tools.get_definitions(),
+            model=self.model,
+            purpose="agent_loop_system",
+        )
 
-            response = await self.provider.chat(
-                messages=messages,
-                tools=self.tools.get_definitions(),
-                model=self.model,
-                purpose="agent_loop_system",
-            )
+        # 记录LLM调用结束时间并计算耗时
+        llm_end_time = time.time()
+        llm_duration = llm_end_time - llm_start_time
 
-            # 记录LLM调用结束时间并计算耗时
-            llm_end_time = time.time()
-            llm_duration += llm_end_time - llm_start_time
+        if response.has_tool_calls:
+            tool_results = []
 
-            if response.has_tool_calls:
-                tool_call_dicts = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": json.dumps(tc.arguments)
-                        }
-                    }
-                    for tc in response.tool_calls
-                ]
-                messages = self.context.add_assistant_message(
-                    messages, response.content, tool_call_dicts,
-                    reasoning_content=response.reasoning_content,
+            for tool_call in response.tool_calls:
+                tool_name, tool_args = self._repair_tool_call(
+                    tool_call.name,
+                    tool_call.arguments,
+                    msg.content,
                 )
+                args_str = json.dumps(tool_args, ensure_ascii=False)
+                logger.info(f"[SYSTEM] 🔧 执行工具: {tool_name}")
+                logger.info(f"[SYSTEM] 🔧 工具输入: {args_str[:200]}...")
 
-                for tool_call in response.tool_calls:
-                    tool_name, tool_args = self._repair_tool_call(
-                        tool_call.name,
-                        tool_call.arguments,
-                        msg.content,
-                    )
-                    args_str = json.dumps(tool_args, ensure_ascii=False)
-                    logger.info(f"[SYSTEM] 🔧 执行工具: {tool_name}")
-                    logger.info(f"[SYSTEM] 🔧 工具输入: {args_str[:200]}...")
+                # 记录开始时间
+                start_time = time.time()
 
-                    # 记录开始时间
-                    start_time = time.time()
+                try:
+                    result = await self.tools.execute(tool_name, tool_args)
 
-                    try:
-                        result = await self.tools.execute(tool_name, tool_args)
+                    # 计算执行耗时
+                    end_time = time.time()
+                    duration = end_time - start_time
 
-                        # 计算执行耗时
-                        end_time = time.time()
-                        duration = end_time - start_time
+                    result_preview = str(result)[:300] if result else "(empty result)"
+                    logger.info(f"[SYSTEM] 🔧 工具输出: {result_preview}...")
+                    logger.info(f"[SYSTEM] ⏱️  工具执行耗时: {duration:.3f}秒")
 
-                        result_preview = str(result)[:300] if result else "(empty result)"
-                        logger.info(f"[SYSTEM] 🔧 工具输出: {result_preview}...")
-                        logger.info(f"[SYSTEM] ⏱️  工具执行耗时: {duration:.3f}秒")
+                    tool_results.append(f"[工具: {tool_name}]\n{result}")
+                except Exception as e:
+                    # 计算执行耗时
+                    end_time = time.time()
+                    duration = end_time - start_time
 
-                        messages = self.context.add_tool_result(
-                            messages, tool_call.id, tool_name, result
-                        )
-                    except Exception as e:
-                        # 计算执行耗时
-                        end_time = time.time()
-                        duration = end_time - start_time
+                    error_msg = f"工具执行失败: {str(e)}"
+                    logger.error(f"[SYSTEM] ❌ {error_msg}")
+                    logger.error(f"[SYSTEM] ⏱️  工具执行耗时: {duration:.3f}秒")
 
-                        error_msg = f"工具执行失败: {str(e)}"
-                        logger.error(f"[SYSTEM] ❌ {error_msg}")
-                        logger.error(f"[SYSTEM] ⏱️  工具执行耗时: {duration:.3f}秒")
+                    tool_results.append(f"[工具: {tool_name}]\n{error_msg}")
 
-                        # 添加错误结果到消息中
-                        messages = self.context.add_tool_result(
-                            messages, tool_call.id, tool_name, error_msg
-                        )
+            # 拼接工具结果为最终回答
+            assistant_text = response.content or ""
+            tools_output = "\n\n".join(tool_results)
+            if assistant_text:
+                final_content = f"{assistant_text}\n\n{tools_output}"
             else:
-                final_content = response.content
-                break
+                final_content = tools_output
+        else:
+            final_content = response.content
 
         if final_content is None:
             final_content = "Background task completed."
@@ -605,9 +534,8 @@ class AgentLoop:
 
         # 记录详细的耗时统计
         logger.info(f"[SYSTEM] 📊 耗时统计详情:")
-        logger.info(f"[SYSTEM] 📊 - LLM调用总耗时: {llm_duration:.3f}秒")
-        logger.info(f"[SYSTEM] 📊 - 工具执行总耗时: {process_duration - llm_duration:.3f}秒")
-        logger.info(f"[SYSTEM] 📊 - 总迭代次数: {iteration}次")
+        logger.info(f"[SYSTEM] 📊 - LLM调用耗时: {llm_duration:.3f}秒")
+        logger.info(f"[SYSTEM] 📊 - 工具执行耗时: {process_duration - llm_duration:.3f}秒")
 
         # Save to session (mark as system message in history)
         session.add_message("user", f"[System: {msg.sender_id}] {msg.content}")

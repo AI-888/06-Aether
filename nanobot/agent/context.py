@@ -203,60 +203,6 @@ class ContextBuilder:
             return text
         return images + [{"type": "text", "text": text}]
 
-    def add_tool_result(
-            self,
-            messages: list[dict[str, Any]],
-            tool_call_id: str,
-            tool_name: str,
-            result: str
-    ) -> list[dict[str, Any]]:
-        """
-        Add a tool result to the message list.
-        
-        Args:
-            messages: Current message list.
-            tool_call_id: ID of the tool call.
-            tool_name: Name of the tool.
-            result: Tool execution result.
-        
-        Returns:
-            Updated message list.
-        """
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "name": tool_name,
-            "content": result
-        })
-        return messages
-
-    def add_assistant_message(
-            self,
-            messages: list[dict[str, Any]],
-            content: str | None,
-            tool_calls: list[dict[str, Any]] | None = None,
-            reasoning_content: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """
-        Add an assistant message to the message list.
-        
-        Args:
-            messages: Current message list.
-            content: Message content.
-            tool_calls: Optional tool calls.
-            reasoning_content: Thinking output (Kimi, DeepSeek-R1, etc.).
-        
-        Returns:
-            Updated message list.
-        """
-        msg: dict[str, Any] = {"role": "assistant", "content": content or ""}
-
-        if tool_calls:
-            msg["tool_calls"] = tool_calls
-
-        # Thinking models reject history without this
-        if reasoning_content:
-            msg["reasoning_content"] = reasoning_content
-
-        messages.append(msg)
-        return messages
+    # NOTE: add_tool_result 和 add_assistant_message 已移除
+    # 当前采用单轮交互模式，不再需要将 tool_calls / tool results 追加到 messages 中
+    # 待模型能力提升后，可重新引入多轮迭代支持
