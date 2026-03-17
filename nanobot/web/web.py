@@ -680,18 +680,18 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
     merged_results = (tools_results or []) + (skills_results or [])
     if merged_results:
         reranked_results = _rerank_route_candidates(user_input, merged_results)
-        additional_context = _build_retrieval_context("Ops/Skills Retrieval Context", reranked_results, limit=2)
+        additional_context = _build_retrieval_context("Ops/Skills Retrieval Context", reranked_results, limit=1)
 
-        top2_results = reranked_results[:2]
-        preview_items = _build_ops_preview_items(top2_results)
-        retrieval_markdown = _build_retrieval_context("Ops/Skills Retrieval Preview", top2_results, limit=2) or ""
+        top1_results = reranked_results[:1]
+        preview_items = _build_ops_preview_items(top1_results)
+        retrieval_markdown = _build_retrieval_context("Ops/Skills Retrieval Preview", top1_results, limit=1) or ""
 
         knowledge_message = {
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": f"tools={len(tools_results)}，skills={len(skills_results)}，重排后展示 top2",
+            "content": f"tools={len(tools_results)}，skills={len(skills_results)}，重排后展示 top1",
             "knowledge_status": "success",
-            "knowledge_count": len(top2_results),
+            "knowledge_count": len(top1_results),
             "knowledge_result": retrieval_markdown,
             "preview_items": preview_items,
             "timestamp": time.time(),
@@ -700,7 +700,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         await websocket.send_text(json.dumps(knowledge_message, ensure_ascii=False))
 
         await websocket.send_text(
-            f"✅ 联合检索完成，tools={len(tools_results)}，skills={len(skills_results)}，重排后取 top2\n\n"
+            f"✅ 联合检索完成，tools={len(tools_results)}，skills={len(skills_results)}，重排后取 top1\n\n"
         )
     else:
         additional_context = None

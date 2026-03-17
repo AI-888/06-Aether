@@ -17,3 +17,4 @@ tests/
 botpy.log
 models
 .*
+logs
