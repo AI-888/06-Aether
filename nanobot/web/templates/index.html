@@ -236,11 +236,6 @@
             border-radius: 4px;
         }
 
-        .duration-info {
-            font-size: 0.8rem;
-            color: #718096;
-        }
-
         .timestamp {
             font-size: 0.8rem;
             color: #a0aec0;
@@ -285,18 +280,6 @@
             background: rgba(159, 122, 234, 0.05);
         }
 
-        /* Reasoning内容样式 */
-        .reasoning-duration {
-            font-size: 0.8rem;
-            color: #718096;
-            margin-top: 5px;
-            padding: 3px 8px;
-            background: rgba(66, 153, 225, 0.1);
-            border-radius: 4px;
-            display: inline-block;
-            border-left: 2px solid #4299e1;
-        }
-
         /* 工具执行区域样式 */
         .tool-section {
             border-left: 4px solid #48bb78;
@@ -328,12 +311,6 @@
             margin-top: 8px;
             padding-left: 10px;
             border-left: 2px solid #e2e8f0;
-        }
-
-        .tool-duration {
-            font-size: 0.85rem;
-            color: #718096;
-            margin-bottom: 3px;
         }
 
         .tool-result, .tool-error {
@@ -472,32 +449,6 @@
         @keyframes typing {
             0%, 60%, 100% { transform: scale(1); opacity: 1; }
             30% { transform: scale(1.2); opacity: 0.7; }
-        }
-
-        .processing-time {
-            font-size: 0.8rem;
-            color: #48bb78;
-            font-weight: 600;
-            margin-top: 3px;
-            padding: 4px 8px;
-            background: rgba(72, 187, 120, 0.1);
-            border-radius: 6px;
-            display: inline-block;
-            border-left: 3px solid #48bb78;
-        }
-
-        .processing-time div {
-            margin: 2px 0;
-        }
-
-        .processing-time div:first-child {
-            color: #4299e1;
-            font-weight: 700;
-        }
-
-        .processing-time div:last-child {
-            color: #ed8936;
-            font-weight: 600;
         }
 
         .streaming {
@@ -834,7 +785,7 @@
     }
 
     // Add AI message
-    function addAIMessage(content, totalTime = null, llmTime = null) {
+    function addAIMessage(content) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message ai';
 
@@ -842,16 +793,6 @@
         const formattedContent = content.replace(/\\n/g, '<br />');
 
         let timeInfo = `<div class=\"timestamp\">${new Date().toLocaleTimeString()}</div>`;
-        if (totalTime && llmTime) {
-            timeInfo += `
-                <div class=\"processing-time\">
-                    <div>总耗时: ${totalTime}秒</div>
-                    <div>LLM执行耗时: ${llmTime}秒</div>
-                </div>
-            `;
-        } else if (totalTime) {
-            timeInfo += `<div class=\"processing-time\">总耗时: ${totalTime}秒</div>`;
-        }
 
         messageDiv.innerHTML = `
             <div class=\"avatar\">AI</div>
@@ -905,7 +846,7 @@
     // --- 消息队列 ---
     const msgQueue = [];           // 待渲染消息队列
     let typewriterBusy = false;    // 打字机是否正在工作
-    const CHARS_PER_SEC = 20;       // 每秒输出字符数
+    const CHARS_PER_SEC = 30;       // 每秒输出字符数
     const CHAR_INTERVAL = Math.round(1000 / CHARS_PER_SEC); // ≈333ms
 
     // --- 队列指示器 DOM ---
@@ -1136,17 +1077,6 @@
             // 非JSON，按纯文本处理
         }
 
-        // 处理时间信息（总耗时行）
-        const timeMatch = response.match(/\*总耗时: ([0-9.]+)秒(?:\s*\|\s*LLM执行耗时: ([0-9.]+)秒)?\*/);
-        if (timeMatch) {
-            const totalTime = timeMatch[1];
-            const llmTime = timeMatch[2] || null;
-            let timeText = `⏱️ 总耗时: ${totalTime}秒`;
-            if (llmTime) timeText += ` | LLM耗时: ${llmTime}秒`;
-            enqueueMsg('completion', '⏱️', '耗时统计', escHtml(timeText));
-            return;
-        }
-
         // 忽略空消息
         const trimmed = response.trim();
         if (!trimmed || trimmed === '---') return;
@@ -1162,9 +1092,8 @@
         // 处理完成消息 → 恢复输入
         if (data.content_type === 'completion' || data.is_completed) {
             isStreaming = false;
-            const durText = data.duration_from_start ? '，总耗时 ' + Number(data.duration_from_start).toFixed(1) + '秒' : '';
             enqueueMsg('completion', '✅', '处理完成',
-                escHtml('请求已处理完毕' + durText), '', {
+                escHtml('请求已处理完毕'), '', {
                 afterRender: function() {
                     isProcessing = false;
                     sendButton.disabled = false;
@@ -1175,19 +1104,17 @@
             return;
         }
 
-        const duration = data.duration_from_start || 0;
-        const durationStr = duration ? `${duration.toFixed(2)}s` : '';
         const iterCount = data.iteration_count || 0;
 
         // 工具调用 — 即时渲染（含交互）
         if (data.is_tool_call) {
-            handleToolCallCard(data, durationStr);
+            handleToolCallCard(data);
             return;
         }
 
         // 知识库查询 — 即时渲染（含交互）
         if (data.content_type === 'knowledge' || data.is_knowledge_query) {
-            handleKnowledgeCard(data, durationStr);
+            handleKnowledgeCard(data);
             return;
         }
 
@@ -1205,11 +1132,11 @@
         const cfg = typeMap[contentType] || typeMap['text'];
 
         const safeContent = escHtml(content).replace(/\n/g, '<br/>');
-        enqueueMsg(cfg.type, cfg.icon, cfg.label, safeContent, durationStr);
+        enqueueMsg(cfg.type, cfg.icon, cfg.label, safeContent);
     }
 
     // ---------- 工具调用卡片（即时渲染） ----------
-    function handleToolCallCard(data, durationStr) {
+    function handleToolCallCard(data) {
         const toolName = data.tool_name || data.toolName || data.name || '工具';
         const toolStatus = data.tool_status || 'start';
 
@@ -1228,9 +1155,8 @@
                 break;
             case 'completed': {
                 const result = data.tool_result || '无结果';
-                const toolDur = data.tool_duration ? data.tool_duration.toFixed(3) + '秒' : durationStr;
                 const resultId = 'tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
-                bodyHtml = `✅ <strong>${escHtml(toolName)}</strong> 执行完成 <span style="color:#718096;font-size:0.8rem;">（${toolDur}）</span>` +
+                bodyHtml = `✅ <strong>${escHtml(toolName)}</strong> 执行完成` +
                     `<div class="tool-result-block">
                         <div class="tool-result-header" onclick="(function(el){var b=el.nextElementSibling;b.classList.toggle('collapsed');el.querySelector('.arrow').textContent=b.classList.contains('collapsed')?'▶':'▼';})(this)">
                             <span>📋 执行结果</span><span class="arrow">▼</span>
@@ -1241,19 +1167,18 @@
             }
             case 'error': {
                 const errorMsg = data.tool_error || '未知错误';
-                const toolDur = data.tool_duration ? data.tool_duration.toFixed(3) + '秒' : durationStr;
-                bodyHtml = `❌ <strong>${escHtml(toolName)}</strong> 执行失败 <span style="color:#718096;font-size:0.8rem;">（${toolDur}）</span>` +
+                bodyHtml = `❌ <strong>${escHtml(toolName)}</strong> 执行失败` +
                     `<div style="margin-top:6px;padding:8px;background:#fef2f2;border-radius:6px;color:#991b1b;font-size:0.9rem;">${escHtml(errorMsg).replace(/\n/g,'<br/>')}</div>`;
                 break;
             }
         }
 
         const icon = toolStatus === 'error' ? '❌' : (toolStatus === 'completed' ? '✅' : '🔧');
-        enqueueMsg('tool', icon, `工具: ${toolName}`, bodyHtml, durationStr, { instant: true });
+        enqueueMsg('tool', icon, `工具: ${toolName}`, bodyHtml, '', { instant: true });
     }
 
     // ---------- 知识库查询卡片（即时渲染） ----------
-    function handleKnowledgeCard(data, durationStr) {
+    function handleKnowledgeCard(data) {
         const status = data.knowledge_status || 'start';
         const content = data.content || '';
         const domain = data.knowledge_domain || '';
@@ -1300,7 +1225,7 @@
         }
 
         const iconMap = { start: '📚', searching: '🔍', success: '✅', no_results: '📭', error: '❌', skipped: '⚠️' };
-        enqueueMsg('knowledge', iconMap[status] || '📚', '知识库查询', bodyHtml, durationStr, { instant: true, afterRender: afterRender });
+        enqueueMsg('knowledge', iconMap[status] || '📚', '知识库查询', bodyHtml, '', { instant: true, afterRender: afterRender });
     }
 
     // (旧的 handleToolCallData 和 createToolSection 已迁移到 handleToolCallCard)

@@ -25,7 +25,7 @@ skill:
 
     - id: get_pod_logs
       type: tool
-      tool: kubectl_exec_log
+      tool: kubectl_query_log
 
       input:
         pod_name: "{{pod_name}}"

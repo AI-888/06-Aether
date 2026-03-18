@@ -33,7 +33,7 @@ class SecurityGuard:
         "check_memory",
         "check_cpu",
         "kubectl_get_pods",
-        "kubectl_exec_log",
+        "kubectl_query_log",
         "knowledge_search",
         "exec",
         "mcp_tool",

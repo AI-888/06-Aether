@@ -17,7 +17,7 @@ from nanobot.agent.tools.mcp import MCPTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.registry import ToolRegistry
 
-from nanobot.agent.tools.kubectl import KubectlGetPodsTool, KubectlExecLogTool
+from nanobot.agent.tools.k8s import KubectlGetPodsTool, KubectlQueryLogTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.rca_trigger import RCATriggerTool, RCAListSkillsTool
@@ -129,7 +129,7 @@ class AgentLoop:
 
         # kubectl 通用工具
         self.tools.register(KubectlGetPodsTool())
-        self.tools.register(KubectlExecLogTool())
+        self.tools.register(KubectlQueryLogTool())
 
         # RCA（根因分析）工具 - 条件注册
         self._register_rca_tools()
@@ -387,12 +387,11 @@ class AgentLoop:
                     # 发送工具执行结果到前端
                     if stream_callback:
                         tool_result_info = {
-                            "content": f"✅ 工具执行完成: {display_tool_name}\n执行耗时: {duration:.3f}秒\n执行结果: {result_preview}\n",
+                            "content": f"✅ 工具执行完成: {display_tool_name}\n执行结果: {result_preview}\n",
                             "is_tool_call": True,
                             "tool_name": display_tool_name,
                             "tool_args": tool_args,
                             "tool_status": "completed",
-                            "tool_duration": duration,
                             "tool_result": result_preview
                         }
                         if asyncio.iscoroutinefunction(stream_callback):
@@ -414,12 +413,11 @@ class AgentLoop:
                     # 发送工具执行错误到前端
                     if stream_callback:
                         tool_error_info = {
-                            "content": f"❌ 工具执行失败: {display_tool_name}\n错误信息: {error_msg}\n执行耗时: {duration:.3f}秒\n",
+                            "content": f"❌ 工具执行失败: {display_tool_name}\n错误信息: {error_msg}\n",
                             "is_tool_call": True,
                             "tool_name": display_tool_name,
                             "tool_args": tool_args,
                             "tool_status": "error",
-                            "tool_duration": duration,
                             "tool_error": error_msg
                         }
                         if asyncio.iscoroutinefunction(stream_callback):
@@ -753,11 +751,10 @@ class AgentLoop:
 
         if original_stream_callback:
             async def enhanced_stream_callback(context_info: dict):
-                """增强的流式回调，添加迭代计数和耗时信息"""
-                # 添加迭代计数和耗时信息
+                """增强的流式回调，添加迭代计数信息"""
+                # 添加迭代计数信息
                 context_info['iteration_count'] = context_info.get('iteration_count', 0)
                 context_info['timestamp'] = time.time()
-                context_info['duration_from_start'] = round(time.time() - start_time, 3)
 
                 # 调用原始回调函数
                 if asyncio.iscoroutinefunction(original_stream_callback):

@@ -695,7 +695,6 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             "knowledge_result": retrieval_markdown,
             "preview_items": preview_items,
             "timestamp": time.time(),
-            "duration_from_start": round(time.time() - start_time, 3),
         }
         await websocket.send_text(json.dumps(knowledge_message, ensure_ascii=False))
 
@@ -715,7 +714,6 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
-            "duration_from_start": round(time.time() - start_time, 3),
         }
         await websocket.send_text(json.dumps(knowledge_message, ensure_ascii=False))
 
@@ -873,7 +871,6 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
             'knowledge_result': formatted_result,
             'preview_items': preview_items,  # 新增预览项目数组
             'timestamp': time.time(),
-            'duration_from_start': round(time.time() - start_time, 3)
         }
 
         await websocket.send_text(json.dumps(knowledge_message, ensure_ascii=False))
@@ -931,19 +928,14 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
             # 兜底：模型失败时返回Top1原文
             await websocket.send_text(f"{knowledge_results[0].content}\n\n")
 
-        # 发送处理时间
-        end_time = time.time()
-        total_processing_time = round(end_time - start_time, 1)
-        await websocket.send_text(f"\n---\n*总耗时: {total_processing_time}秒*\n")
-
         # 发送处理完成状态消息，让前端按钮可以点击
+        end_time = time.time()
         completion_message = {
             'type': 'stream_chunk',
             'content_type': 'completion',
             'content': '处理完成',
             'is_completed': True,
             'timestamp': end_time,
-            'duration_from_start': total_processing_time
         }
         await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
 
@@ -953,19 +945,14 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
         await websocket.send_text("📭 知识库中没有找到相关结果\n\n")
         await websocket.send_text("🤖 抱歉，我在知识库中没有找到相关信息，无法回答您的问题。\n\n")
 
-        # 发送处理时间
-        end_time = time.time()
-        total_processing_time = round(end_time - start_time, 1)
-        await websocket.send_text(f"\n---\n*总耗时: {total_processing_time}秒*\n")
-
         # 发送处理完成状态消息，让前端按钮可以点击
+        end_time = time.time()
         completion_message = {
             'type': 'stream_chunk',
             'content_type': 'completion',
             'content': '处理完成',
             'is_completed': True,
             'timestamp': end_time,
-            'duration_from_start': total_processing_time
         }
         await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
 
@@ -998,17 +985,10 @@ async def process_troubleshooting_intent(
 
     await websocket.send_text("🔧 检测到排查/执行类问题，进入AI分析...\n\n")
 
-    # Record LLM start time
-    llm_start_time = time.time()
-
     # 设置流式回调函数
     async def stream_callback(context_info: dict):
-        """流式输出回调函数，按类型分类显示内容，并统计每次返回的耗时"""
+        """流式输出回调函数，按类型分类显示内容"""
         content = context_info.get('content', '')
-
-        # 获取回调时间和计算耗时
-        callback_time = time.time()
-        current_duration = round(callback_time - start_time, 3)
 
         # 获取迭代计数
         iteration_count = context_info.get('iteration_count', 0)
@@ -1061,8 +1041,6 @@ async def process_troubleshooting_intent(
             'is_tool_call': content_type == 'tool' or context_info.get('is_tool_call', False),
             'is_final_answer': context_info.get('is_final_answer', False),
             'is_iteration_start': context_info.get('is_iteration_start', False),
-            'timestamp': callback_time,
-            'duration_from_start': current_duration,
             'iteration_count': iteration_count,
         }
 
@@ -1070,7 +1048,6 @@ async def process_troubleshooting_intent(
         if content_type == 'tool':
             message_data['tool_name'] = context_info.get('tool_name', '')
             message_data['tool_status'] = context_info.get('tool_status', '')
-            message_data['tool_duration'] = context_info.get('tool_duration', 0)
             message_data['tool_result'] = context_info.get('tool_result', '')
             message_data['tool_error'] = context_info.get('tool_error', '')
             message_data['tool_args'] = context_info.get('tool_args')
@@ -1096,10 +1073,6 @@ async def process_troubleshooting_intent(
         disable_auto_kb=True,
     )
 
-    # Record LLM end time
-    llm_end_time = time.time()
-    llm_execution_time = round(llm_end_time - llm_start_time, 1)
-
     # Send the actual response (如果流式输出已经发送了内容，这里可能不需要再发送)
     if response and response.strip():
         # 检查是否已经通过流式输出发送了内容
@@ -1109,10 +1082,6 @@ async def process_troubleshooting_intent(
         await websocket.send_text("No response from agent.")
 
     end_time = time.time()
-    total_processing_time = round(end_time - start_time, 1)
-
-    # Send processing times
-    await websocket.send_text(f"\n---\n*总耗时: {total_processing_time}秒 | LLM执行耗时: {llm_execution_time}秒*")
 
     # 发送处理完成状态消息，让前端按钮可以点击
     completion_message = {
@@ -1121,48 +1090,23 @@ async def process_troubleshooting_intent(
         'content': '处理完成',
         'is_completed': True,
         'timestamp': end_time,
-        'duration_from_start': total_processing_time
-    }
-    await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
-
-    # 发送处理完成状态消息，让前端按钮可以点击
-    completion_message = {
-        'type': 'stream_chunk',
-        'content_type': 'completion',
-        'content': '处理完成',
-        'is_completed': True,
-        'timestamp': end_time,
-        'duration_from_start': total_processing_time
     }
     await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
 
 
 async def process_user_message(user_input: str) -> str:
     """Process user message using nanobot's AgentLoop."""
-    import time
-
-    start_time = time.time()
 
     # Check if provider and agent_loop are initialized
     if not provider or not agent_loop:
         return "Error: Web UI resources not initialized. Please restart the server."
 
-    # Record LLM start time
-    llm_start_time = time.time()
-
     response = await agent_loop.process_direct(user_input, session_key="cli:webui")
 
-    # Record LLM end time
-    llm_end_time = time.time()
-    llm_execution_time = round(llm_end_time - llm_start_time, 1)
-
-    end_time = time.time()
-    total_processing_time = round(end_time - start_time, 1)
-
     if response:
-        return f"{response}\n\n---\n*总耗时: {total_processing_time}秒 | LLM执行耗时: {llm_execution_time}秒*"
+        return response
     else:
-        return f"No response from agent.\n\n---\n*总耗时: {total_processing_time}秒 | LLM执行耗时: {llm_execution_time}秒*"
+        return "No response from agent."
 
 
 @web_app.post("/api/chat")

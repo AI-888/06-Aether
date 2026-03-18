@@ -1,82 +1,18 @@
-"""kubectl 通用工具集。"""
+"""kubectl 查询日志工具 —— 根据组件名字关键字查找 Pod 并搜索日志。"""
 
-import asyncio
 import re
 from typing import Any
 
 from nanobot.agent.tools.base import Tool
+from nanobot.agent.tools.k8s._utils import run_command
 
 
-async def _run_command(command: str, timeout: int = 60) -> str:
-    """执行 shell 命令并返回输出。"""
-    try:
-        process = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        try:
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            process.kill()
-            return f"Error: 命令执行超时（{timeout}秒）"
-
-        output_parts = []
-        if stdout:
-            output_parts.append(stdout.decode("utf-8", errors="replace"))
-        if stderr:
-            stderr_text = stderr.decode("utf-8", errors="replace")
-            if stderr_text.strip():
-                output_parts.append(f"STDERR:\n{stderr_text}")
-        if process.returncode != 0:
-            output_parts.append(f"\nExit code: {process.returncode}")
-
-        return "\n".join(output_parts) if output_parts else "(无输出)"
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-
-class KubectlGetPodsTool(Tool):
-    """根据组件名字关键字，从全部命名空间中查询匹配的 Pod。"""
-
-    @property
-    def name(self) -> str:
-        return "kubectl_get_pods"
-
-    @property
-    def description(self) -> str:
-        return (
-            "根据组件名字关键字，从全部命名空间中查询匹配的 Pod，"
-            "返回 Pod 名称、命名空间、状态、节点等信息。"
-            "等价于：kubectl get pods -Ao wide | grep <component_keyword>"
-        )
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "component_keyword": {
-                    "type": "string",
-                    "description": "组件名字关键字，用于 grep 过滤 Pod 列表，例如 'rocketmq-broker'",
-                },
-            },
-            "required": ["component_keyword"],
-        }
-
-    async def execute(self, component_keyword: str, **kwargs: Any) -> str:
-        # 对关键字做基本安全过滤，防止 shell 注入
-        safe_keyword = re.sub(r"[;|&`$<>\\]", "", component_keyword)
-        cmd = f"kubectl get pods -Ao wide | grep {safe_keyword}"
-        return await _run_command(cmd)
-
-
-class KubectlExecLogTool(Tool):
+class KubectlQueryLogTool(Tool):
     """根据组件名字关键字、日志路径、日志关键字，查询匹配 Pod 中的日志。"""
 
     @property
     def name(self) -> str:
-        return "kubectl_exec_log"
+        return "kubectl_query_log"
 
     @property
     def description(self) -> str:
@@ -135,7 +71,7 @@ class KubectlExecLogTool(Tool):
             f"kubectl get pods -A | grep {safe_kw} | "
             r"awk -F ' ' '{ print $1 \" \" $2 }'"
         )
-        pod_list_output = await _run_command(list_cmd)
+        pod_list_output = await run_command(list_cmd)
 
         if not pod_list_output.strip() or pod_list_output.startswith("Error"):
             return f"未找到匹配关键字 '{component_keyword}' 的 Pod。\n{pod_list_output}"
@@ -167,7 +103,7 @@ class KubectlExecLogTool(Tool):
                     f"kubectl get pod {pod_name} -n {namespace} "
                     r"-o jsonpath='{.spec.containers[*].name}'"
                 )
-                container_output = await _run_command(container_cmd)
+                container_output = await run_command(container_cmd)
                 if container_output.startswith("Error"):
                     results.append(f"[{namespace}/{pod_name}] 获取容器列表失败: {container_output}\n")
                     continue
@@ -193,7 +129,7 @@ class KubectlExecLogTool(Tool):
                 f"xargs -I {{}} sh -c \"echo \\\"=== {{}} ===\"; "
                 f"grep -n \\\"{safe_log_kw}\\\" {{}} | head -{lines}\"'"
             )
-            exec_output = await _run_command(exec_cmd)
+            exec_output = await run_command(exec_cmd)
 
             results.append(f"=== Pod: {namespace}/{pod_name} (容器: {target_container}) ===")
             results.append(exec_output)
