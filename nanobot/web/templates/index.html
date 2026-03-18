@@ -509,6 +509,252 @@
             50% { opacity: 0.8; }
             100% { opacity: 1; }
         }
+
+        /* ========== 新的独立消息卡片样式 ========== */
+        .msg-card {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            animation: fadeIn 0.35s ease-out;
+            gap: 10px;
+        }
+
+        .msg-card .msg-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .msg-card .msg-body {
+            flex: 1;
+            min-width: 0;
+            background: white;
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border: 1px solid #e8ecf1;
+            transition: box-shadow 0.2s;
+            max-width: 85%;
+        }
+
+        .msg-card .msg-body:hover {
+            box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+        }
+
+        .msg-card .msg-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .msg-card .msg-meta .msg-label {
+            font-weight: 600;
+            font-size: 0.8rem;
+            padding: 1px 8px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .msg-card .msg-text {
+            font-size: 0.95rem;
+            line-height: 1.65;
+            color: #334155;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .msg-card .msg-text pre {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* --- 不同类型消息的颜色方案 --- */
+        /* 系统/状态消息 */
+        .msg-card.msg-status .msg-icon { background: #eef2ff; color: #6366f1; }
+        .msg-card.msg-status .msg-body { border-left: 3px solid #818cf8; background: #fafbff; }
+        .msg-card.msg-status .msg-label { background: #eef2ff; color: #6366f1; }
+
+        /* 意图识别 */
+        .msg-card.msg-intent .msg-icon { background: #fef3c7; color: #d97706; }
+        .msg-card.msg-intent .msg-body { border-left: 3px solid #f59e0b; background: #fffdf5; }
+        .msg-card.msg-intent .msg-label { background: #fef3c7; color: #d97706; }
+
+        /* 知识库查询 */
+        .msg-card.msg-knowledge .msg-icon { background: #f3e8ff; color: #9333ea; }
+        .msg-card.msg-knowledge .msg-body { border-left: 3px solid #a855f7; background: #fdfaff; }
+        .msg-card.msg-knowledge .msg-label { background: #f3e8ff; color: #9333ea; }
+
+        /* 工具执行 */
+        .msg-card.msg-tool .msg-icon { background: #dcfce7; color: #16a34a; }
+        .msg-card.msg-tool .msg-body { border-left: 3px solid #22c55e; background: #f8fef9; }
+        .msg-card.msg-tool .msg-label { background: #dcfce7; color: #16a34a; }
+
+        /* 思考/推理 */
+        .msg-card.msg-reasoning .msg-icon { background: #e0f2fe; color: #0284c7; }
+        .msg-card.msg-reasoning .msg-body { border-left: 3px solid #38bdf8; background: #f5fbff; }
+        .msg-card.msg-reasoning .msg-label { background: #e0f2fe; color: #0284c7; }
+
+        /* 迭代 */
+        .msg-card.msg-iteration .msg-icon { background: #fce7f3; color: #db2777; }
+        .msg-card.msg-iteration .msg-body { border-left: 3px solid #ec4899; background: #fef7fb; }
+        .msg-card.msg-iteration .msg-label { background: #fce7f3; color: #db2777; }
+
+        /* 最终答案 */
+        .msg-card.msg-answer .msg-icon { background: #d1fae5; color: #059669; }
+        .msg-card.msg-answer .msg-body { border-left: 3px solid #10b981; background: #f0fdf7; }
+        .msg-card.msg-answer .msg-label { background: #d1fae5; color: #059669; }
+        .msg-card.msg-answer .msg-text { font-size: 1rem; }
+
+        /* 错误 */
+        .msg-card.msg-error .msg-icon { background: #fee2e2; color: #dc2626; }
+        .msg-card.msg-error .msg-body { border-left: 3px solid #ef4444; background: #fef5f5; }
+        .msg-card.msg-error .msg-label { background: #fee2e2; color: #dc2626; }
+
+        /* 完成 */
+        .msg-card.msg-completion .msg-icon { background: #d1fae5; color: #059669; }
+        .msg-card.msg-completion .msg-body {
+            border-left: 3px solid #10b981;
+            background: linear-gradient(135deg, #f0fdf7 0%, #ecfdf5 100%);
+        }
+        .msg-card.msg-completion .msg-label { background: #d1fae5; color: #059669; }
+        .msg-card.msg-completion .msg-text {
+            font-weight: 600;
+            color: #059669;
+        }
+
+        /* 工具结果区域的折叠样式 */
+        .msg-card .tool-result-block {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .msg-card .tool-result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f1f5f9;
+            cursor: pointer;
+            user-select: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .msg-card .tool-result-header:hover {
+            background: #e2e8f0;
+        }
+
+        .msg-card .tool-result-body {
+            padding: 10px 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+            color: #334155;
+        }
+
+        .msg-card .tool-result-body.collapsed {
+            display: none;
+        }
+
+        /* 知识库预览链接区域 */
+        .msg-card .knowledge-preview-area {
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(66, 153, 225, 0.08);
+            border-radius: 8px;
+        }
+
+        /* 消息淡入动画增强 */
+        @keyframes msgSlideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg-card {
+            animation: msgSlideIn 0.3s ease-out;
+        }
+
+        /* ========== 打字机效果 ========== */
+        .typewriter-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.1em;
+            background: #6366f1;
+            margin-left: 2px;
+            vertical-align: text-bottom;
+            animation: cursorBlink 0.7s ease-in-out infinite;
+            border-radius: 1px;
+        }
+
+        @keyframes cursorBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* 打字中的卡片左边框呼吸灯效果 */
+        .msg-card.typing .msg-body {
+            box-shadow: 0 1px 8px rgba(99, 102, 241, 0.12);
+        }
+
+        /* 消息队列指示器 */
+        .queue-indicator {
+            position: fixed;
+            bottom: 90px;
+            right: 30px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+            z-index: 100;
+            display: none;
+            animation: fadeIn 0.3s ease-out;
+            backdrop-filter: blur(8px);
+        }
+
+        .queue-indicator.visible {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .queue-indicator .queue-dot {
+            width: 6px;
+            height: 6px;
+            background: #fbbf24;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* AI消息wrapper样式简化 - 保留用户消息兼容 */
+        .message.ai .message-wrapper {
+            justify-content: flex-start;
+        }
     </style>
 </head>
 <body>
@@ -651,15 +897,235 @@
         isTyping = false;
     }
 
-    // WebSocket message handling for streaming responses
-    let currentAIMessage = null;
+    // ================================================================
+    //  消息缓冲队列 + 打字机渲染引擎
+    // ================================================================
     let isStreaming = false;
-    let currentStreamingSections = {}; // 存储不同类型的流式内容
 
+    // --- 消息队列 ---
+    const msgQueue = [];           // 待渲染消息队列
+    let typewriterBusy = false;    // 打字机是否正在工作
+    const CHARS_PER_SEC = 20;       // 每秒输出字符数
+    const CHAR_INTERVAL = Math.round(1000 / CHARS_PER_SEC); // ≈333ms
+
+    // --- 队列指示器 DOM ---
+    const queueIndicator = document.createElement('div');
+    queueIndicator.className = 'queue-indicator';
+    queueIndicator.innerHTML = '<span class="queue-dot"></span><span class="queue-count">队列: 0</span>';
+    document.body.appendChild(queueIndicator);
+
+    function updateQueueIndicator() {
+        const cnt = msgQueue.length;
+        if (cnt > 0) {
+            queueIndicator.querySelector('.queue-count').textContent = `队列: ${cnt}`;
+            queueIndicator.classList.add('visible');
+        } else {
+            queueIndicator.classList.remove('visible');
+        }
+    }
+
+    // --- 安全转义HTML ---
+    function escHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // --- 将文本中的特殊序列转换为显示用的 token 列表 ---
+    // 返回 token 数组，每个 token 是最小不可拆分单元
+    // 例如 "<br/>" 或 "&lt;" 作为一个 token，普通字符各一个 token
+    function tokenizeHtml(html) {
+        const tokens = [];
+        let i = 0;
+        while (i < html.length) {
+            // HTML 标签: <br/>, <strong>, </strong>, <div ...>...</div> 等
+            if (html[i] === '<') {
+                const end = html.indexOf('>', i);
+                if (end !== -1) {
+                    const tag = html.substring(i, end + 1);
+                    // 对自闭合标签或短标签整体作为一个token
+                    tokens.push(tag);
+                    i = end + 1;
+                    continue;
+                }
+            }
+            // HTML 实体: &lt; &gt; &amp; 等
+            if (html[i] === '&') {
+                const semiIdx = html.indexOf(';', i);
+                if (semiIdx !== -1 && semiIdx - i < 10) {
+                    tokens.push(html.substring(i, semiIdx + 1));
+                    i = semiIdx + 1;
+                    continue;
+                }
+            }
+            // emoji: 多码点字符（使用 codePoint 检测）
+            const cp = html.codePointAt(i);
+            if (cp > 0xFFFF) {
+                // 4字节UTF-16（surrogate pair）
+                tokens.push(html.substring(i, i + 2));
+                i += 2;
+            } else {
+                tokens.push(html[i]);
+                i++;
+            }
+        }
+        return tokens;
+    }
+
+    // --- 创建空卡片骨架，返回 { card, textEl } ---
+    function createCardSkeleton(type, icon, label, extra) {
+        const card = document.createElement('div');
+        card.className = `msg-card msg-${type} typing`;
+        const time = new Date().toLocaleTimeString();
+        card.innerHTML = `
+            <div class="msg-icon">${icon}</div>
+            <div class="msg-body">
+                <div class="msg-meta">
+                    <span class="msg-label">${label}</span>
+                    <span>${time}</span>
+                    ${extra ? `<span>${extra}</span>` : ''}
+                </div>
+                <div class="msg-text"><span class="typewriter-cursor"></span></div>
+            </div>
+        `;
+        messagesDiv.appendChild(card);
+        scrollToBottom();
+        const textEl = card.querySelector('.msg-text');
+        return { card, textEl };
+    }
+
+    // --- 打字机核心：逐 token 渲染到 textEl ---
+    function typewriteTokens(textEl, tokens) {
+        return new Promise((resolve) => {
+            let idx = 0;
+            const cursor = textEl.querySelector('.typewriter-cursor');
+
+            function tick() {
+                if (idx >= tokens.length) {
+                    // 打字完成，移除光标
+                    if (cursor) cursor.remove();
+                    resolve();
+                    return;
+                }
+                const tk = tokens[idx];
+                // 在光标前插入 token
+                if (cursor) {
+                    // 如果token是HTML标签，用innerHTML方式插入
+                    if (tk.startsWith('<')) {
+                        const temp = document.createElement('span');
+                        temp.innerHTML = tk;
+                        while (temp.firstChild) {
+                            textEl.insertBefore(temp.firstChild, cursor);
+                        }
+                    } else {
+                        // 文本节点或HTML实体
+                        const span = document.createElement('span');
+                        span.innerHTML = tk;
+                        textEl.insertBefore(span, cursor);
+                    }
+                }
+                idx++;
+                scrollToBottom();
+
+                // 对 HTML 标签跳过延迟，直接进入下一个
+                if (tk.startsWith('<') || tk.startsWith('&')) {
+                    requestAnimationFrame(tick);
+                } else {
+                    setTimeout(tick, CHAR_INTERVAL);
+                }
+            }
+            tick();
+        });
+    }
+
+    // --- 即时渲染（对工具、知识库等复杂卡片不做打字效果） ---
+    function createMsgCardInstant(type, icon, label, bodyHtml, extra) {
+        const card = document.createElement('div');
+        card.className = `msg-card msg-${type}`;
+        const time = new Date().toLocaleTimeString();
+        card.innerHTML = `
+            <div class="msg-icon">${icon}</div>
+            <div class="msg-body">
+                <div class="msg-meta">
+                    <span class="msg-label">${label}</span>
+                    <span>${time}</span>
+                    ${extra ? `<span>${extra}</span>` : ''}
+                </div>
+                <div class="msg-text">${bodyHtml}</div>
+            </div>
+        `;
+        messagesDiv.appendChild(card);
+        scrollToBottom();
+        return card;
+    }
+
+    // --- 消费队列 ---
+    async function processQueue() {
+        if (typewriterBusy) return;
+        typewriterBusy = true;
+
+        while (msgQueue.length > 0) {
+            updateQueueIndicator();
+            const item = msgQueue.shift();
+
+            if (item.instant) {
+                // 即时渲染（工具、知识库等含交互的卡片）
+                const card = createMsgCardInstant(item.type, item.icon, item.label, item.html, item.extra);
+                if (item.afterRender) item.afterRender(card);
+            } else {
+                // 打字机渲染
+                const tokens = tokenizeHtml(item.html);
+                const { card, textEl } = createCardSkeleton(item.type, item.icon, item.label, item.extra);
+                await typewriteTokens(textEl, tokens);
+                card.classList.remove('typing');
+                if (item.afterRender) item.afterRender(card);
+            }
+            updateQueueIndicator();
+        }
+
+        typewriterBusy = false;
+        updateQueueIndicator();
+    }
+
+    // --- 入队辅助 ---
+    function enqueueMsg(type, icon, label, html, extra, opts) {
+        msgQueue.push({ type, icon, label, html, extra: extra || '', instant: !!(opts && opts.instant), afterRender: opts && opts.afterRender });
+        updateQueueIndicator();
+        processQueue();
+    }
+
+    // ---------- 将纯文本中的 emoji 前缀映射到卡片类型 ----------
+    function classifyPlainText(text) {
+        if (text.includes('🧠') || text.includes('正在识别'))
+            return { type: 'status', icon: '🧠', label: '意图识别' };
+        if (text.includes('✅ 用户意图识别') || text.includes('意图'))
+            return { type: 'intent', icon: '🎯', label: '意图结果' };
+        if (text.includes('📚') || text.includes('知识库'))
+            return { type: 'knowledge', icon: '📚', label: '知识库' };
+        if (text.includes('🧰') || text.includes('检索工具'))
+            return { type: 'tool', icon: '🧰', label: '工具检索' };
+        if (text.includes('🛠️') || text.includes('skills'))
+            return { type: 'tool', icon: '🛠️', label: 'Skills检索' };
+        if (text.includes('🔧') || text.includes('排查') || text.includes('AI分析'))
+            return { type: 'reasoning', icon: '🔧', label: '分析中' };
+        if (text.includes('📊'))
+            return { type: 'knowledge', icon: '📊', label: '知识库' };
+        if (text.includes('📭'))
+            return { type: 'status', icon: '📭', label: '无结果' };
+        if (text.includes('⚠️'))
+            return { type: 'error', icon: '⚠️', label: '警告' };
+        if (text.includes('❌'))
+            return { type: 'error', icon: '❌', label: '错误' };
+        if (text.includes('🤖'))
+            return { type: 'answer', icon: '🤖', label: 'AI回答' };
+        return { type: 'status', icon: 'AI', label: '消息' };
+    }
+
+    // ---------- ws.onmessage — 收到消息先入队 ----------
     ws.onmessage = function(event) {
         const response = event.data;
+        hideTypingIndicator();
+        isStreaming = true;
 
-        // 检查是否是JSON格式的流式响应数据
+        // 尝试解析JSON流式数据
         try {
             const data = JSON.parse(response);
             if (data.type === 'stream_chunk' || data.content_type || data.is_tool_call) {
@@ -667,393 +1133,179 @@
                 return;
             }
         } catch (e) {
-            // 不是JSON格式，按原逻辑处理
+            // 非JSON，按纯文本处理
         }
 
-        // Check if this is the start of a new response
-        if (response.includes("🤖 AI Agent is processing your request")) {
-            hideTypingIndicator();
-            isStreaming = true;
-            currentStreamingSections = {}; // 重置流式内容分类
-            currentAIMessage = document.createElement('div');
-            currentAIMessage.className = 'message ai streaming';
-            currentAIMessage.innerHTML = `
-                <div class="avatar">AI</div>
-                <div class="message-content">
-                    <div class="streaming-sections">${response}</div>
-                    <div class="timestamp">${new Date().toLocaleTimeString()}</div>
-                </div>
-            `;
-            messagesDiv.appendChild(currentAIMessage);
+        // 处理时间信息（总耗时行）
+        const timeMatch = response.match(/\*总耗时: ([0-9.]+)秒(?:\s*\|\s*LLM执行耗时: ([0-9.]+)秒)?\*/);
+        if (timeMatch) {
+            const totalTime = timeMatch[1];
+            const llmTime = timeMatch[2] || null;
+            let timeText = `⏱️ 总耗时: ${totalTime}秒`;
+            if (llmTime) timeText += ` | LLM耗时: ${llmTime}秒`;
+            enqueueMsg('completion', '⏱️', '耗时统计', escHtml(timeText));
             return;
         }
 
-        // Check if this is processing time info
-        if (response.includes("总耗时:")) {
-            isStreaming = false;
-            const timeMatch = response.match(/\*总耗时: ([0-9.]+)秒 \| LLM执行耗时: ([0-9.]+)秒\*/);
-            if (timeMatch && currentAIMessage) {
-                const totalTime = timeMatch[1];
-                const llmTime = timeMatch[2];
-                const timeDiv = document.createElement('div');
-                timeDiv.className = 'processing-time';
-                timeDiv.innerHTML = `
-                    <div>总耗时: ${totalTime}秒</div>
-                    <div>LLM执行耗时: ${llmTime}秒</div>
-                `;
-                currentAIMessage.querySelector('.message-content').appendChild(timeDiv);
-            }
-            currentAIMessage = null;
-            currentStreamingSections = {};
+        // 忽略空消息
+        const trimmed = response.trim();
+        if (!trimmed || trimmed === '---') return;
 
-            // Re-enable input after processing completes
-            isProcessing = false;
-            sendButton.disabled = false;
-            messageInput.disabled = false;
-            messageInput.focus();
-
-            scrollToBottom();
-            return;
-        }
-
-        // Handle streaming content
-        if (isStreaming && currentAIMessage) {
-            const sectionsDiv = currentAIMessage.querySelector('.streaming-sections');
-            if (sectionsDiv) {
-                // 创建默认的流式内容区域
-                if (!currentStreamingSections.default) {
-                    const defaultSection = createStreamingSection('thinking', '思考过程');
-                    sectionsDiv.appendChild(defaultSection);
-                    currentStreamingSections.default = defaultSection.querySelector('.streaming-content');
-                }
-                // 将\\n替换为实际的换行符
-                const formattedResponse = response.replace(/\\n/g, '<br />');
-                currentStreamingSections.default.textContent += formattedResponse;
-                scrollToBottom();
-            }
-        } else if (response.includes("🤖 AI Agent is processing your request")) {
-            // Start of streaming output
-            hideTypingIndicator();
-            isStreaming = true;
-            currentStreamingSections = {};
-            currentAIMessage = document.createElement('div');
-            currentAIMessage.className = 'message ai streaming';
-            currentAIMessage.innerHTML = `
-                <div class="avatar">AI</div>
-                <div class="message-content">
-                    <div class="streaming-sections"></div>
-                    <div class="timestamp">${new Date().toLocaleTimeString()}</div>
-                </div>
-            `;
-            messagesDiv.appendChild(currentAIMessage);
-        } else if (isStreaming && currentAIMessage) {
-            // Streaming content
-            const sectionsDiv = currentAIMessage.querySelector('.streaming-sections');
-            if (sectionsDiv) {
-                // 创建默认的流式内容区域
-                if (!currentStreamingSections.default) {
-                    const defaultSection = createStreamingSection('thinking', '思考过程');
-                    sectionsDiv.appendChild(defaultSection);
-                    currentStreamingSections.default = defaultSection.querySelector('.streaming-content');
-                }
-                currentStreamingSections.default.textContent += response;
-                scrollToBottom();
-            }
-        } else {
-            // Fallback for non-streaming responses
-            hideTypingIndicator();
-            const timeMatch = response.match(/\\n\\n---\\n\*总耗时: ([0-9.]+)秒 \| LLM执行耗时: ([0-9.]+)秒\*/);
-            let messageContent = response;
-            let totalTime = null;
-            let llmTime = null;
-
-            if (timeMatch) {
-                totalTime = timeMatch[1];
-                llmTime = timeMatch[2];
-                messageContent = response.replace(/\\n\\n---\\n\*总耗时: [0-9.]+秒 \| LLM执行耗时: [0-9.]+秒\*/, '');
-            }
-
-            addAIMessage(messageContent, totalTime, llmTime);
-
-            // Re-enable input after processing completes
-            isProcessing = false;
-            sendButton.disabled = false;
-            messageInput.disabled = false;
-            messageInput.focus();
-        }
+        // 根据文本内容分类，入队打字机渲染
+        const cls = classifyPlainText(trimmed);
+        const safeHtml = escHtml(trimmed).replace(/\n/g, '<br/>');
+        enqueueMsg(cls.type, cls.icon, cls.label, safeHtml);
     };
 
-    // 处理流式分块数据
+    // ---------- 处理JSON流式分块数据 ----------
     function handleStreamChunk(data) {
-        // 检查是否是新的agent响应（迭代开始或最终答案）
-        const isNewResponse = data.is_iteration_start || data.is_final_answer;
-
-        // 如果是新的agent响应或者还没有开始流式传输，创建新消息
-        if (isNewResponse || !isStreaming) {
-            hideTypingIndicator();
-            isStreaming = true;
-            currentStreamingSections = {};
-            currentAIMessage = document.createElement('div');
-            currentAIMessage.className = 'message ai streaming';
-
-            // 添加迭代和耗时信息到消息标题
-            const iterationCount = data.iteration_count || 0;
-            const duration = data.duration_from_start || 0;
-            const timestamp = new Date().toLocaleTimeString();
-
-            currentAIMessage.innerHTML = `
-                <div class=\"avatar\">AI</div>
-                <div class=\"message-content\">
-                    <div class=\"message-header\">
-                        <span class=\"iteration-info\">迭代 ${iterationCount}</span>
-                        <span class=\"duration-info\">耗时: ${duration.toFixed(3)}秒</span>
-                        <span class=\"timestamp\">${timestamp}</span>
-                    </div>
-                    <div class=\"streaming-sections\"></div>
-                </div>
-            `;
-            messagesDiv.appendChild(currentAIMessage);
-        }
-
-        const sectionsDiv = currentAIMessage.querySelector('.streaming-sections');
-        if (!sectionsDiv) return;
-
-        // 处理工具执行结果
-        if (data.is_tool_call) {
-            handleToolCallData(data, sectionsDiv);
+        // 处理完成消息 → 恢复输入
+        if (data.content_type === 'completion' || data.is_completed) {
+            isStreaming = false;
+            const durText = data.duration_from_start ? '，总耗时 ' + Number(data.duration_from_start).toFixed(1) + '秒' : '';
+            enqueueMsg('completion', '✅', '处理完成',
+                escHtml('请求已处理完毕' + durText), '', {
+                afterRender: function() {
+                    isProcessing = false;
+                    sendButton.disabled = false;
+                    messageInput.disabled = false;
+                    messageInput.focus();
+                }
+            });
             return;
         }
 
-        // 处理知识库查询结果
-        if (data.content_type === 'knowledge' || data.is_knowledge_query) {
-            handleKnowledgeQueryData(data, sectionsDiv);
-            return;
-        }
-
-        const contentType = data.content_type || 'reasoning';
-        const content = data.content || '';
         const duration = data.duration_from_start || 0;
+        const durationStr = duration ? `${duration.toFixed(2)}s` : '';
+        const iterCount = data.iteration_count || 0;
 
-        // 根据内容类型创建或获取对应的区域
-        if (!currentStreamingSections[contentType]) {
-            const sectionTitle = getSectionTitle(contentType);
-            const section = createStreamingSection(contentType, sectionTitle);
-            sectionsDiv.appendChild(section);
-            currentStreamingSections[contentType] = section.querySelector('.streaming-content');
+        // 工具调用 — 即时渲染（含交互）
+        if (data.is_tool_call) {
+            handleToolCallCard(data, durationStr);
+            return;
         }
 
-        // 添加内容到对应的区域
-        if (currentStreamingSections[contentType]) {
-            // 对于reasoning类型，添加耗时信息
-            let displayContent = content;
-            if (contentType === 'reasoning') {
-                // 直接使用duration_from_start字段作为每次reasoning的耗时
-                const reasoningDuration = duration.toFixed(3);
-
-                // 清理内容，移除重复的耗时信息
-                console.log('Original reasoning content:', content);
-                const cleanContent = content.replace(/\\n\\*\\(迭代: \\d+, 耗时: [0-9.]+秒\\*\\)/, '');
-
-                displayContent = `${cleanContent}<div class=\"reasoning-duration\">思考耗时: ${reasoningDuration}秒</div>`;
-            }
-
-            // 将\\n替换为实际的换行符
-            const formattedContent = displayContent.replace(/\\n/g, '<br />');
-            currentStreamingSections[contentType].innerHTML += formattedContent;
-            scrollToBottom();
+        // 知识库查询 — 即时渲染（含交互）
+        if (data.content_type === 'knowledge' || data.is_knowledge_query) {
+            handleKnowledgeCard(data, durationStr);
+            return;
         }
+
+        const content = data.content || '';
+        const contentType = data.content_type || 'text';
+
+        // 根据content_type映射卡片类型
+        const typeMap = {
+            'reasoning': { type: 'reasoning', icon: '🤔', label: '思考' },
+            'iteration': { type: 'iteration', icon: '🔄', label: `迭代 ${iterCount}` },
+            'final_answer': { type: 'answer', icon: '💡', label: '最终回答' },
+            'text': { type: 'status', icon: '💬', label: '响应' },
+            'tool': { type: 'tool', icon: '🔧', label: '工具' },
+        };
+        const cfg = typeMap[contentType] || typeMap['text'];
+
+        const safeContent = escHtml(content).replace(/\n/g, '<br/>');
+        enqueueMsg(cfg.type, cfg.icon, cfg.label, safeContent, durationStr);
     }
 
-    // 处理工具执行数据
-    function handleToolCallData(data, sectionsDiv) {
-        // 确保tool_name正确获取，添加调试信息
-        const toolName = data.tool_name || data.toolName || data.name || data.function_name || data.command || '工具';
+    // ---------- 工具调用卡片（即时渲染） ----------
+    function handleToolCallCard(data, durationStr) {
+        const toolName = data.tool_name || data.toolName || data.name || '工具';
         const toolStatus = data.tool_status || 'start';
 
-        // 更智能的工具命令获取逻辑
-        let tool_command = 'server not response';
+        let tool_command = '';
         if (data.tool_args) {
-            // 尝试多种可能的命令字段
             tool_command = data.tool_args.command || data.tool_args.query || data.tool_args.path ||
                          data.tool_args.file || data.tool_args.function_name ||
                          JSON.stringify(data.tool_args, null, 2);
         }
 
-        // 调试日志
-        console.log('Tool call data:', JSON.stringify(data, null, 2));
-        console.log('Tool name:', toolName);
-        console.log('Tool status:', toolStatus);
-        console.log('Tool command:', tool_command);
-
-        // 创建或获取工具执行区域
-        if (!currentStreamingSections['tool_' + toolName]) {
-            const toolSection = createToolSection(toolName);
-            sectionsDiv.appendChild(toolSection);
-            currentStreamingSections['tool_' + toolName] = toolSection.querySelector('.tool-content');
-        }
-
-        const toolContentDiv = currentStreamingSections['tool_' + toolName];
-        if (!toolContentDiv) return;
-
-        // 根据工具状态更新显示
+        let bodyHtml = '';
         switch (toolStatus) {
             case 'start':
-                // 直接使用已经智能处理过的工具命令
-                toolContentDiv.innerHTML += `<div class=\"tool-status-start\">🔧 开始执行工具: <strong>${tool_command}</strong></div>`;
+                bodyHtml = `🔧 开始执行: <strong>${escHtml(toolName)}</strong>` +
+                    (tool_command ? `<div style="margin-top:6px;padding:8px;background:#f1f5f9;border-radius:6px;font-family:monospace;font-size:0.85rem;">${escHtml(tool_command)}</div>` : '');
                 break;
-            case 'completed':
-                const duration = data.tool_duration ? data.tool_duration.toFixed(3) : '未知';
+            case 'completed': {
                 const result = data.tool_result || '无结果';
-                // 将\\n替换为实际的换行符
-                const formattedResult = result.replace(/\\n/g, '\\n');
-                toolContentDiv.innerHTML += `
-                    <div class=\"tool-status-completed\">
-                        ✅ 工具执行完成: <strong>${toolName}</strong>
-                        <div class=\"tool-details\">
-                            <div class=\"tool-duration\">执行耗时: ${duration}秒</div>
-                            <div class=\"tool-result\">执行结果: ${formattedResult}</div>
+                const toolDur = data.tool_duration ? data.tool_duration.toFixed(3) + '秒' : durationStr;
+                const resultId = 'tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+                bodyHtml = `✅ <strong>${escHtml(toolName)}</strong> 执行完成 <span style="color:#718096;font-size:0.8rem;">（${toolDur}）</span>` +
+                    `<div class="tool-result-block">
+                        <div class="tool-result-header" onclick="(function(el){var b=el.nextElementSibling;b.classList.toggle('collapsed');el.querySelector('.arrow').textContent=b.classList.contains('collapsed')?'▶':'▼';})(this)">
+                            <span>📋 执行结果</span><span class="arrow">▼</span>
                         </div>
-                    </div>
-                `;
+                        <div class="tool-result-body" id="${resultId}">${escHtml(result)}</div>
+                    </div>`;
                 break;
-            case 'error':
+            }
+            case 'error': {
                 const errorMsg = data.tool_error || '未知错误';
-                const errorDuration = data.tool_duration ? data.tool_duration.toFixed(3) : '未知';
-                // 将\\n替换为实际的换行符
-                const formattedErrorMsg = errorMsg.replace(/\\n/g, '<br />');
-                toolContentDiv.innerHTML += `
-                    <div class=\"tool-status-error\">
-                        ❌ 工具执行失败: <strong>${toolName}</strong>
-                        <div class=\"tool-details\">
-                            <div class=\"tool-duration\">执行耗时: ${errorDuration}秒</div>
-                            <div class=\"tool-error\">错误信息: ${formattedErrorMsg}</div>
-                        </div>
-                    </div>
-                `;
+                const toolDur = data.tool_duration ? data.tool_duration.toFixed(3) + '秒' : durationStr;
+                bodyHtml = `❌ <strong>${escHtml(toolName)}</strong> 执行失败 <span style="color:#718096;font-size:0.8rem;">（${toolDur}）</span>` +
+                    `<div style="margin-top:6px;padding:8px;background:#fef2f2;border-radius:6px;color:#991b1b;font-size:0.9rem;">${escHtml(errorMsg).replace(/\n/g,'<br/>')}</div>`;
                 break;
+            }
         }
 
-        scrollToBottom();
+        const icon = toolStatus === 'error' ? '❌' : (toolStatus === 'completed' ? '✅' : '🔧');
+        enqueueMsg('tool', icon, `工具: ${toolName}`, bodyHtml, durationStr, { instant: true });
     }
 
-    // 创建工具执行区域
-    function createToolSection(toolName) {
-        const section = document.createElement('div');
-        section.className = 'streaming-section streaming-section-tool';
-        section.innerHTML = `
-            <div class=\"section-header\">
-                <span class=\"section-title\">工具执行: ${toolName}</span>
-            </div>
-            <div class=\"tool-content\"></div>
-        `;
-        return section;
-    }
+    // ---------- 知识库查询卡片（即时渲染） ----------
+    function handleKnowledgeCard(data, durationStr) {
+        const status = data.knowledge_status || 'start';
+        const content = data.content || '';
+        const domain = data.knowledge_domain || '';
+        const query = data.knowledge_query || '';
+        const count = data.knowledge_count || 0;
+        const result = data.knowledge_result || '';
 
-    // 处理知识库查询数据
-    function handleKnowledgeQueryData(data, sectionsDiv) {
-        const knowledgeStatus = data.knowledge_status || 'start';
-        const knowledgeDomain = data.knowledge_domain || '';
-        const knowledgeQuery = data.knowledge_query || '';
-        const knowledgeCount = data.knowledge_count || 0;
-        const knowledgeResult = data.knowledge_result || '';
-
-        // 调试日志
-        console.log('Knowledge query data:', JSON.stringify(data, null, 2));
-        console.log('Knowledge status:', knowledgeStatus);
-        console.log('Knowledge domain:', knowledgeDomain);
-        console.log('Knowledge query:', knowledgeQuery);
-
-        // 创建或获取知识库查询区域
-        if (!currentStreamingSections['knowledge']) {
-            const knowledgeSection = createKnowledgeSection();
-            sectionsDiv.appendChild(knowledgeSection);
-            currentStreamingSections['knowledge'] = knowledgeSection.querySelector('.knowledge-content');
-        }
-
-        const knowledgeContentDiv = currentStreamingSections['knowledge'];
-        if (!knowledgeContentDiv) return;
-
-        // 根据知识库查询状态更新显示
-        switch (knowledgeStatus) {
+        let bodyHtml = '';
+        let afterRender = null;
+        switch (status) {
             case 'start':
-                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-start\">📚 ${data.content}</div>`;
+                bodyHtml = escHtml(content);
                 break;
             case 'searching':
-                knowledgeContentDiv.innerHTML += `
-                    <div class=\"knowledge-status-searching\">
-                        🔍 ${data.content}
-                        <div class=\"knowledge-details\">
-                            <div class=\"knowledge-query-info\">查询领域: ${knowledgeDomain}</div>
-                            <div class=\"knowledge-query-info\">查询关键词: ${knowledgeQuery}</div>
-                        </div>
-                    </div>
-                `;
+                bodyHtml = escHtml(content) +
+                    (domain ? `<div style="font-size:0.85rem;color:#718096;margin-top:4px;">领域: ${escHtml(domain)} | 关键词: ${escHtml(query)}</div>` : '');
                 break;
-            case 'success':
-                const formattedResult = knowledgeResult.replace(/\\n/g, '\\n');
-                const previewLinksId = `knowledge-preview-links-${Date.now()}`;
-                knowledgeContentDiv.innerHTML += `
-                    <div class=\"knowledge-status-success\">
-                        ✅ ${data.content} <span class=\"knowledge-count\">${knowledgeCount}</span>
-                        <div class=\"knowledge-details\">
-                            <div class=\"knowledge-result\">${formattedResult}</div>
-                            <div class=\"knowledge-preview-links\" id=\"${previewLinksId}\"></div>
-                        </div>
-                    </div>
-                `;
-                
-                // 使用新的预览项目数组生成预览链接
-                setTimeout(() => {
-                    if (data.preview_items && data.preview_items.length > 0) {
-                        createPreviewLinksFromArray(data.preview_items, previewLinksId);
-                    } else {
-                        // 兼容旧的解析方式
-                        parseKnowledgeResultsForPreview(formattedResult, previewLinksId);
-                    }
-                }, 100);
+            case 'success': {
+                const previewLinksId = `kpl-${Date.now()}-${Math.random().toString(36).slice(2,5)}`;
+                bodyHtml = `${escHtml(content)} <span class="knowledge-count">${count}</span>` +
+                    (result ? `<div style="margin-top:8px;max-height:200px;overflow-y:auto;background:#fafafa;padding:10px;border-radius:6px;font-size:0.9rem;border:1px solid #e2e8f0;">${escHtml(result)}</div>` : '') +
+                    `<div class="knowledge-preview-area" id="${previewLinksId}"></div>`;
+                const _previewItems = data.preview_items;
+                afterRender = function() {
+                    setTimeout(function() {
+                        if (_previewItems && _previewItems.length > 0) {
+                            createPreviewLinksFromArray(_previewItems, previewLinksId);
+                        }
+                    }, 100);
+                };
                 break;
+            }
             case 'no_results':
-                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-no-results\">📭 ${data.content}</div>`;
+                bodyHtml = `📭 ${escHtml(content)}`;
                 break;
             case 'error':
-                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-error\">❌ ${data.content}</div>`;
+                bodyHtml = `❌ ${escHtml(content)}`;
                 break;
             case 'skipped':
-                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-skipped\">⚠️ ${data.content}</div>`;
+                bodyHtml = `⚠️ ${escHtml(content)}`;
                 break;
             default:
-                knowledgeContentDiv.innerHTML += `<div class=\"knowledge-status-start\">📚 ${data.content}</div>`;
-                break;
+                bodyHtml = escHtml(content);
         }
 
-        scrollToBottom();
+        const iconMap = { start: '📚', searching: '🔍', success: '✅', no_results: '📭', error: '❌', skipped: '⚠️' };
+        enqueueMsg('knowledge', iconMap[status] || '📚', '知识库查询', bodyHtml, durationStr, { instant: true, afterRender: afterRender });
     }
 
-    // 创建知识库查询区域
-    function createKnowledgeSection() {
-        const section = document.createElement('div');
-        section.className = 'streaming-section streaming-section-knowledge';
-        section.innerHTML = `
-            <div class=\"section-header\">
-                <span class=\"section-title\">知识库查询</span>
-            </div>
-            <div class=\"knowledge-content\"></div>
-        `;
-        return section;
-    }
+    // (旧的 handleToolCallData 和 createToolSection 已迁移到 handleToolCallCard)
 
-    // 获取内容类型的显示标题
-    function getSectionTitle(contentType) {
-        const titles = {
-            'reasoning': '思考过程',
-            'thinking': '思考过程',
-            'tool': '工具执行',
-            'answer': '最终回答',
-            'knowledge': '知识库查询',
-            'default': '处理过程'
-        };
-        return titles[contentType] || titles['default'];
-    }
+    // (旧的 handleKnowledgeQueryData 和 createKnowledgeSection 已迁移到 handleKnowledgeCard)
 
     // 解析知识库结果中的文档链接并添加预览功能
     function parseKnowledgeResultsForPreview(resultHtml, containerId) {

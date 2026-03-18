@@ -32,6 +32,7 @@ from nanobot.metrics import (
 
 TOOLS_COLLECTION = "ops_tools"
 SKILLS_COLLECTION = "skills_docs"
+RCA_SKILLS_COLLECTION = "rca_skills"
 
 
 def _strip_frontmatter(content: str) -> str:
@@ -416,6 +417,115 @@ class IntentRoutingStore:
     def search_skills(self, query: str, limit: int = 2) -> list[dict[str, Any]]:
         collection = self._get_or_create(self.skills_client, SKILLS_COLLECTION)
         return self._query_collection(collection, query, limit, operation="intent_routing_skills")
+
+    # ----- RCA Skill 检索方法 -----
+
+    def init_rca_skills_index(self, rca_loader: Any) -> int:
+        """构建 RCA Skill 向量索引。
+
+        将所有已加载的 RCA Skill 的名称、描述和步骤信息向量化存储，
+        供后续检索匹配使用。
+
+        Args:
+            rca_loader: RCASkillLoader 实例
+
+        Returns:
+            成功索引的 Skill 数量
+        """
+        collection = self._get_or_create(self.skills_client, RCA_SKILLS_COLLECTION)
+
+        docs: list[str] = []
+        ids: list[str] = []
+        metas: list[dict[str, Any]] = []
+
+        skills = rca_loader.list_skills()
+        for skill_info in skills:
+            name = skill_info.get("name", "")
+            if not name:
+                continue
+
+            description = skill_info.get("description", "")
+            steps_count = skill_info.get("steps_count", "0")
+
+            # 获取完整 Skill 对象以拼接步骤描述
+            skill_obj = rca_loader.get_skill(name)
+            steps_desc = ""
+            if skill_obj and hasattr(skill_obj, "steps"):
+                steps_desc = " → ".join(
+                    f"{s.id}({s.type.value})" for s in skill_obj.steps
+                )
+
+            doc_text = (
+                f"RCA Skill: {name}\n"
+                f"描述: {description}\n"
+                f"类型: {skill_info.get('type', 'workflow')}\n"
+                f"步骤({steps_count}): {steps_desc}"
+            )
+
+            ids.append(f"rca_skill::{name}")
+            docs.append(doc_text)
+            metas.append({
+                "source": "rca_skill",
+                "skill_name": name,
+                "version": skill_info.get("version", ""),
+                "file_path": skill_info.get("file_path", ""),
+            })
+
+        if not docs:
+            logger.info("[ROUTING] RCA skills 索引无文档可索引")
+            return 0
+
+        embeddings = self.embedder.embed_batch(docs)
+        collection.upsert(ids=ids, documents=docs, metadatas=metas, embeddings=embeddings)
+        logger.info(f"[ROUTING] ✅ RCA skills 索引已构建: {len(docs)} 个 Skill")
+        return len(docs)
+
+    def register_rca_skill(self, skill_name: str, doc_text: str) -> None:
+        """注册单个 RCA Skill 到向量索引。
+
+        用于热加载时增量更新索引。
+
+        Args:
+            skill_name: Skill 名称
+            doc_text: Skill 的可检索文本描述
+        """
+        collection = self._get_or_create(self.skills_client, RCA_SKILLS_COLLECTION)
+        embeddings = self.embedder.embed_batch([doc_text])
+        collection.upsert(
+            ids=[f"rca_skill::{skill_name}"],
+            documents=[doc_text],
+            metadatas=[{"source": "rca_skill", "skill_name": skill_name}],
+            embeddings=embeddings,
+        )
+        logger.debug(f"[ROUTING] RCA Skill '{skill_name}' 已注册到向量索引")
+
+    def remove_rca_skill(self, skill_name: str) -> None:
+        """从向量索引中移除 RCA Skill。
+
+        Args:
+            skill_name: Skill 名称
+        """
+        try:
+            collection = self._get_or_create(self.skills_client, RCA_SKILLS_COLLECTION)
+            collection.delete(ids=[f"rca_skill::{skill_name}"])
+            logger.debug(f"[ROUTING] RCA Skill '{skill_name}' 已从向量索引移除")
+        except Exception as e:
+            logger.warning(f"[ROUTING] 移除 RCA Skill '{skill_name}' 索引失败: {e}")
+
+    def search_rca_skill(self, query: str, limit: int = 1) -> list[dict[str, Any]]:
+        """根据故障描述检索最匹配的 RCA Skill。
+
+        Args:
+            query: 故障描述文本
+            limit: 返回结果数量上限
+
+        Returns:
+            匹配结果列表，每项包含 document、metadata、distance
+        """
+        collection = self._get_or_create(self.skills_client, RCA_SKILLS_COLLECTION)
+        return self._query_collection(
+            collection, query, limit, operation="rca_skill_search"
+        )
 
     def _query_collection(self, collection: Any, query: str, limit: int, operation: str = "intent_routing") -> list[dict[str, Any]]:
         query_start = time.time()

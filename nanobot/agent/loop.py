@@ -20,6 +20,7 @@ from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.kubectl import KubectlGetPodsTool, KubectlExecLogTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.spawn import SpawnTool
+from nanobot.agent.tools.rca_trigger import RCATriggerTool, RCAListSkillsTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.base import LLMProvider
@@ -129,6 +130,68 @@ class AgentLoop:
         # kubectl 通用工具
         self.tools.register(KubectlGetPodsTool())
         self.tools.register(KubectlExecLogTool())
+
+        # RCA（根因分析）工具 - 条件注册
+        self._register_rca_tools()
+
+    def _register_rca_tools(self) -> None:
+        """条件注册 RCA（根因分析）相关工具。"""
+        try:
+            from nanobot.config import load_config
+            config = load_config()
+
+            if not config.rca.enabled:
+                logger.debug("[RCA] RCA 功能未启用，跳过工具注册")
+                return
+
+            from nanobot.rca.audit import AuditLogger
+            from nanobot.rca.engine import RCAEngine
+            from nanobot.rca.loader import RCASkillLoader
+            from nanobot.rca.router import RCARouter
+            from nanobot.rca.security import SecurityGuard
+
+            # 初始化安全校验层
+            security = SecurityGuard(extra_whitelist=config.rca.security_whitelist)
+
+            # 初始化审计日志
+            audit = AuditLogger(log_dir=config.rca.audit_log_dir)
+
+            # 初始化 Skill 加载器
+            skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
+            loaded_count = skill_loader.load_all()
+            logger.info(f"[RCA] 已加载 {loaded_count} 个 RCA Skill")
+
+            # 启用热加载
+            if config.rca.hot_reload:
+                skill_loader.start_watcher()
+
+            # 初始化执行引擎
+            engine = RCAEngine(
+                provider=self.provider,
+                tool_registry=self.tools,
+                security_guard=security,
+                audit_logger=audit,
+                model=config.rca.model or self.model,
+                max_step_timeout=config.rca.max_step_timeout,
+                max_total_timeout=config.rca.max_total_timeout,
+            )
+
+            # 初始化路由控制器
+            router = RCARouter(
+                skill_loader=skill_loader,
+                engine=engine,
+            )
+
+            # 注册工具
+            self.tools.register(RCATriggerTool(rca_router=router))
+            self.tools.register(RCAListSkillsTool(skill_loader=skill_loader))
+
+            logger.info("[RCA] ✅ RCA 工具注册完成")
+
+        except ImportError as e:
+            logger.warning(f"[RCA] RCA 模块导入失败: {e}")
+        except Exception as e:
+            logger.warning(f"[RCA] RCA 工具注册失败: {e}")
 
     async def run(self) -> None:
         """Run the agent loop, processing messages from the bus."""

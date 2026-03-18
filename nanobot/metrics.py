@@ -4,6 +4,8 @@
 通过 prometheus_client 暴露指标，供 Prometheus server 抓取。
 """
 
+from __future__ import annotations
+
 from prometheus_client import Histogram, Counter, Gauge, REGISTRY
 
 # ---------------------------------------------------------------------------
@@ -89,6 +91,47 @@ RERANK_DURATION = Histogram(
 )
 
 # ---------------------------------------------------------------------------
+# 4. RCA（根因分析）指标
+# ---------------------------------------------------------------------------
+
+# RCA 完整执行耗时
+RCA_EXECUTION_DURATION = Histogram(
+    "aether_rca_execution_duration_seconds",
+    "RCA 完整执行耗时（秒）",
+    labelnames=["skill_name", "status"],
+    buckets=(1, 2, 5, 10, 20, 30, 60, 120, 300),
+)
+
+# RCA 单步骤执行耗时
+RCA_STEP_DURATION = Histogram(
+    "aether_rca_step_duration_seconds",
+    "RCA 单步骤执行耗时（秒）",
+    labelnames=["step_type", "status"],
+    buckets=(0.1, 0.5, 1, 2, 5, 10, 20, 30),
+)
+
+# RCA 执行总次数
+RCA_EXECUTION_TOTAL = Counter(
+    "aether_rca_execution_total",
+    "RCA 执行总次数",
+    labelnames=["skill_name", "status"],
+)
+
+# Skill 检索匹配次数
+RCA_SKILL_MATCH_TOTAL = Counter(
+    "aether_rca_skill_match_total",
+    "RCA Skill 检索匹配次数",
+    labelnames=["matched"],
+)
+
+# 安全拒绝次数
+RCA_SECURITY_REJECT_TOTAL = Counter(
+    "aether_rca_security_reject_total",
+    "RCA 安全拒绝次数",
+    labelnames=["tool_name"],
+)
+
+# ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
 
@@ -155,7 +198,7 @@ class MetricsLogger:
     def __init__(
         self,
         log_dir: str = "logs",
-        interval_seconds: int = 3,
+        interval_seconds: int = 5,
         backup_count: int = 30,
     ):
         self._log_dir = log_dir
@@ -275,7 +318,7 @@ class MetricsLogger:
     def get_instance(
         cls,
         log_dir: str = "logs",
-        interval_seconds: int = 3,
+        interval_seconds: int = 5,
         backup_count: int = 30,
     ) -> "MetricsLogger":
         """获取全局单例（首次调用时创建）。"""
@@ -290,7 +333,7 @@ class MetricsLogger:
 
 def start_metrics_logging(
     log_dir: str = "logs",
-    interval_seconds: int = 3,
+    interval_seconds: int = 5,
     backup_count: int = 30,
 ):
     """便捷函数：启动全局定时指标打印。"""

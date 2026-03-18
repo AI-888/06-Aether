@@ -1,0 +1,120 @@
+skill:
+  name: kubernetes_pod_crash
+  version: "1.0"
+
+  description: Diagnose Kubernetes Pod CrashLoopBackOff issues
+
+  type: workflow
+
+  input_schema:
+    pod_name: string
+    namespace: string
+
+  steps:
+
+    - id: get_pod_status
+      type: tool
+      tool: kubectl_get_pods
+
+      input:
+        namespace: "{{namespace}}"
+
+      output_schema:
+        pod_status: string
+        restart_count: number
+
+    - id: get_pod_logs
+      type: tool
+      tool: kubectl_exec_log
+
+      input:
+        pod_name: "{{pod_name}}"
+        namespace: "{{namespace}}"
+
+      output_schema:
+        log_content: string
+
+    - id: analyze_logs
+      type: llm
+
+      input_from:
+        - get_pod_logs.log_content
+        - get_pod_status.pod_status
+
+      prompt: |
+        分析 Kubernetes Pod 的日志和状态，判断 Pod 崩溃的原因类型。
+
+        Pod 状态: {{pod_status}}
+        Pod 日志:
+        {{log_content}}
+
+        请分析并输出JSON:
+        {
+          "crash_type": "",
+          "error_detail": ""
+        }
+
+      output_schema:
+        crash_type: string
+        error_detail: string
+
+    - id: determine_root_cause
+      type: root_cause_definition
+
+      logic:
+
+        - when:
+            crash_type: "OOMKilled"
+
+          root_cause: "Pod 因内存不足被 OOM Killer 终止"
+
+          solution: |
+            增加 Pod 的 resources.limits.memory
+            检查应用是否有内存泄漏
+
+        - when:
+            crash_type: "ImagePullBackOff"
+
+          root_cause: "容器镜像拉取失败"
+
+          solution: |
+            检查镜像名称和标签是否正确
+            检查镜像仓库的访问权限
+            检查网络连通性
+
+        - when:
+            crash_type: "CrashLoopBackOff"
+
+          root_cause: "应用程序启动后反复崩溃"
+
+          solution: |
+            检查应用程序日志中的错误信息
+            检查配置文件是否正确
+            检查依赖服务是否可用
+
+    - id: conclusion
+      type: llm
+
+      input_from:
+        - determine_root_cause.root_cause
+        - determine_root_cause.solution
+        - analyze_logs.crash_type
+        - analyze_logs.error_detail
+
+      prompt: |
+        根据 Kubernetes Pod 崩溃的诊断结果生成最终报告。
+
+        崩溃类型: {{crash_type}}
+        错误详情: {{error_detail}}
+        根因: {{root_cause}}
+        建议方案: {{solution}}
+
+        输出JSON:
+        {
+          "summary": "",
+          "recommendation": ""
+        }
+
+      output_schema:
+        summary: string
+        recommendation: string

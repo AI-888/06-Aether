@@ -22,6 +22,20 @@ from nanobot.metrics import (
 )
 
 
+class MockFunction:
+    """模拟 OpenAI tool_call.function 对象，用于流式 tool_calls 组装。"""
+    def __init__(self, name: str, arguments: str):
+        self.name = name
+        self.arguments = arguments
+
+
+class MockToolCall:
+    """模拟 OpenAI tool_call 对象，用于流式 tool_calls 组装。"""
+    def __init__(self, id: str, name: str, arguments: str):
+        self.id = id
+        self.function = MockFunction(name, arguments)
+
+
 class LiteLLMProvider(LLMProvider):
     """
     LLM provider using LiteLLM for multi-provider support.
@@ -182,6 +196,9 @@ class LiteLLMProvider(LLMProvider):
                 # 流式输出模式
                 kwargs["stream"] = True
                 full_content = ""
+                # 收集流式 tool_calls：key = tool_call index, value = {id, name, arguments_parts}
+                streaming_tool_calls: dict[int, dict[str, Any]] = {}
+                finish_reason = "stop"
 
                 response = await acompletion(**kwargs)
 
@@ -189,7 +206,14 @@ class LiteLLMProvider(LLMProvider):
 
                 async for chunk in response:
                     if hasattr(chunk, 'choices') and chunk.choices:
-                        delta = chunk.choices[0].delta
+                        choice = chunk.choices[0]
+                        delta = choice.delta
+
+                        # 记录 finish_reason
+                        if hasattr(choice, 'finish_reason') and choice.finish_reason:
+                            finish_reason = choice.finish_reason
+
+                        # 收集文本内容
                         if hasattr(delta, 'content') and delta.content:
                             content_chunk = delta.content
                             full_content += content_chunk
@@ -200,7 +224,7 @@ class LiteLLMProvider(LLMProvider):
                                 context_info = {
                                     "content": content_chunk,
                                     "model": model,
-                                    "is_tool_call": hasattr(delta, 'tool_calls') and delta.tool_calls,
+                                    "is_tool_call": False,
                                     "is_reasoning": self._is_reasoning_content(content_chunk),
                                     "is_final_answer": self._is_final_answer_content(content_chunk),
                                     "total_length": len(full_content),
@@ -215,6 +239,30 @@ class LiteLLMProvider(LLMProvider):
                                 else:
                                     stream_callback(context_info)
 
+                        # 收集流式 tool_calls（增量拼接）
+                        if hasattr(delta, 'tool_calls') and delta.tool_calls:
+                            for tc_delta in delta.tool_calls:
+                                idx = tc_delta.index if hasattr(tc_delta, 'index') and tc_delta.index is not None else 0
+                                if idx not in streaming_tool_calls:
+                                    streaming_tool_calls[idx] = {
+                                        "id": "",
+                                        "name": "",
+                                        "arguments_parts": [],
+                                    }
+                                entry = streaming_tool_calls[idx]
+
+                                # 拼接 id
+                                if hasattr(tc_delta, 'id') and tc_delta.id:
+                                    entry["id"] += tc_delta.id
+
+                                # 拼接 function.name
+                                if hasattr(tc_delta, 'function') and tc_delta.function:
+                                    if hasattr(tc_delta.function, 'name') and tc_delta.function.name:
+                                        entry["name"] += tc_delta.function.name
+                                    # 拼接 function.arguments（增量字符串）
+                                    if hasattr(tc_delta.function, 'arguments') and tc_delta.function.arguments:
+                                        entry["arguments_parts"].append(tc_delta.function.arguments)
+
                 # 计算耗时
                 end_time = time.time()
                 duration = end_time - start_time
@@ -222,30 +270,43 @@ class LiteLLMProvider(LLMProvider):
                 # 记录LLM出参和耗时
                 logger.info(f"[LLM] 流式调用耗时: {duration:.3f}秒")
                 logger.info(f"[LLM] 流式输出内容长度: {len(full_content)}字符")
+                if streaming_tool_calls:
+                    logger.info(f"[LLM] 流式收集到 {len(streaming_tool_calls)} 个 tool_calls")
 
                 # Prometheus: 记录流式调用指标
                 LLM_REQUEST_DURATION.labels(model=model, purpose=purpose, status="success", input_length_range=input_length_range).observe(duration)
                 LLM_OUTPUT_TEXT_LENGTH.labels(model=model, purpose=purpose).observe(len(full_content))
                 LLM_REQUEST_TOTAL.labels(model=model, purpose=purpose, status="success").inc()
 
-                # 创建一个模拟的response对象用于解析
+                # 将收集到的流式 tool_calls 组装为标准格式
+                assembled_tool_calls = None
+                if streaming_tool_calls:
+                    assembled_tool_calls = []
+                    for idx in sorted(streaming_tool_calls.keys()):
+                        entry = streaming_tool_calls[idx]
+                        assembled_tool_calls.append(MockToolCall(
+                            id=entry["id"] or f"call_stream_{idx}",
+                            name=entry["name"],
+                            arguments="".join(entry["arguments_parts"]),
+                        ))
+                    logger.info(f"[LLM] 组装的 tool_calls: {[(tc.id, tc.function.name) for tc in assembled_tool_calls]}")
+
+                # 创建模拟的 response 对象用于解析
                 class MockResponse:
-                    def __init__(self, content):
-                        self.choices = [MockChoice(content)]
+                    def __init__(self, content, tool_calls, finish_reason):
+                        self.choices = [MockChoice(content, tool_calls, finish_reason)]
 
                 class MockChoice:
-                    def __init__(self, content):
-                        self.message = MockMessage(content)
-                        self.finish_reason = "stop"
+                    def __init__(self, content, tool_calls, finish_reason):
+                        self.message = MockMessage(content, tool_calls)
+                        self.finish_reason = finish_reason
 
                 class MockMessage:
-                    def __init__(self, content):
+                    def __init__(self, content, tool_calls):
                         self.content = content
-                        # 单轮模式下不再从文本内容中解析 function 调用
-                        # 避免 function 类型 JSON 污染 SLM 输入
-                        self.tool_calls = None
+                        self.tool_calls = tool_calls
 
-                mock_response = MockResponse(full_content)
+                mock_response = MockResponse(full_content, assembled_tool_calls, finish_reason)
                 return self._parse_response(mock_response, tools)
             else:
                 # 非流式模式（原有逻辑）

@@ -1,0 +1,115 @@
+skill:
+  name: rocketmq_troubleshoot
+  version: "1.0"
+
+  description: Diagnose RocketMQ issues from logs
+
+  type: workflow
+
+  input_schema:
+    log_text: string
+
+  steps:
+
+    - id: extract_error
+      type: llm
+
+      prompt: |
+        从日志中提取关键错误信息
+
+        {{log_text}}
+
+        输出JSON:
+        {
+          "error_message":"",
+          "error_module":""
+        }
+
+      output_schema:
+        error_message: string
+        error_module: string
+
+
+    - id: classify_problem
+      type: llm
+
+      input_from:
+        - extract_error.error_message
+
+      prompt: |
+        根据错误信息判断RocketMQ问题类型
+
+        error_message: {{error_message}}
+
+        输出JSON:
+        {
+          "problem_type":""
+        }
+
+      output_schema:
+        problem_type: string
+
+
+    - id: disk_check
+      type: tool
+      tool: check_disk_usage
+
+      input:
+        path: /data/rocketmq
+
+      output_schema:
+        disk_usage: number
+
+
+    - id: determine_root_cause
+      type: root_cause_definition
+
+      logic:
+
+        - when:
+            problem_type: "磁盘空间不足"
+            disk_usage: ">90"
+
+          root_cause: "RocketMQ broker disk full"
+
+          solution: |
+            清理 /data/rocketmq/commitlog
+            或扩容磁盘
+
+
+        - when:
+            problem_type: "nameserver连接异常"
+
+          root_cause: |
+            Broker cannot connect to nameserver
+
+          solution: |
+            检查 nameserver 地址
+            检查端口 9876
+
+
+
+    - id: conclusion
+      type: llm
+
+      input_from:
+        - determine_root_cause.root_cause
+        - determine_root_cause.solution
+        - classify_problem.problem_type
+
+      prompt: |
+        根据诊断结果生成最终报告
+
+        problem_type: {{problem_type}}
+        root_cause: {{root_cause}}
+        solution: {{solution}}
+
+        输出JSON:
+        {
+          "summary":"",
+          "recommendation":""
+        }
+
+      output_schema:
+        summary: string
+        recommendation: string
