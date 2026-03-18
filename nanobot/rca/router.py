@@ -115,9 +115,9 @@ class RCARouter:
         query = fault_input.description
 
         # 1. 尝试 RAG 向量检索
-        if self.intent_store and hasattr(self.intent_store, "search_rca_skill"):
+        if self.intent_store and hasattr(self.intent_store, "search_skills"):
             try:
-                results = self.intent_store.search_rca_skill(query, limit=1)
+                results = self.intent_store.search_skills(query, limit=1)
                 if results:
                     skill_name = results[0].get("metadata", {}).get("skill_name", "")
                     if skill_name:

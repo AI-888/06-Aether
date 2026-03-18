@@ -209,6 +209,9 @@
             background: #4299e1;
             color: white;
             border-bottom-right-radius: 5px;
+            max-width: 85%;
+            width: fit-content;
+            word-break: break-word;
         }
 
         .ai .message-content {
@@ -398,6 +401,20 @@
             border-radius: 10px;
             font-size: 0.75rem;
             font-weight: 600;
+        }
+
+        .rerank-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #e2e8f0;
+            border-top-color: #ed8936;
+            border-radius: 50%;
+            animation: rerank-spin 0.8s linear infinite;
+            vertical-align: middle;
+        }
+        @keyframes rerank-spin {
+            to { transform: rotate(360deg); }
         }
 
         .section-header {
@@ -1192,10 +1209,24 @@
             case 'start':
                 bodyHtml = escHtml(content);
                 break;
-            case 'searching':
-                bodyHtml = escHtml(content) +
-                    (domain ? `<div style="font-size:0.85rem;color:#718096;margin-top:4px;">领域: ${escHtml(domain)} | 关键词: ${escHtml(query)}</div>` : '');
+            case 'searching': {
+                bodyHtml = `<div style="display:flex;align-items:center;gap:8px;">`
+                    + `<span>${escHtml(content)}</span>`
+                    + (count > 0 ? ` <span class="knowledge-count" style="background:#ed8936;">${count}</span>` : '')
+                    + `<span class="rerank-spinner"></span>`
+                    + `</div>`;
+                if (result) {
+                    bodyHtml += `<div style="margin-top:8px;max-height:160px;overflow-y:auto;background:#fffbeb;padding:10px;border-radius:6px;font-size:0.85rem;border:1px solid #f6e05e;color:#744210;">${escHtml(result)}</div>`;
+                }
+                if (domain || query) {
+                    bodyHtml += `<div style="font-size:0.82rem;color:#718096;margin-top:4px;">`
+                        + (domain ? `领域: ${escHtml(domain)}` : '')
+                        + (domain && query ? ' | ' : '')
+                        + (query ? `关键词: ${escHtml(query)}` : '')
+                        + `</div>`;
+                }
                 break;
+            }
             case 'success': {
                 const previewLinksId = `kpl-${Date.now()}-${Math.random().toString(36).slice(2,5)}`;
                 bodyHtml = `${escHtml(content)} <span class="knowledge-count">${count}</span>` +
@@ -1225,7 +1256,8 @@
         }
 
         const iconMap = { start: '📚', searching: '🔍', success: '✅', no_results: '📭', error: '❌', skipped: '⚠️' };
-        enqueueMsg('knowledge', iconMap[status] || '📚', '知识库查询', bodyHtml, '', { instant: true, afterRender: afterRender });
+        const titleMap = { start: '工具检索', searching: '工具检索 · 重排序中', success: '工具检索 · 完成', no_results: '工具检索 · 无结果', error: '工具检索 · 异常', skipped: '工具检索 · 已跳过' };
+        enqueueMsg('knowledge', iconMap[status] || '📚', titleMap[status] || '知识库查询', bodyHtml, '', { instant: true, afterRender: afterRender });
     }
 
     // (旧的 handleToolCallData 和 createToolSection 已迁移到 handleToolCallCard)

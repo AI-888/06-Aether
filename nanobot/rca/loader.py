@@ -47,7 +47,7 @@ class RCASkillLoader:
         self._watcher_stop_event = threading.Event()
 
     def load_all(self) -> int:
-        """加载目录中所有 YAML Skill 文件。
+        """加载目录中所有 SKILL 开头的 YAML 文件。
 
         Returns:
             成功加载的 Skill 数量
@@ -58,7 +58,9 @@ class RCASkillLoader:
             return 0
 
         count = 0
-        for path in sorted(self.skill_dir.glob("*.yaml")):
+        # 加载 SKILL*.yaml 和 SKILL*.yml 文件
+        yaml_files = sorted(self.skill_dir.glob("SKILL*.yaml")) + sorted(self.skill_dir.glob("SKILL*.yml"))
+        for path in yaml_files:
             skill = self.load_file(path)
             if skill:
                 count += 1
@@ -170,21 +172,27 @@ class RCASkillLoader:
 
         loader = self
 
+        def _is_skill_file(path: str) -> bool:
+            """检查是否为 SKILL 开头的 yaml/yml 文件。"""
+            from pathlib import Path
+            name = Path(path).name
+            return name.startswith("SKILL") and (name.endswith(".yaml") or name.endswith(".yml"))
+
         class _Handler(FileSystemEventHandler):
             """文件系统事件处理器。"""
 
             def on_created(self, event):
-                if not event.is_directory and event.src_path.endswith(".yaml"):
+                if not event.is_directory and _is_skill_file(event.src_path):
                     logger.info(f"[RCA-LOADER] 检测到新增: {event.src_path}")
                     loader.load_file(Path(event.src_path))
 
             def on_modified(self, event):
-                if not event.is_directory and event.src_path.endswith(".yaml"):
+                if not event.is_directory and _is_skill_file(event.src_path):
                     logger.info(f"[RCA-LOADER] 检测到修改: {event.src_path}")
                     loader.load_file(Path(event.src_path))
 
             def on_deleted(self, event):
-                if not event.is_directory and event.src_path.endswith(".yaml"):
+                if not event.is_directory and _is_skill_file(event.src_path):
                     logger.info(f"[RCA-LOADER] 检测到删除: {event.src_path}")
                     # 根据文件路径找到对应的 Skill 并移除
                     with loader._lock:
@@ -237,22 +245,22 @@ class RCASkillLoader:
                 f"{s.id}({s.type.value})" for s in skill.steps
             )
             doc_text = (
-                f"RCA Skill: {skill.name}\n"
+                f"Skill: {skill.name}\n"
                 f"描述: {skill.description}\n"
                 f"类型: {skill.type}\n"
                 f"步骤: {steps_desc}"
             )
 
-            # 使用 IntentRoutingStore 的方法注册
-            if hasattr(self.intent_store, "register_rca_skill"):
-                self.intent_store.register_rca_skill(
+            # 使用 IntentRoutingStore 的统一方法注册
+            if hasattr(self.intent_store, "register_skill"):
+                self.intent_store.register_skill(
                     skill_name=skill.name,
                     doc_text=doc_text,
                 )
                 logger.debug(
-                    f"[RCA-LOADER] Skill '{skill.name}' 已注册到 RAG 索引"
+                    f"[SKILL-LOADER] Skill '{skill.name}' 已注册到 RAG 索引"
                 )
         except Exception as e:
             logger.warning(
-                f"[RCA-LOADER] Skill '{skill.name}' RAG 注册失败: {e}"
+                f"[SKILL-LOADER] Skill '{skill.name}' RAG 注册失败: {e}"
             )

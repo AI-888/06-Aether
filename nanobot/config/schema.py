@@ -261,7 +261,7 @@ class ToolsConfig(BaseModel):
 class RCAConfig(BaseModel):
     """RCA（根因分析）功能配置。"""
     enabled: bool = False                                        # 是否启用 RCA 功能
-    skill_dir: str = "~/.nanobot/workspace/rca_skills"           # Skill YAML 文件目录
+    skill_dir: str = "~/.nanobot/workspace/skills"               # Skill YAML 文件目录
     model: str = ""                                              # RCA 专用 SLM 模型（为空时使用默认模型）
     hot_reload: bool = True                                      # 是否启用热加载
     max_step_timeout: int = 30                                   # 单步骤超时时间（秒）

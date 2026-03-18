@@ -165,9 +165,17 @@ def initialize_webui_resources():
             tool_schemas=agent_loop.tools.get_definitions(),
             mcp_servers=config.mcp.servers,
         )
-        skills_count = intent_routing_store.init_skills_index(agent_loop.context.skills)
+
+        # 使用 RCASkillLoader 统一加载 YAML Skill 并构建索引
+        from nanobot.rca.loader import RCASkillLoader
+        skill_loader = RCASkillLoader(
+            skill_dir=config.rca.skill_dir,
+            intent_routing_store=intent_routing_store,
+        )
+        loaded_count = skill_loader.load_all()
+        skills_count = intent_routing_store.init_skills_index(skill_loader)
         logger.info(
-            f"[WEB] 🧭 意图路由索引初始化完成: tools_docs={tools_count}, skills_chunks={skills_count}"
+            f"[WEB] 🧭 意图路由索引初始化完成: tools={tools_count}, skills={skills_count} (loaded={loaded_count})"
         )
     except Exception as e:
         logger.error(f"[WEB] ❌ 意图路由索引初始化失败: {e}")
@@ -595,63 +603,32 @@ def _rerank_route_candidates(query: str, results: list[dict[str, Any]]) -> list[
 
 
 async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: float):
-    """处理运维操作意图：tools/skills 联合检索并重排后进入 loop。"""
+    """处理运维操作意图：检索 Skill → rerank top1 → 提取工具 → 筛选已注册工具 → LLM 决策。
+
+    流程：
+    1. 在统一 skills 向量库中检索匹配的 Skill（YAML 格式）
+    2. rerank 取 top1
+    3. 从 top1 Skill 的 steps 中提取 type=tool 的步骤引用的工具名
+    4. 在全部已注册工具中筛选匹配的工具
+    5. 将 Skill 内容作为上下文 + 筛选后的工具列表喂给 LLM
+    6. LLM 自主决策是否调用工具、调用哪个工具
+    """
     import json
     import time
-
-    def _build_ops_preview_items(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        preview_items: list[dict[str, Any]] = []
-        seen_keys: set[str] = set()
-
-        for item in results:
-            meta = item.get("metadata", {}) or {}
-            skill_name = meta.get("skill_name") or ""
-            tool_name = meta.get("tool_name") or ""
-            server_name = meta.get("server_name") or ""
-
-            # skills 命中优先展示文件预览
-            file_path = meta.get("path") or ""
-            if file_path:
-                try:
-                    fp = Path(file_path).expanduser()
-                    if not fp.is_absolute() and config and getattr(config, "workspace_path", None):
-                        fp = Path(config.workspace_path) / fp
-                    file_path = str(fp.resolve())
-                except Exception:
-                    file_path = str(file_path)
-
-                dedupe_key = f"file::{file_path}"
-                if dedupe_key not in seen_keys:
-                    preview_items.append(
-                        {
-                            "type": "file",
-                            "id": file_path,
-                            "label": f"📁 预览Skill文件: {skill_name or 'unknown'}",
-                            "path": file_path,
-                        }
-                    )
-                    seen_keys.add(dedupe_key)
-                continue
-
-            # MCP 工具命中回退展示服务 URL 预览
-            server_url = meta.get("server_url") or ""
-            if server_url:
-                dedupe_key = f"url::{server_url}"
-                if dedupe_key not in seen_keys:
-                    preview_items.append(
-                        {
-                            "type": "url",
-                            "id": server_url,
-                            "label": f"🌐 预览MCP服务: {server_name or tool_name or 'mcp'}",
-                            "url": server_url,
-                        }
-                    )
-                    seen_keys.add(dedupe_key)
-
-        return preview_items
+    from nanobot.rca.loader import RCASkillLoader
 
     if not intent_routing_store:
-        await websocket.send_text("⚠️ tools/skills 索引未初始化，直接进入执行流程。\n")
+        await websocket.send_text("⚠️ Skill 索引未初始化，直接进入 LLM 自由推理。\n")
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "content_type": "knowledge",
+            "content": "Skill 索引未初始化，跳过检索",
+            "knowledge_status": "skipped",
+            "knowledge_count": 0,
+            "knowledge_result": "",
+            "preview_items": [],
+            "timestamp": time.time(),
+        }, ensure_ascii=False))
         return await process_troubleshooting_intent(
             user_input,
             websocket,
@@ -660,62 +637,162 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             use_skills_retrieval=False,
         )
 
-    tools_results: list[dict[str, Any]] = []
-    skills_results: list[dict[str, Any]] = []
+    # ── Step 1: 通知前端开始检索 Skill 库 ──
+    await websocket.send_text(json.dumps({
+        "type": "stream_chunk",
+        "content_type": "knowledge",
+        "content": "正在检索运维 Skill 库...",
+        "knowledge_status": "start",
+        "knowledge_count": 0,
+        "knowledge_result": "",
+        "preview_items": [],
+        "timestamp": time.time(),
+    }, ensure_ascii=False))
 
-    await websocket.send_text("🧰 正在检索工具能力库（top2）...\n")
+    skill_results: list[dict[str, Any]] = []
     try:
-        tools_results = intent_routing_store.search_tools(user_input, limit=2)
-        await websocket.send_text(f"✅ tools 检索完成，命中 {len(tools_results)} 条\n")
+        skill_results = intent_routing_store.search_skills(user_input, limit=4)
     except Exception as e:
-        await websocket.send_text(f"⚠️ tools 检索失败: {str(e)}\n")
-
-    await websocket.send_text("🛠️ 正在检索 skills 库（top2）...\n")
-    try:
-        skills_results = intent_routing_store.search_skills(user_input, limit=2)
-        await websocket.send_text(f"✅ skills 检索完成，命中 {len(skills_results)} 条\n")
-    except Exception as e:
-        await websocket.send_text(f"⚠️ skills 检索失败: {str(e)}\n")
-
-    merged_results = (tools_results or []) + (skills_results or [])
-    if merged_results:
-        reranked_results = _rerank_route_candidates(user_input, merged_results)
-        additional_context = _build_retrieval_context("Ops/Skills Retrieval Context", reranked_results, limit=1)
-
-        top1_results = reranked_results[:1]
-        preview_items = _build_ops_preview_items(top1_results)
-        retrieval_markdown = _build_retrieval_context("Ops/Skills Retrieval Preview", top1_results, limit=1) or ""
-
-        knowledge_message = {
+        logger.warning(f"[WEB] skill 检索失败: {e}")
+        await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": f"tools={len(tools_results)}，skills={len(skills_results)}，重排后展示 top1",
-            "knowledge_status": "success",
-            "knowledge_count": len(top1_results),
-            "knowledge_result": retrieval_markdown,
-            "preview_items": preview_items,
+            "content": f"Skill 检索失败: {str(e)}",
+            "knowledge_status": "error",
+            "knowledge_count": 0,
+            "knowledge_result": "",
+            "preview_items": [],
             "timestamp": time.time(),
-        }
-        await websocket.send_text(json.dumps(knowledge_message, ensure_ascii=False))
+        }, ensure_ascii=False))
 
-        await websocket.send_text(
-            f"✅ 联合检索完成，tools={len(tools_results)}，skills={len(skills_results)}，重排后取 top1\n\n"
-        )
-    else:
-        additional_context = None
-        await websocket.send_text("⚠️ tools/skills 均未命中，直接进入执行流程。\n")
-
-        knowledge_message = {
+    if not skill_results:
+        await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "tools/skills 均未命中",
+            "content": "未检索到匹配 Skill，进入 LLM 自由推理",
             "knowledge_status": "no_results",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
-        }
-        await websocket.send_text(json.dumps(knowledge_message, ensure_ascii=False))
+        }, ensure_ascii=False))
+        await websocket.send_text("🔧 未匹配到运维 Skill，进入 AI 自由推理...\n\n")
+        return await process_troubleshooting_intent(
+            user_input,
+            websocket,
+            start_time,
+            additional_context=None,
+            use_skills_retrieval=False,
+        )
+
+    # ── Step 2: 通知前端检索结果（rerank 前） ──
+    raw_preview_md = _build_retrieval_context("Skill 检索原始结果", skill_results, limit=len(skill_results)) or ""
+    await websocket.send_text(json.dumps({
+        "type": "stream_chunk",
+        "content_type": "knowledge",
+        "content": f"Skill 检索完成，命中 {len(skill_results)} 条，正在重排序...",
+        "knowledge_status": "searching",
+        "knowledge_count": len(skill_results),
+        "knowledge_result": raw_preview_md,
+        "preview_items": [],
+        "timestamp": time.time(),
+    }, ensure_ascii=False))
+
+    # ── Step 3: rerank 取 top1 ──
+    reranked_results = _rerank_route_candidates(user_input, skill_results)
+    top1 = reranked_results[0] if reranked_results else None
+
+    if not top1:
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "content_type": "knowledge",
+            "content": "Rerank 后无有效结果，进入 LLM 自由推理",
+            "knowledge_status": "no_results",
+            "knowledge_count": 0,
+            "knowledge_result": "",
+            "preview_items": [],
+            "timestamp": time.time(),
+        }, ensure_ascii=False))
+        return await process_troubleshooting_intent(
+            user_input,
+            websocket,
+            start_time,
+            additional_context=None,
+            use_skills_retrieval=False,
+        )
+
+    top1_meta = top1.get("metadata", {}) or {}
+    matched_skill_name = top1_meta.get("skill_name", "")
+    retrieval_markdown = _build_retrieval_context("Ops Skill Retrieval (Reranked Top1)", [top1], limit=1) or ""
+
+    # ── Step 4: 从 Skill YAML 中提取 type=tool 步骤引用的工具名 ──
+    skill_tool_names: list[str] = []
+    try:
+        skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
+        skill_loader.load_all()
+        skill_obj = skill_loader.get_skill(matched_skill_name)
+
+        if skill_obj and hasattr(skill_obj, "steps"):
+            for step in skill_obj.steps:
+                if step.type.value == "tool" and step.tool:
+                    if step.tool not in skill_tool_names:
+                        skill_tool_names.append(step.tool)
+            logger.info(f"[WEB] Skill '{matched_skill_name}' 引用的工具: {skill_tool_names}")
+    except Exception as e:
+        logger.warning(f"[WEB] 从 Skill 提取工具列表失败: {e}")
+
+    # ── Step 5: 在全部已注册工具中筛选匹配的工具 ──
+    registered_tool_names = agent_loop.tools.tool_names if agent_loop else []
+    filtered_tool_names: list[str] = [
+        tn for tn in skill_tool_names if tn in registered_tool_names
+    ]
+    unregistered_tools = [tn for tn in skill_tool_names if tn not in registered_tool_names]
+
+    if unregistered_tools:
+        logger.warning(f"[WEB] Skill 引用了未注册的工具: {unregistered_tools}")
+
+    logger.info(f"[WEB] 最终筛选的已注册工具列表: {filtered_tool_names}")
+
+    # ── Step 6: 通知前端 rerank 结果（含工具提取信息） ──
+    tools_info = f"，提取工具: {filtered_tool_names}" if filtered_tool_names else "，未提取到可用工具"
+    await websocket.send_text(json.dumps({
+        "type": "stream_chunk",
+        "content_type": "knowledge",
+        "content": f"重排序完成，最佳匹配 Skill: {matched_skill_name}{tools_info}",
+        "knowledge_status": "success",
+        "knowledge_count": 1,
+        "knowledge_result": retrieval_markdown,
+        "preview_items": [],
+        "timestamp": time.time(),
+    }, ensure_ascii=False))
+
+    # ── Step 7: 构建 Skill 上下文，传入 LLM loop ──
+    # 将 Skill 的完整描述和步骤作为 additional_context，
+    # 将筛选后的工具名作为 tool_names_filter，让 LLM 自主决策
+    skill_context_parts = [f"# 运维 Skill 参考: {matched_skill_name}"]
+    if skill_obj:
+        skill_context_parts.append(f"描述: {skill_obj.description}")
+        skill_context_parts.append(f"类型: {skill_obj.type}")
+        if skill_obj.steps:
+            skill_context_parts.append("\n## 参考排查步骤:")
+            for i, step in enumerate(skill_obj.steps, 1):
+                step_desc = f"  {i}. [{step.type.value}] {step.id}"
+                if step.tool:
+                    step_desc += f" (工具: {step.tool})"
+                if step.prompt:
+                    prompt_preview = step.prompt.strip()[:120]
+                    step_desc += f"\n     提示: {prompt_preview}..."
+                skill_context_parts.append(step_desc)
+        if filtered_tool_names:
+            skill_context_parts.append(f"\n## 可用工具: {', '.join(filtered_tool_names)}")
+            skill_context_parts.append("请根据用户问题和以上 Skill 参考，自主判断是否需要调用工具以及调用哪个工具。")
+    additional_context = "\n".join(skill_context_parts)
+
+    await websocket.send_text(
+        f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
+        f"（可用工具: {', '.join(filtered_tool_names) if filtered_tool_names else '无'}），"
+        f"进入 AI 分析...\n\n"
+    )
 
     return await process_troubleshooting_intent(
         user_input,
@@ -723,6 +800,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         start_time,
         additional_context=additional_context,
         use_skills_retrieval=False,
+        tool_names_filter=filtered_tool_names or None,
     )
 
 
@@ -965,25 +1043,262 @@ async def process_troubleshooting_intent(
         start_time: float,
         additional_context: str | None = None,
         use_skills_retrieval: bool = True,
+        tool_names_filter: list[str] | None = None,
 ):
-    """处理排查类意图：可带系统补充上下文进入 loop。"""
+    """处理排查类意图：搜索 Skill → rerank top1 → RCA Engine 执行。
+
+    当 B 类（运维）调用时，通过 use_skills_retrieval=False 跳过 skill 检索，
+    直接使用传入的 additional_context 和 tool_names_filter 进入 LLM loop。
+
+    当 C 类（排障）直接调用时，执行 Skill 检索 → rerank → RCA Engine 流程。
+    """
 
     import time
     import json
 
-    # C 类默认先查 skills 索引；B 类可通过 use_skills_retrieval=False 禁用
-    if use_skills_retrieval and additional_context is None and intent_routing_store:
+    # ─── B 类入口：跳过 skill 检索，直接进入 LLM loop ───
+    if not use_skills_retrieval:
+        await websocket.send_text("🔧 检测到运维操作类问题，进入AI分析...\n\n")
+        return await _run_agent_loop(user_input, websocket, additional_context, tool_names_filter)
 
-        await websocket.send_text("🛠️ 正在检索 skills 库（top2）...\n")
-        try:
-            skill_hits = intent_routing_store.search_skills(user_input, limit=2)
-            additional_context = _build_retrieval_context("Troubleshooting Skill Retrieval Context", skill_hits,
-                                                          limit=2)
-            await websocket.send_text(f"✅ skills 检索完成，命中 {len(skill_hits)} 条\n\n")
-        except Exception as e:
-            await websocket.send_text(f"⚠️ skills 检索失败: {str(e)}，继续执行。\n")
+    # ─── C 类排障流程：搜索 Skill → rerank → RCA Engine ───
 
-    await websocket.send_text("🔧 检测到排查/执行类问题，进入AI分析...\n\n")
+    if not intent_routing_store:
+        await websocket.send_text("⚠️ Skill 索引未初始化，回退到 LLM 自由推理。\n")
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "content_type": "knowledge",
+            "content": "Skill 索引未初始化，跳过检索",
+            "knowledge_status": "skipped",
+            "knowledge_count": 0,
+            "knowledge_result": "",
+            "preview_items": [],
+            "timestamp": time.time(),
+        }, ensure_ascii=False))
+        return await _run_agent_loop(user_input, websocket, None, None)
+
+    # Step 1: 通知前端开始检索 Skill 库
+    await websocket.send_text(json.dumps({
+        "type": "stream_chunk",
+        "content_type": "knowledge",
+        "content": "正在检索排障 Skill 库...",
+        "knowledge_status": "start",
+        "knowledge_count": 0,
+        "knowledge_result": "",
+        "preview_items": [],
+        "timestamp": time.time(),
+    }, ensure_ascii=False))
+
+    skill_results: list[dict[str, Any]] = []
+    try:
+        skill_results = intent_routing_store.search_skills(user_input, limit=4)
+    except Exception as e:
+        logger.warning(f"[WEB] skill 检索失败: {e}")
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "content_type": "knowledge",
+            "content": f"Skill 检索失败: {str(e)}",
+            "knowledge_status": "error",
+            "knowledge_count": 0,
+            "knowledge_result": "",
+            "preview_items": [],
+            "timestamp": time.time(),
+        }, ensure_ascii=False))
+
+    if not skill_results:
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "content_type": "knowledge",
+            "content": "未检索到匹配 Skill，回退到 LLM 自由推理",
+            "knowledge_status": "no_results",
+            "knowledge_count": 0,
+            "knowledge_result": "",
+            "preview_items": [],
+            "timestamp": time.time(),
+        }, ensure_ascii=False))
+        await websocket.send_text("🔧 未匹配到排障 Skill，进入 AI 自由推理...\n\n")
+        return await _run_agent_loop(user_input, websocket, None, None)
+
+    # Step 2: 通知前端检索结果（rerank 前）
+    raw_preview_md = _build_retrieval_context("Skill 检索原始结果", skill_results, limit=len(skill_results)) or ""
+    await websocket.send_text(json.dumps({
+        "type": "stream_chunk",
+        "content_type": "knowledge",
+        "content": f"Skill 检索完成，命中 {len(skill_results)} 条，正在重排序...",
+        "knowledge_status": "searching",
+        "knowledge_count": len(skill_results),
+        "knowledge_result": raw_preview_md,
+        "preview_items": [],
+        "timestamp": time.time(),
+    }, ensure_ascii=False))
+
+    # Step 3: rerank 取 top1
+    reranked_results = _rerank_route_candidates(user_input, skill_results)
+    top1 = reranked_results[0] if reranked_results else None
+
+    if not top1:
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "content_type": "knowledge",
+            "content": "Rerank 后无有效结果，回退到 LLM 自由推理",
+            "knowledge_status": "no_results",
+            "knowledge_count": 0,
+            "knowledge_result": "",
+            "preview_items": [],
+            "timestamp": time.time(),
+        }, ensure_ascii=False))
+        return await _run_agent_loop(user_input, websocket, None, None)
+
+    top1_meta = top1.get("metadata", {}) or {}
+    matched_skill_name = top1_meta.get("skill_name", "")
+    retrieval_markdown = _build_retrieval_context("Skill Retrieval (Reranked Top1)", [top1], limit=1) or ""
+
+    await websocket.send_text(json.dumps({
+        "type": "stream_chunk",
+        "content_type": "knowledge",
+        "content": f"重排序完成，最佳匹配 Skill: {matched_skill_name}（共检索 {len(skill_results)} 条）",
+        "knowledge_status": "success",
+        "knowledge_count": 1,
+        "knowledge_result": retrieval_markdown,
+        "preview_items": [],
+        "timestamp": time.time(),
+    }, ensure_ascii=False))
+
+    # Step 4: 使用 RCA Engine 执行匹配到的 Skill
+    await websocket.send_text(f"🔧 匹配到排障 Skill: **{matched_skill_name}**，开始执行分步诊断...\n\n")
+
+    try:
+        report = await _execute_rca_skill(matched_skill_name, user_input, websocket)
+
+        if report:
+            # 发送 RCA 报告到前端
+            report_md = report.to_markdown()
+            await websocket.send_text(report_md + "\n")
+        else:
+            # Skill 执行失败，回退到 LLM 自由推理
+            await websocket.send_text("⚠️ Skill 执行失败，回退到 LLM 自由推理...\n\n")
+            return await _run_agent_loop(user_input, websocket, None, None)
+
+    except Exception as e:
+        logger.error(f"[WEB] RCA Skill 执行异常: {e}")
+        await websocket.send_text(f"⚠️ Skill 执行异常: {str(e)}，回退到 LLM 自由推理...\n\n")
+        return await _run_agent_loop(user_input, websocket, None, None)
+
+    end_time = time.time()
+
+    # 发送处理完成状态消息
+    completion_message = {
+        'type': 'stream_chunk',
+        'content_type': 'completion',
+        'content': '处理完成',
+        'is_completed': True,
+        'timestamp': end_time,
+    }
+    await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+
+
+async def _execute_rca_skill(
+    skill_name: str,
+    user_input: str,
+    websocket: WebSocket,
+) -> "RCAReport | None":
+    """加载并执行指定的 RCA Skill。
+
+    Args:
+        skill_name: Skill 名称
+        user_input: 用户原始输入（作为 Skill 的 description 输入）
+        websocket: WebSocket 连接，用于流式通知
+
+    Returns:
+        RCA 报告，执行失败返回 None
+    """
+    import json
+    import time
+
+    try:
+        from nanobot.rca.loader import RCASkillLoader
+        from nanobot.rca.engine import RCAEngine
+        from nanobot.rca.audit import AuditLogger
+        from nanobot.rca.security import SecurityGuard
+        from nanobot.rca.report import RCAReport
+
+        # 加载 Skill
+        skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
+        skill_loader.load_all()
+        skill = skill_loader.get_skill(skill_name)
+
+        if not skill:
+            logger.warning(f"[WEB] Skill '{skill_name}' 未找到")
+            return None
+
+        # 初始化 RCA Engine 依赖
+        security = SecurityGuard(extra_whitelist=config.rca.security_whitelist)
+        audit = AuditLogger(log_dir=config.rca.audit_log_dir)
+
+        engine = RCAEngine(
+            provider=provider,
+            tool_registry=agent_loop.tools,
+            security_guard=security,
+            audit_logger=audit,
+            model=config.rca.model or config.agents.defaults.model,
+            max_step_timeout=config.rca.max_step_timeout,
+            max_total_timeout=config.rca.max_total_timeout,
+        )
+
+        # 构建输入：将用户输入映射到 Skill 的 input_schema
+        inputs: dict = {}
+        for key in skill.input_schema:
+            inputs[key] = user_input
+
+        # 定义流式回调：将每一步的执行结果实时通知前端
+        async def rca_stream_callback(step_id: str, output: dict):
+            step_msg = {
+                "type": "stream_chunk",
+                "content_type": "tool",
+                "content": f"✅ RCA 步骤完成: {step_id}",
+                "is_tool_call": True,
+                "tool_name": f"rca_step: {step_id}",
+                "tool_status": "completed",
+                "tool_result": json.dumps(output, ensure_ascii=False, default=str)[:500],
+                "timestamp": time.time(),
+            }
+            await websocket.send_text(json.dumps(step_msg, ensure_ascii=False))
+
+        # 执行 Skill
+        report = await engine.execute(
+            skill=skill,
+            inputs=inputs,
+            stream_callback=lambda step_id, output: _sync_to_async_callback(
+                rca_stream_callback, step_id, output
+            ),
+        )
+
+        return report
+
+    except Exception as e:
+        logger.error(f"[WEB] RCA Skill 执行失败: {e}")
+        return None
+
+
+def _sync_to_async_callback(async_fn, *args):
+    """将异步回调转换为同步调用（用于 RCAEngine 的 stream_callback）。"""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(async_fn(*args))
+    except RuntimeError:
+        asyncio.run(async_fn(*args))
+
+
+async def _run_agent_loop(
+    user_input: str,
+    websocket: WebSocket,
+    additional_context: str | None = None,
+    tool_names_filter: list[str] | None = None,
+):
+    """通用的 agent loop 执行入口（用于 B 类运维和 C 类排障回退）。"""
+    import time
+    import json
 
     # 设置流式回调函数
     async def stream_callback(context_info: dict):
@@ -1071,19 +1386,18 @@ async def process_troubleshooting_intent(
         session_key="cli:webui",
         additional_context=additional_context,
         disable_auto_kb=True,
+        tool_names_filter=tool_names_filter,
     )
 
-    # Send the actual response (如果流式输出已经发送了内容，这里可能不需要再发送)
+    # Send the actual response
     if response and response.strip():
-        # 检查是否已经通过流式输出发送了内容
-        # 如果没有流式输出，则发送完整响应
         await websocket.send_text("\n" + response)
     elif not response:
         await websocket.send_text("No response from agent.")
 
     end_time = time.time()
 
-    # 发送处理完成状态消息，让前端按钮可以点击
+    # 发送处理完成状态消息
     completion_message = {
         'type': 'stream_chunk',
         'content_type': 'completion',

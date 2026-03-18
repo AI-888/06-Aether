@@ -266,6 +266,7 @@ class AgentLoop:
         metadata = msg.metadata or {}
         additional_context = metadata.get("additional_context")
         disable_auto_kb = bool(metadata.get("disable_auto_kb", False))
+        tool_names_filter: list[str] | None = metadata.get("tool_names_filter")
 
         knowledge_context = additional_context
         if knowledge_context is None and not disable_auto_kb:
@@ -307,9 +308,16 @@ class AgentLoop:
         # 检查是否有流式回调函数
         stream_callback = getattr(self, 'stream_callback', None)
 
+        # 根据 tool_names_filter 筛选传入 LLM 的工具定义
+        if tool_names_filter:
+            tool_defs = self.tools.get_definitions_by_names(tool_names_filter)
+            logger.info(f"[LOOP] 🔧 使用筛选工具列表: {tool_names_filter}，共 {len(tool_defs)} 个")
+        else:
+            tool_defs = self.tools.get_definitions()
+
         response = await self.provider.chat(
             messages=messages,
-            tools=self.tools.get_definitions(),
+            tools=tool_defs,
             model=self.model,
             stream=bool(stream_callback),
             stream_callback=stream_callback,
@@ -435,10 +443,11 @@ class AgentLoop:
             else:
                 final_content = tools_output
         else:
-            # No tool calls, 直接使用 LLM 回答
+            # No tool calls, 尝试从LLM回复中提取命令自动执行
             fallback_content = await self._fallback_exec_on_empty_response(
                 msg.content,
                 response.content,
+                stream_callback=stream_callback,
             )
             final_content = fallback_content if fallback_content is not None else response.content
 
@@ -680,6 +689,69 @@ class AgentLoop:
         return bool(re.fullmatch(r"[a-z][a-z0-9_:-]{2,}", token)) and " " not in token
 
     @staticmethod
+    def _extract_commands_from_response(llm_content: str) -> list[str]:
+        """从LLM回复文本中提取代码块中的可执行命令。
+
+        支持以下格式：
+        - ```bash\n command \n```
+        - ```shell\n command \n```
+        - ```sh\n command \n```
+        - ```\n command \n```（无语言标记的代码块，内容以常见命令前缀开头）
+
+        Returns:
+            提取到的命令列表（去重、保序）
+        """
+        commands: list[str] = []
+        seen: set[str] = set()
+
+        # 匹配 ```bash/shell/sh/无标记 代码块
+        pattern = re.compile(
+            r"```(?:bash|shell|sh)?\s*\n(.*?)```",
+            re.DOTALL | re.IGNORECASE,
+        )
+
+        # 常见的可执行命令前缀
+        exec_prefixes = (
+            "kubectl", "docker", "curl", "wget", "cat", "grep", "tail",
+            "head", "ls", "ps", "top", "df", "du", "netstat", "ss",
+            "ping", "traceroute", "nslookup", "dig", "systemctl",
+            "journalctl", "apt", "yum", "pip", "npm", "git",
+            "find", "awk", "sed", "sort", "uniq", "wc", "echo",
+            "mysql", "redis-cli", "mongo", "etcdctl", "helm",
+        )
+
+        for m in pattern.finditer(llm_content):
+            block = m.group(1).strip()
+            if not block:
+                continue
+
+            # 按行拆分，每行作为一条独立命令
+            for line in block.splitlines():
+                cmd = line.strip()
+                # 跳过空行和注释行
+                if not cmd or cmd.startswith("#"):
+                    continue
+                # 去掉 $ 提示符前缀
+                if cmd.startswith("$ "):
+                    cmd = cmd[2:].strip()
+
+                # 检查是否是可执行命令（以已知前缀开头，或包含管道/重定向）
+                first_token = cmd.split()[0] if cmd.split() else ""
+                is_executable = (
+                    first_token in exec_prefixes
+                    or "|" in cmd
+                    or ">" in cmd
+                    or first_token.startswith("./")
+                    or first_token.startswith("/")
+                )
+
+                if is_executable and cmd not in seen:
+                    commands.append(cmd)
+                    seen.add(cmd)
+
+        return commands
+
+    @staticmethod
     def _infer_exec_command_from_text(user_text: str, hint: str = "") -> str | None:
         text = f"{user_text} {hint}".lower()
         if "broker" in text and "pod" in text:
@@ -696,20 +768,102 @@ class AgentLoop:
             self,
             user_text: str,
             llm_content: str | None,
+            stream_callback=None,
     ) -> str | None:
-        """
-        Fallback for tiny models that return '{}' without emitting tool calls.
+        """当LLM没有触发tool_call时的回退处理。
+
+        场景1: LLM返回空内容或'{}'，通过关键词推断命令执行。
+        场景2: LLM在回复文本中包含了可执行命令（代码块），提取并自动执行。
         """
         content = (llm_content or "").strip()
-        if content not in {"", "{}"}:
+
+        # 场景1: 空响应，尝试从用户输入推断命令
+        if content in {"", "{}"}:
+            command = self._infer_exec_command_from_text(user_text)
+            if not command:
+                return None
+            result = await self.tools.execute("exec", {"command": command})
+            return f"已执行命令:\n{command}\n\n结果:\n{result}"
+
+        # 场景2: LLM回复了包含命令的文本，提取代码块中的命令自动执行
+        commands = self._extract_commands_from_response(content)
+        if not commands:
             return None
 
-        command = self._infer_exec_command_from_text(user_text)
-        if not command:
+        logger.info(f"[LOOP] 🔍 从LLM回复中提取到 {len(commands)} 条可执行命令")
+
+        exec_results: list[str] = []
+        for cmd in commands:
+            display_name = f"exec: {cmd.split()[0]}" if cmd.split() else "exec"
+            logger.info(f"[LOOP] 🔧 自动执行提取的命令: {cmd}")
+
+            # 通知前端工具开始执行
+            if stream_callback:
+                tool_start_info = {
+                    "content": f"🔧 自动执行命令: {display_name}\n命令: {cmd}\n",
+                    "is_tool_call": True,
+                    "tool_args": {"command": cmd},
+                    "tool_name": display_name,
+                    "tool_status": "start",
+                }
+                if asyncio.iscoroutinefunction(stream_callback):
+                    await stream_callback(tool_start_info)
+                else:
+                    stream_callback(tool_start_info)
+
+            start_time = time.time()
+            try:
+                result = await self.tools.execute("exec", {"command": cmd})
+                duration = time.time() - start_time
+                result_preview = str(result)[:300] if result else "(empty result)"
+                logger.info(f"[LOOP] 🔧 命令输出: {result_preview}...")
+                logger.info(f"[LOOP] ⏱️  命令执行耗时: {duration:.3f}秒")
+
+                # 通知前端工具执行完成
+                if stream_callback:
+                    tool_result_info = {
+                        "content": f"✅ 命令执行完成: {display_name}\n执行结果: {result_preview}\n",
+                        "is_tool_call": True,
+                        "tool_name": display_name,
+                        "tool_args": {"command": cmd},
+                        "tool_status": "completed",
+                        "tool_result": result_preview,
+                    }
+                    if asyncio.iscoroutinefunction(stream_callback):
+                        await stream_callback(tool_result_info)
+                    else:
+                        stream_callback(tool_result_info)
+
+                exec_results.append(f"[执行命令: {cmd}]\n{result}")
+
+            except Exception as e:
+                duration = time.time() - start_time
+                error_msg = f"命令执行失败: {str(e)}"
+                logger.error(f"[LOOP] ❌ {error_msg}")
+
+                # 通知前端工具执行失败
+                if stream_callback:
+                    tool_error_info = {
+                        "content": f"❌ 命令执行失败: {display_name}\n错误信息: {error_msg}\n",
+                        "is_tool_call": True,
+                        "tool_name": display_name,
+                        "tool_args": {"command": cmd},
+                        "tool_status": "error",
+                        "tool_error": error_msg,
+                    }
+                    if asyncio.iscoroutinefunction(stream_callback):
+                        await stream_callback(tool_error_info)
+                    else:
+                        stream_callback(tool_error_info)
+
+                exec_results.append(f"[执行命令: {cmd}]\n{error_msg}")
+
+        if not exec_results:
             return None
 
-        result = await self.tools.execute("exec", {"command": command})
-        return f"已执行命令:\n{command}\n\n结果:\n{result}"
+        # 将LLM原始回复和命令执行结果拼接
+        exec_output = "\n\n".join(exec_results)
+        return f"{content}\n\n---\n📋 **命令执行结果：**\n\n{exec_output}"
 
     async def process_direct(
             self,
@@ -719,6 +873,7 @@ class AgentLoop:
             chat_id: str = "direct",
             additional_context: str | None = None,
             disable_auto_kb: bool = False,
+            tool_names_filter: list[str] | None = None,
     ) -> str:
         """
         Process a message directly (for CLI or cron usage).
@@ -740,6 +895,7 @@ class AgentLoop:
             metadata={
                 "additional_context": additional_context,
                 "disable_auto_kb": disable_auto_kb,
+                "tool_names_filter": tool_names_filter,
             },
         )
 

@@ -18,7 +18,8 @@ class ContextBuilder:
     into a coherent prompt for the LLM.
     """
 
-    BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
+    # BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
+    BOOTSTRAP_FILES = []
     PROMPT_DIR = "prompt"  # 自定义提示词目录
 
     def __init__(self, workspace: Path):
@@ -84,13 +85,14 @@ class ContextBuilder:
         system = platform.system()
         runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
 
-        return f"""# Identity
-                ## Current Time
-                {now}
+        # return f"""# Identity
+        #         ## Current Time
+        #         {now}
 
-                ## Runtime
-                {runtime}
-                """
+        #         ## Runtime
+        #         {runtime}
+        #         """
+        return ""
 
     def _load_bootstrap_files(self) -> str:
         """Load all bootstrap files from workspace."""
@@ -167,12 +169,12 @@ class ContextBuilder:
 
         # System prompt
         system_prompt = self.build_system_prompt(skill_names)
-        if channel and chat_id:
-            system_prompt += f"\n\n## Current Session\nChannel: {channel}\nChat ID: {chat_id}"
+        # if channel and chat_id:
+        #     system_prompt += f"\n\n## Current Session\nChannel: {channel}\nChat ID: {chat_id}"
 
-        # 如果存在额外上下文（如知识库查询结果），添加到系统提示中
-        if additional_context:
-            system_prompt += f"\n\n## Additional Context\n{additional_context}"
+        # # 如果存在额外上下文（如知识库查询结果），添加到系统提示中
+        # if additional_context:
+        #     system_prompt += f"\n\n## Additional Context\n{additional_context}"
 
         messages.append({"role": "system", "content": system_prompt})
 

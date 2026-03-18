@@ -35,6 +35,14 @@ class ToolRegistry:
         """Get all tool definitions in OpenAI format."""
         return [tool.to_schema() for tool in self._tools.values()]
 
+    def get_definitions_by_names(self, names: list[str]) -> list[dict[str, Any]]:
+        """按名称列表筛选工具定义，只返回匹配的工具 schema。"""
+        return [
+            tool.to_schema()
+            for tool in self._tools.values()
+            if tool.name in names
+        ]
+
     async def execute(self, name: str, params: dict[str, Any]) -> str:
         """
         Execute a tool by name with given parameters.
