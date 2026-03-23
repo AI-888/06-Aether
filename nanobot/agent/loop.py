@@ -358,6 +358,15 @@ class AgentLoop:
         else:
             tool_defs = self.tools.get_definitions()
 
+        # 当 tool_names_filter 恰好只有 1 个工具时，强制 LLM 必须调用该工具
+        forced_tool_choice: str | dict | None = None
+        if tool_names_filter and len(tool_names_filter) == 1 and len(tool_defs) == 1:
+            forced_tool_choice = {
+                "type": "function",
+                "function": {"name": tool_names_filter[0]},
+            }
+            logger.info(f"[LOOP] 🔧 强制 tool_choice: {forced_tool_choice}")
+
         response = await self.provider.chat(
             messages=messages,
             tools=tool_defs,
@@ -365,6 +374,7 @@ class AgentLoop:
             stream=bool(stream_callback),
             stream_callback=stream_callback,
             purpose="agent_loop",
+            tool_choice=forced_tool_choice,
         )
 
         # 记录LLM调用结束时间并计算耗时
@@ -807,6 +817,91 @@ class AgentLoop:
             return "kubectl get pods -Ao wide | grep rocketmq | grep -v cmq"
         return None
 
+    def _try_parse_text_tool_call(self, content: str) -> tuple[str, dict] | None:
+        """尝试从 LLM 文本回复中解析 JSON 格式的工具调用结构。
+
+        当小模型不支持标准 function calling 时，可能会在 content 中直接输出：
+            {"name": "kubectl_get_pods", "arguments": {"component_keyword": "rocketmq-broker"}}
+        本方法负责识别并解析这种格式，且只有工具已注册才返回结果。
+
+        支持的格式：
+        - 整个 content 就是一个 JSON 对象
+        - JSON 嵌在文本中（提取第一个 `{...}` 块）
+        - JSON 包裹在 ```json ... ``` 代码块中
+
+        Args:
+            content: LLM 返回的文本内容
+
+        Returns:
+            (tool_name, tool_args) 元组，解析失败或工具未注册时返回 None
+        """
+        if not content or not content.strip():
+            return None
+
+        text = content.strip()
+
+        # 策略1：尝试从 ```json ... ``` 代码块中提取
+        json_block_match = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
+        if json_block_match:
+            candidate = json_block_match.group(1).strip()
+            result = self._parse_tool_call_json(candidate)
+            if result:
+                return result
+
+        # 策略2：整个 content 就是 JSON
+        result = self._parse_tool_call_json(text)
+        if result:
+            return result
+
+        # 策略3：提取文本中第一个 {...} 块（处理前后有自然语言描述的情况）
+        brace_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text)
+        if brace_match:
+            candidate = brace_match.group(0)
+            result = self._parse_tool_call_json(candidate)
+            if result:
+                return result
+
+        return None
+
+    def _parse_tool_call_json(self, candidate: str) -> tuple[str, dict] | None:
+        """解析单个 JSON 字符串，判断是否为合法的工具调用结构。
+
+        合法结构必须满足：
+        1. 是合法的 JSON 对象
+        2. 包含 "name" 字段（字符串）
+        3. 包含 "arguments" 字段（字典）
+        4. name 对应的工具已在 ToolRegistry 中注册
+
+        Args:
+            candidate: 待解析的 JSON 字符串
+
+        Returns:
+            (tool_name, tool_args) 元组，不合法时返回 None
+        """
+        try:
+            data = json.loads(candidate)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        name = data.get("name")
+        arguments = data.get("arguments")
+
+        if not isinstance(name, str) or not name.strip():
+            return None
+        if not isinstance(arguments, dict):
+            return None
+
+        # 安全校验：只有已注册的工具才允许执行
+        if not self.tools.has(name):
+            logger.warning(f"[LOOP] ⚠️ 文本中解析到工具调用 '{name}'，但该工具未注册，忽略")
+            return None
+
+        logger.info(f"[LOOP] 🔍 从文本中解析到工具调用: name={name}, args={arguments}")
+        return (name, arguments)
+
     async def _fallback_exec_on_empty_response(
             self,
             user_text: str,
@@ -815,10 +910,85 @@ class AgentLoop:
     ) -> str | None:
         """当LLM没有触发tool_call时的回退处理。
 
+        场景0: LLM在回复文本中返回了 {"name": "xxx", "arguments": {...}} 格式的 JSON，
+               识别为工具调用并直接执行（最高优先级）。
         场景1: LLM返回空内容或'{}'，通过关键词推断命令执行。
         场景2: LLM在回复文本中包含了可执行命令（代码块），提取并自动执行。
         """
         content = (llm_content or "").strip()
+
+        # 场景0: 检测文本中的 JSON 工具调用结构，直接执行
+        parsed = self._try_parse_text_tool_call(content)
+        if parsed:
+            tool_name, tool_args = parsed
+            # 通过 _repair_tool_call 进行修正（兼容小模型输出）
+            tool_name, tool_args = self._repair_tool_call(tool_name, tool_args, user_text)
+            args_str = json.dumps(tool_args, ensure_ascii=False)
+            display_tool_name = tool_name
+            logger.info(f"[LOOP] 🔧 从文本解析到工具调用，直接执行: {tool_name}")
+            logger.info(f"[LOOP] 🔧 工具参数: {args_str[:500]}")
+
+            # 通知前端工具开始执行
+            if stream_callback:
+                tool_start_info = {
+                    "content": f"🔧 识别到工具调用，开始执行: {display_tool_name}\n工具参数: {args_str[:1000]}\n",
+                    "is_tool_call": True,
+                    "tool_args": tool_args,
+                    "tool_name": display_tool_name,
+                    "tool_status": "start",
+                }
+                if asyncio.iscoroutinefunction(stream_callback):
+                    await stream_callback(tool_start_info)
+                else:
+                    stream_callback(tool_start_info)
+
+            start_time = time.time()
+            try:
+                result = await self.tools.execute(tool_name, tool_args)
+                duration = time.time() - start_time
+                result_preview = str(result)[:300] if result else "(empty result)"
+                logger.info(f"[LOOP] 🔧 工具输出: {result_preview}...")
+                logger.info(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
+
+                # 通知前端工具执行完成
+                if stream_callback:
+                    tool_result_info = {
+                        "content": f"✅ 工具执行完成: {display_tool_name}\n执行结果: {result_preview}\n",
+                        "is_tool_call": True,
+                        "tool_name": display_tool_name,
+                        "tool_args": tool_args,
+                        "tool_status": "completed",
+                        "tool_result": result_preview,
+                    }
+                    if asyncio.iscoroutinefunction(stream_callback):
+                        await stream_callback(tool_result_info)
+                    else:
+                        stream_callback(tool_result_info)
+
+                return f"[工具: {tool_name}]\n{result}"
+
+            except Exception as e:
+                duration = time.time() - start_time
+                error_msg = f"工具执行失败: {str(e)}"
+                logger.error(f"[LOOP] ❌ {error_msg}")
+                logger.error(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
+
+                # 通知前端工具执行失败
+                if stream_callback:
+                    tool_error_info = {
+                        "content": f"❌ 工具执行失败: {display_tool_name}\n错误信息: {error_msg}\n",
+                        "is_tool_call": True,
+                        "tool_name": display_tool_name,
+                        "tool_args": tool_args,
+                        "tool_status": "error",
+                        "tool_error": error_msg,
+                    }
+                    if asyncio.iscoroutinefunction(stream_callback):
+                        await stream_callback(tool_error_info)
+                    else:
+                        stream_callback(tool_error_info)
+
+                return f"[工具: {tool_name}]\n{error_msg}"
 
         # 场景1: 空响应，尝试从用户输入推断命令
         if content in {"", "{}"}:

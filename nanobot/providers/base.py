@@ -49,6 +49,7 @@ class LLMProvider(ABC):
             model: str | None = None,
             max_tokens: int = 4096,
             temperature: float = 0.7,
+            tool_choice: str | dict[str, Any] | None = None,
     ) -> LLMResponse:
         """
         Send a chat completion request.
@@ -59,6 +60,10 @@ class LLMProvider(ABC):
             model: Model identifier (provider-specific).
             max_tokens: Maximum tokens in response.
             temperature: Sampling temperature.
+            tool_choice: 工具选择策略。可选值：
+                - None / "auto": LLM 自主决策是否调用工具
+                - "required": 强制 LLM 必须调用某个工具
+                - {"type": "function", "function": {"name": "xxx"}}: 强制调用指定工具
         
         Returns:
             LLMResponse with content and/or tool calls.

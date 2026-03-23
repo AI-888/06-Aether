@@ -905,7 +905,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
     if filtered_tool_names and len(filtered_tool_names) == 1:
         await websocket.send_text(
             f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
-            f"，正在调用工具 `{filtered_tool_names[0]}` ...\n\n"
+            f"，准备调用工具 `{filtered_tool_names[0]}` ...\n\n"
         )
     else:
         await websocket.send_text(

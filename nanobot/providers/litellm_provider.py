@@ -135,6 +135,7 @@ class LiteLLMProvider(LLMProvider):
             stream: bool = False,
             stream_callback: Callable | None = None,
             purpose: str = "general",
+            tool_choice: str | dict[str, Any] | None = None,
     ) -> LLMResponse:
         """
         Send a chat completion request via LiteLLM.
@@ -179,7 +180,8 @@ class LiteLLMProvider(LLMProvider):
 
         if tools:
             kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
+            # 外部传入的 tool_choice 优先；未传时默认 "auto"
+            kwargs["tool_choice"] = tool_choice if tool_choice is not None else "auto"
 
         # 记录LLM入参
         logger.info(f"[LLM] 调用模型: {model}")
