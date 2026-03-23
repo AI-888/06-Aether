@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
-
+from loguru import logger
 from nanobot.agent.tools.base import Tool
 from nanobot.agent.tools.k8s._utils import run_command
 
@@ -67,6 +67,8 @@ class KubectlGetPodsTool(Tool):
                 if exclude_kw:
                     safe_exclude = re.sub(r"[;|&`$<>\\]", "", exclude_kw)
                     cmd += f" | grep -v {safe_exclude}"
+        
+        logger.info(f"[{self.name}] 🔧 工具命令: {cmd}...")
 
         return await run_command(cmd)
 

@@ -787,22 +787,38 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         "timestamp": time.time(),
     }, ensure_ascii=False))
 
-    # ── Step 3: rerank 取 top1 ──
-    reranked_results = _rerank_route_candidates(user_input, skill_results)
-    top1 = reranked_results[0] if reranked_results else None
+    # ── Step 3a: 创建 skill_loader（filter 和后续步骤共用） ──
+    skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
+    skill_loader.load_all()
+
+    # ── Step 3b: 过滤被 SOP 包含的 Atomic Skill ──
+    from nanobot.rca.skill_filter import filter_redundant_atomic_skills
+    filtered_results = filter_redundant_atomic_skills(skill_results, skill_loader)
+    logger.info(
+        f"[WEB] Skill filter: {len(skill_results)} → {len(filtered_results)} "
+        f"(移除 {len(skill_results) - len(filtered_results)} 个冗余 Atomic)"
+    )
+
+    # ── Step 3c: 条件 rerank ──
+    if len(filtered_results) >= 2:
+        reranked_results = _rerank_route_candidates(user_input, filtered_results)
+        top1 = reranked_results[0] if reranked_results else None
+    else:
+        # 只剩 1 条或 0 条，跳过 rerank
+        top1 = filtered_results[0] if filtered_results else None
 
     if not top1:
         await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "Rerank 后无有效结果，无法执行该操作",
+            "content": "过滤/Rerank 后无有效结果，无法执行该操作",
             "knowledge_status": "no_results",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        await websocket.send_text("🔧 Skill 重排序后无有效结果，无法执行该操作。\n\n")
+        await websocket.send_text("🔧 Skill 过滤/重排序后无有效结果，无法执行该操作。\n\n")
         completion_message = {
             'type': 'stream_chunk',
             'content_type': 'completion',
@@ -817,26 +833,74 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
     matched_skill_name = top1_meta.get("skill_name", "")
     retrieval_markdown = _build_retrieval_context("Ops Skill Retrieval (Reranked Top1)", [top1], limit=1) or ""
 
-    # ── Step 4: 从 Skill YAML 中提取 type=tool 步骤引用的工具名 ──
-    skill_tool_names: list[str] = []
+    # ── Step 4: 获取 Skill 对象，按类型分发执行 ──
+    skill_obj = None
     try:
-        skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
-        skill_loader.load_all()
         skill_obj = skill_loader.get_skill(matched_skill_name)
-
-        if skill_obj:
-            if hasattr(skill_obj, "steps") and skill_obj.steps:
-                # SOP Skill：从 steps 中提取 type=tool 的步骤
-                for step in skill_obj.steps:
-                    if step.type.value == "tool" and step.tool:
-                        if step.tool not in skill_tool_names:
-                            skill_tool_names.append(step.tool)
-            elif hasattr(skill_obj, "tool") and skill_obj.tool:
-                # Atomic Skill：直接从 tool 字段提取
-                skill_tool_names.append(skill_obj.tool)
-            logger.info(f"[WEB] Skill '{matched_skill_name}' 引用的工具: {skill_tool_names}")
     except Exception as e:
-        logger.warning(f"[WEB] 从 Skill 提取工具列表失败: {e}")
+        logger.warning(f"[WEB] 获取 Skill '{matched_skill_name}' 失败: {e}")
+
+    if skill_obj and hasattr(skill_obj, "steps") and skill_obj.steps:
+        # ── SOP Skill：通过 RCA Engine 逐步执行 ──
+        logger.info(
+            f"[WEB] Skill '{matched_skill_name}' 是 SOP Skill "
+            f"({len(skill_obj.steps)} 步)，走 RCA Engine 逐步执行"
+        )
+
+        # 通知前端 rerank 结果
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "content_type": "knowledge",
+            "content": f"重排序完成，最佳匹配 SOP Skill: {matched_skill_name}",
+            "knowledge_status": "success",
+            "knowledge_count": 1,
+            "knowledge_result": retrieval_markdown,
+            "preview_items": [],
+            "timestamp": time.time(),
+        }, ensure_ascii=False))
+
+        await websocket.send_text(
+            f"🔧 匹配到运维 SOP Skill: **{matched_skill_name}**"
+            f"（共 {len(skill_obj.steps)} 步），开始逐步执行...\n\n"
+        )
+
+        try:
+            report = await _execute_rca_skill(
+                matched_skill_name, user_input, websocket, skill_loader=skill_loader,
+            )
+
+            if report:
+                # 发送 RCA 报告到前端
+                report_md = report.to_markdown()
+                await websocket.send_text(report_md + "\n")
+            else:
+                # Skill 执行失败，回退到 LLM 自由推理
+                await websocket.send_text("⚠️ SOP Skill 执行失败，回退到 LLM 自由推理...\n\n")
+                return await _run_agent_loop(user_input, websocket, None, None)
+
+        except Exception as e:
+            logger.error(f"[WEB] SOP Skill 执行异常: {e}")
+            await websocket.send_text(
+                f"⚠️ SOP Skill 执行异常: {str(e)}，回退到 LLM 自由推理...\n\n"
+            )
+            return await _run_agent_loop(user_input, websocket, None, None)
+
+        # 发送完成状态
+        completion_message = {
+            'type': 'stream_chunk',
+            'content_type': 'completion',
+            'content': '处理完成',
+            'is_completed': True,
+            'timestamp': time.time(),
+        }
+        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        return
+
+    # ── Atomic Skill / 无 steps 的 Skill：走 LLM loop 路径 ──
+    skill_tool_names: list[str] = []
+    if skill_obj and hasattr(skill_obj, "tool") and skill_obj.tool:
+        skill_tool_names.append(skill_obj.tool)
+    logger.info(f"[WEB] Skill '{matched_skill_name}' 引用的工具: {skill_tool_names}")
 
     # ── Step 5: 在全部已注册工具中筛选匹配的工具 ──
     registered_tool_names = agent_loop.tools.tool_names if agent_loop else []
@@ -864,28 +928,14 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
     }, ensure_ascii=False))
 
     # ── Step 7: 构建 Skill 上下文，传入 LLM loop ──
-    # 将 Skill 的完整描述和步骤作为 additional_context，
-    # 将筛选后的工具名作为 tool_names_filter。
-    # 当仅匹配到 1 个已注册工具时，强制 LLM 必须调用该工具（确定性执行）。
     skill_context_parts = [f"# 运维 Skill 参考: {matched_skill_name}"]
     if skill_obj:
         skill_context_parts.append(f"描述: {skill_obj.description}")
         skill_context_parts.append(f"类型: {skill_obj.type}")
-        if hasattr(skill_obj, "steps") and skill_obj.steps:
-            skill_context_parts.append("\n## 参考排查步骤:")
-            for i, step in enumerate(skill_obj.steps, 1):
-                step_desc = f"  {i}. [{step.type.value}] {step.id}"
-                if step.tool:
-                    step_desc += f" (工具: {step.tool})"
-                if step.prompt:
-                    prompt_preview = step.prompt.strip()[:120]
-                    step_desc += f"\n     提示: {prompt_preview}..."
-                skill_context_parts.append(step_desc)
-        elif hasattr(skill_obj, "tool") and skill_obj.tool:
+        if hasattr(skill_obj, "tool") and skill_obj.tool:
             skill_context_parts.append(f"\n## 绑定工具: {skill_obj.tool}")
         if filtered_tool_names:
             skill_context_parts.append(f"\n## 可用工具: {', '.join(filtered_tool_names)}")
-            # 当仅有 1 个已注册工具时，强制 LLM 必须调用该工具
             if len(filtered_tool_names) == 1:
                 tool_name = filtered_tool_names[0]
                 skill_context_parts.append(
@@ -1247,9 +1297,24 @@ async def process_troubleshooting_intent(
         "timestamp": time.time(),
     }, ensure_ascii=False))
 
-    # Step 3: rerank 取 top1
-    reranked_results = _rerank_route_candidates(user_input, skill_results)
-    top1 = reranked_results[0] if reranked_results else None
+    # Step 3a: 过滤被 SOP 包含的 Atomic Skill
+    from nanobot.rca.loader import RCASkillLoader
+    from nanobot.rca.skill_filter import filter_redundant_atomic_skills
+    skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
+    skill_loader.load_all()
+    filtered_results = filter_redundant_atomic_skills(skill_results, skill_loader)
+    logger.info(
+        f"[WEB] Skill filter: {len(skill_results)} → {len(filtered_results)} "
+        f"(移除 {len(skill_results) - len(filtered_results)} 个冗余 Atomic)"
+    )
+
+    # Step 3b: 条件 rerank
+    if len(filtered_results) >= 2:
+        reranked_results = _rerank_route_candidates(user_input, filtered_results)
+        top1 = reranked_results[0] if reranked_results else None
+    else:
+        # 只剩 1 条或 0 条，跳过 rerank
+        top1 = filtered_results[0] if filtered_results else None
 
     if not top1:
         await websocket.send_text(json.dumps({
@@ -1325,6 +1390,7 @@ async def _execute_rca_skill(
     skill_name: str,
     user_input: str,
     websocket: WebSocket,
+    skill_loader: "RCASkillLoader | None" = None,
 ) -> "RCAReport | None":
     """加载并执行指定的 RCA Skill。
 
@@ -1332,6 +1398,7 @@ async def _execute_rca_skill(
         skill_name: Skill 名称
         user_input: 用户原始输入（作为 Skill 的 description 输入）
         websocket: WebSocket 连接，用于流式通知
+        skill_loader: 外部已初始化的 RCASkillLoader（可选，不传则内部新建）
 
     Returns:
         RCA 报告，执行失败返回 None
@@ -1346,9 +1413,11 @@ async def _execute_rca_skill(
         from nanobot.rca.security import SecurityGuard
         from nanobot.rca.report import RCAReport
 
-        # 加载 Skill
-        skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
-        skill_loader.load_all()
+        # 复用外部传入的 skill_loader，或新建
+        if skill_loader is None:
+            skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
+            skill_loader.load_all()
+
         skill = skill_loader.get_skill(skill_name)
 
         if not skill:
@@ -1364,6 +1433,7 @@ async def _execute_rca_skill(
             tool_registry=agent_loop.tools,
             security_guard=security,
             audit_logger=audit,
+            skill_loader=skill_loader,
             model=config.rca.model or config.agents.defaults.model,
             max_step_timeout=config.rca.max_step_timeout,
             max_total_timeout=config.rca.max_total_timeout,

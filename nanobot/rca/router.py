@@ -264,15 +264,26 @@ class RCARouter:
         # 1. 尝试 RAG 向量检索
         if self.intent_store and hasattr(self.intent_store, "search_skills"):
             try:
-                results = self.intent_store.search_skills(query, limit=1)
+                results = self.intent_store.search_skills(query, limit=4)
                 if results:
-                    skill_name = results[0].get("metadata", {}).get(
-                        "skill_name", ""
+                    # filter: 移除被 SOP 包含的 Atomic Skill
+                    from nanobot.rca.skill_filter import filter_redundant_atomic_skills
+                    filtered = filter_redundant_atomic_skills(results, self.skill_loader)
+                    logger.info(
+                        f"[RCA-ROUTER] Skill filter: {len(results)} → {len(filtered)} "
+                        f"(移除 {len(results) - len(filtered)} 个冗余 Atomic)"
                     )
-                    if skill_name:
-                        skill = self.skill_loader.get_skill(skill_name)
-                        if skill:
-                            return skill
+                    # 条件 rerank：结果 >= 2 条才 rerank
+                    if len(filtered) >= 2:
+                        filtered = self._distance_sort(filtered)
+                    if filtered:
+                        skill_name = filtered[0].get("metadata", {}).get(
+                            "skill_name", ""
+                        )
+                        if skill_name:
+                            skill = self.skill_loader.get_skill(skill_name)
+                            if skill:
+                                return skill
             except Exception as e:
                 logger.warning(f"[RCA-ROUTER] RAG 检索失败: {e}")
 
@@ -327,6 +338,14 @@ class RCARouter:
 
         RCA_SKILL_MATCH_TOTAL.labels(matched="true").inc()
         return await self.engine.execute(skill, inputs)
+
+    @staticmethod
+    def _distance_sort(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """按向量距离排序（距离越小越相关）。"""
+        return sorted(
+            results,
+            key=lambda x: x.get("distance") if x.get("distance") is not None else 1e9,
+        )
 
     @staticmethod
     def _extract_content(response: Any) -> str:

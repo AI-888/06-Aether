@@ -369,6 +369,7 @@ class IntentRoutingStore:
             metas.append({
                 "source": "skill",
                 "skill_name": name,
+                "skill_type": skill_info.get("type", ""),   # "atomic" 或 "sop"
                 "version": skill_info.get("version", ""),
                 "file_path": skill_info.get("file_path", ""),
             })
@@ -423,7 +424,7 @@ class IntentRoutingStore:
         collection = self._get_or_create(self.skills_client, SKILLS_COLLECTION)
         return self._query_collection(collection, query, limit, operation="intent_routing_skills")
 
-    def register_skill(self, skill_name: str, doc_text: str) -> None:
+    def register_skill(self, skill_name: str, doc_text: str, skill_type: str = "") -> None:
         """注册单个 Skill 到向量索引。
 
         用于热加载时增量更新索引。
@@ -431,16 +432,17 @@ class IntentRoutingStore:
         Args:
             skill_name: Skill 名称
             doc_text: Skill 的可检索文本描述
+            skill_type: Skill 类型（"atomic" 或 "sop"）
         """
         collection = self._get_or_create(self.skills_client, SKILLS_COLLECTION)
         embeddings = self.embedder.embed_batch([doc_text])
         collection.upsert(
             ids=[f"skill::{skill_name}"],
             documents=[doc_text],
-            metadatas=[{"source": "skill", "skill_name": skill_name}],
+            metadatas=[{"source": "skill", "skill_name": skill_name, "skill_type": skill_type}],
             embeddings=embeddings,
         )
-        logger.debug(f"[ROUTING] Skill '{skill_name}' 已注册到向量索引")
+        logger.debug(f"[ROUTING] Skill '{skill_name}' (type={skill_type}) 已注册到向量索引")
 
     def remove_skill(self, skill_name: str) -> None:
         """从向量索引中移除 Skill。

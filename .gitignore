@@ -18,3 +18,4 @@ botpy.log
 models
 .*
 logs
+.agent

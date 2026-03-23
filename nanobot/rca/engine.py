@@ -369,11 +369,11 @@ class RCAEngine:
         tool_name = atomic.tool or atomic.name
 
         # 检查 Tool 是否存在于 ToolRegistry
-        if hasattr(self.tools, "has_tool"):
-            if not self.tools.has_tool(tool_name):
+        if hasattr(self.tools, "has"):
+            if not self.tools.has(tool_name):
                 raise ToolNotFoundError(step_id, tool_name)
-        elif hasattr(self.tools, "get_tool"):
-            if self.tools.get_tool(tool_name) is None:
+        elif hasattr(self.tools, "get"):
+            if self.tools.get(tool_name) is None:
                 raise ToolNotFoundError(step_id, tool_name)
 
         # 安全校验
@@ -381,6 +381,20 @@ class RCAEngine:
 
         # 通过 ToolRegistry 执行工具调用
         raw_result = await self.tools.execute(tool_name, params)
+
+        # 检查工具返回是否为错误信息
+        if isinstance(raw_result, str) and raw_result.startswith("Error:"):
+            logger.error(f"[RCA] 工具 '{tool_name}' 执行失败: {raw_result}")
+            # 区分错误类型：参数校验失败 vs 其他执行错误
+            if "missing required" in raw_result or "Invalid parameters" in raw_result:
+                raise RCAExecutionError(
+                    step_id,
+                    f"工具 '{tool_name}' 参数校验失败: {raw_result}",
+                )
+            raise RCAExecutionError(
+                step_id,
+                f"工具 '{tool_name}' 执行返回错误: {raw_result}",
+            )
 
         # 确保返回字典格式
         if isinstance(raw_result, str):

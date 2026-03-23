@@ -356,9 +356,11 @@ class RCASkillLoader:
 
             # 使用 IntentRoutingStore 的统一方法注册
             if hasattr(self.intent_store, "register_skill"):
+                skill_type_val = "atomic" if isinstance(skill, AtomicSkill) else "sop"
                 self.intent_store.register_skill(
                     skill_name=skill.name,
                     doc_text=doc_text,
+                    skill_type=skill_type_val,
                 )
                 logger.debug(
                     f"[RCA-LOADER] {skill_type} Skill '{skill.name}' 已注册到 RAG 索引"
