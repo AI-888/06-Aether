@@ -1,3 +1,4 @@
+from __future__ import annotations
 """QQ channel implementation using botpy SDK."""
 
 import asyncio

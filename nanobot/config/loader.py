@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Configuration loading utilities."""
 
 import json

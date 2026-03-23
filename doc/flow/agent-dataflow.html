@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aether Agent - 数据全流程</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --card-bg: #1a1a2e;
+    --card-border: #2d2d4a;
+    --accent-blue: #4f8ef7;
+    --accent-green: #42e695;
+    --accent-orange: #f7a84f;
+    --accent-purple: #a855f7;
+    --accent-red: #ef4444;
+    --accent-cyan: #22d3ee;
+    --accent-pink: #ec4899;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --glow-blue: rgba(79,142,247,0.25);
+    --glow-green: rgba(66,230,149,0.25);
+    --glow-orange: rgba(247,168,79,0.25);
+    --glow-purple: rgba(168,85,247,0.25);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* 背景粒子效果 */
+  .bg-particles {
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(79,142,247,0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(168,85,247,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, rgba(66,230,149,0.05) 0%, transparent 50%);
+  }
+  /* 顶部标题栏 */
+  .header {
+    position: relative; z-index:1;
+    text-align: center;
+    padding: 48px 20px 24px;
+  }
+  .header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple), var(--accent-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 1px;
+  }
+  .header .subtitle {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    margin-top: 8px;
+  }
+  /* 标签页导航 */
+  .tabs {
+    position: relative; z-index:1;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 20px 24px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    padding: 10px 24px;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .tab-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--text-primary);
+    box-shadow: 0 0 20px var(--glow-blue);
+  }
+  .tab-btn.active {
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 20px var(--glow-blue);
+  }
+  /* 内容区 */
+  .content {
+    position: relative; z-index:1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  /* 流程卡片 */
+  .flow-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    align-items: center;
+  }
+  .flow-card {
+    width: 100%;
+    max-width: 900px;
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    background: var(--card-bg);
+    padding: 28px 32px;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  .flow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .flow-card.highlight-blue { border-left: 4px solid var(--accent-blue); }
+  .flow-card.highlight-green { border-left: 4px solid var(--accent-green); }
+  .flow-card.highlight-orange { border-left: 4px solid var(--accent-orange); }
+  .flow-card.highlight-purple { border-left: 4px solid var(--accent-purple); }
+  .flow-card.highlight-red { border-left: 4px solid var(--accent-red); }
+  .flow-card.highlight-cyan { border-left: 4px solid var(--accent-cyan); }
+  .flow-card.highlight-pink { border-left: 4px solid var(--accent-pink); }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .card-icon {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+  }
+  .card-icon.blue { background: rgba(79,142,247,0.15); }
+  .card-icon.green { background: rgba(66,230,149,0.15); }
+  .card-icon.orange { background: rgba(247,168,79,0.15); }
+  .card-icon.purple { background: rgba(168,85,247,0.15); }
+  .card-icon.red { background: rgba(239,68,68,0.15); }
+  .card-icon.cyan { background: rgba(34,211,238,0.15); }
+  .card-icon.pink { background: rgba(236,72,153,0.15); }
+  .card-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+  .card-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .card-body {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.7;
+  }
+  .card-body code {
+    background: rgba(79,142,247,0.12);
+    color: var(--accent-cyan);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    font-size: 0.84rem;
+  }
+  .card-body .file-ref {
+    color: var(--accent-purple);
+    font-style: italic;
+    font-size: 0.82rem;
+  }
+  /* 连接箭头 */
+  .arrow-down {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 0;
+  }
+  .arrow-line {
+    width: 2px;
+    height: 24px;
+    background: linear-gradient(to bottom, var(--card-border), var(--accent-blue));
+  }
+  .arrow-head {
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 10px solid var(--accent-blue);
+  }
+  .arrow-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+  /* 分支箭头 */
+  .branch-container {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    gap: 16px;
+    position: relative;
+  }
+  .branch-card {
+    flex: 1;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+    padding: 20px 22px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  .branch-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  }
+  .branch-card.active-branch {
+    box-shadow: 0 0 24px var(--glow-blue);
+  }
+  .branch-label {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .branch-label.a-type { background: rgba(66,230,149,0.15); color: var(--accent-green); }
+  .branch-label.d-simple { background: rgba(79,142,247,0.15); color: var(--accent-blue); }
+  .branch-label.d-complex { background: rgba(247,168,79,0.15); color: var(--accent-orange); }
+  /* 数据标注 */
+  .data-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin: 2px 4px 2px 0;
+  }
+  .data-tag.input { background: rgba(79,142,247,0.12); color: var(--accent-blue); }
+  .data-tag.output { background: rgba(66,230,149,0.12); color: var(--accent-green); }
+  .data-tag.context { background: rgba(168,85,247,0.12); color: var(--accent-purple); }
+  .data-tag.tool { background: rgba(247,168,79,0.12); color: var(--accent-orange); }
+  .data-tag.ws { background: rgba(236,72,153,0.12); color: var(--accent-pink); }
+  /* Mermaid 图容器 */
+  .mermaid-wrapper {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 32px;
+    overflow-x: auto;
+  }
+  .mermaid-wrapper .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  /* 图例 */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    padding: 20px 0;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+  /* 详情面板 */
+  .detail-section {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .detail-section h4 {
+    font-size: 0.88rem;
+    color: var(--accent-cyan);
+    margin-bottom: 10px;
+  }
+  .detail-section ul {
+    list-style: none;
+    padding: 0;
+  }
+  .detail-section li {
+    padding: 4px 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    position: relative;
+    padding-left: 16px;
+  }
+  .detail-section li::before {
+    content: '›';
+    position: absolute;
+    left: 0;
+    color: var(--accent-blue);
+    font-weight: bold;
+  }
+  /* 统计信息 */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .stat-label {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  /* 响应式 */
+  @media (max-width: 768px) {
+    .branch-container { flex-direction: column; }
+    .header h1 { font-size: 1.6rem; }
+    .flow-card { padding: 20px; }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="bg-particles"></div>
+
+<div class="header">
+  <h1>🤖 Aether Agent — 数据全流程</h1>
+  <div class="subtitle">用户输入 → 意图识别 → Skill 匹配 → 工具调用 → 结果输出</div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="overview">📊 总览流程图</button>
+  <button class="tab-btn" data-tab="detail">📋 逐步详解</button>
+  <button class="tab-btn" data-tab="branches">🔀 三大分支</button>
+  <button class="tab-btn" data-tab="data">📦 数据流转</button>
+</div>
+
+<div class="content">
+
+<!-- ======================== Tab 1: 总览流程图 ======================== -->
+<div class="tab-panel active" id="tab-overview">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-blue)"></div> 用户交互</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-green)"></div> A 类 · 知识问答</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-orange)"></div> D-complex · RCA排障</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-purple)"></div> D-simple · 简单操作</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-cyan)"></div> Agent Loop</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-pink)"></div> WebSocket 推送</div>
+  </div>
+
+  <div class="mermaid-wrapper">
+    <div class="mermaid">
+flowchart TD
+    subgraph FE["🖥️ 前端 index.html"]
+        U["👤 用户输入消息"]
+        WS_SEND["📤 ws.send(message)"]
+        WS_RECV["📥 ws.onmessage 处理"]
+    end
+
+    subgraph WEB["🌐 WebSocket 后端 web.py"]
+        EP["🔌 /ws 端点<br/>websocket_endpoint"]
+        PROC["⚙️ process_user_message_streaming"]
+        
+        subgraph INTENT["🧠 Step 1: 意图识别"]
+            CI["classify_user_intent<br/>LLM 分类 → A / D"]
+        end
+
+        subgraph A_PATH["🟢 A 类: 知识问答"]
+            QA["process_qa_intent"]
+            KB["ChromaDB 知识库<br/>search_knowledge"]
+            LLM_QA["LLM 总结答案"]
+        end
+
+        subgraph D_SUB["🔍 Step 2: D 类子分类"]
+            DS["classify_d_sub_type<br/>LLM 分类 → simple / complex"]
+        end
+
+        subgraph D_SIMPLE["🟣 D-simple: 简单操作"]
+            OPS["process_ops_intent"]
+            SK_S["Skill 向量库检索"]
+            RR_S["Rerank Top1"]
+            TOOL_EX["提取 Skill 工具名"]
+            TOOL_FI["筛选已注册工具"]
+            CTX_BUILD["构建 Skill 上下文<br/>+ 强制工具调用指令"]
+        end
+
+        subgraph D_COMPLEX["🟠 D-complex: RCA 排障"]
+            TS["process_troubleshooting_intent"]
+            SK_C["Skill 向量库检索"]
+            RR_C["Rerank Top1"]
+            RCA["_execute_rca_skill<br/>RCAEngine 分步执行"]
+        end
+
+        AL["_run_agent_loop<br/>设置流式回调"]
+    end
+
+    subgraph AGENT["🤖 Agent Loop (loop.py)"]
+        PD["process_direct<br/>包装 InboundMessage"]
+        PM["_process_message"]
+        CB["ContextBuilder.build_messages<br/>系统提示 + additional_context + 用户输入"]
+        LLM["☁️ LLM Provider<br/>provider.chat(messages, tools)"]
+        TC{"🔧 has_tool_calls?"}
+        REPAIR["_repair_tool_call<br/>修复畸形调用"]
+        EXEC["tools.execute<br/>执行工具"]
+        FB["_fallback_exec_on_empty_response<br/>空响应回退"]
+        RESULT["📤 最终输出"]
+    end
+
+    U --> WS_SEND --> EP --> PROC --> CI
+    CI -->|"A"| QA
+    CI -->|"D"| DS
+
+    QA --> KB --> LLM_QA --> WS_RECV
+
+    DS -->|"simple"| OPS
+    DS -->|"complex"| TS
+
+    OPS --> SK_S --> RR_S --> TOOL_EX --> TOOL_FI --> CTX_BUILD --> AL
+
+    TS --> SK_C --> RR_C --> RCA --> WS_RECV
+
+    AL --> PD --> PM --> CB --> LLM
+    LLM --> TC
+    TC -->|"是"| REPAIR --> EXEC --> RESULT
+    TC -->|"否"| FB --> RESULT
+    RESULT --> WS_RECV
+
+    style FE fill:#1e1e3a,stroke:#4f8ef7,stroke-width:2px
+    style WEB fill:#1a1a2e,stroke:#a855f7,stroke-width:2px
+    style AGENT fill:#1a2e1a,stroke:#42e695,stroke-width:2px
+    style INTENT fill:#1e2a3a,stroke:#4f8ef7
+    style A_PATH fill:#1a2e1a,stroke:#42e695
+    style D_SUB fill:#2a1e3a,stroke:#a855f7
+    style D_SIMPLE fill:#2a1e3a,stroke:#a855f7
+    style D_COMPLEX fill:#2e2a1a,stroke:#f7a84f
+    style U fill:#4f8ef7,color:#fff
+    style LLM fill:#a855f7,color:#fff
+    style RCA fill:#f7a84f,color:#000
+    style EXEC fill:#42e695,color:#000
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value">3</div>
+      <div class="stat-label">处理管道 (A / D-simple / D-complex)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">2</div>
+      <div class="stat-label">LLM 意图分类调用</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">7</div>
+      <div class="stat-label">核心处理函数</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">1</div>
+      <div class="stat-label">单轮 Agent Loop 迭代</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== Tab 2: 逐步详解 ======================== -->
+<div class="tab-panel" id="tab-detail">
+  <div class="flow-container">
+
+    <div class="flow-card highlight-blue">
+      <div class="card-header">
+        <div class="card-icon blue">👤</div>
+        <div>
+          <div class="card-title">Step 0 — 用户输入</div>
+          <div class="card-subtitle">前端 index.html → WebSocket</div>
+        </div>
+      </div>
+      <div class="card-body">
+        用户在输入框输入消息，点击 Send 或按 Enter。前端通过 <code>ws.send(message)</code> 将纯文本发送到后端 <code>/ws</code> 端点。
+        <br><br>
+        <span class="data-tag input">📥 输入</span> 用户纯文本消息（string）<br>
+        <span class="data-tag ws">📡 协议</span> WebSocket 全双工通信
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div><div class="arrow-label">ws.receive_text()</div></div>
+
+    <div class="flow-card highlight-blue">
+      <div class="card-header">
+        <div class="card-icon blue">🔌</div>
+        <div>
+          <div class="card-title">Step 1 — WebSocket 入口</div>
+          <div class="card-subtitle">web.py → websocket_endpoint → process_user_message_streaming</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <code>websocket_endpoint</code> 接收消息后调用 <code>process_user_message_streaming(data, websocket)</code>。
+        初始化 <code>start_time</code>，发送 "🤖 AI Agent is processing..." 到前端。
+        <br><br>
+        <span class="data-tag input">📥 输入</span> <code>user_input: str</code>, <code>websocket: WebSocket</code><br>
+        <span class="data-tag ws">📡 推送</span> "🤖 AI Agent is processing your request..."
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div><div class="arrow-label">classify_user_intent()</div></div>
+
+    <div class="flow-card highlight-purple">
+      <div class="card-header">
+        <div class="card-icon purple">🧠</div>
+        <div>
+          <div class="card-title">Step 2 — 一级意图分类 (A / D)</div>
+          <div class="card-subtitle">web.py → classify_user_intent</div>
+        </div>
+      </div>
+      <div class="card-body">
+        构建意图分类 prompt，调用 <code>provider.chat()</code> 让 LLM 判断用户意图：
+        <br><br>
+        <strong>A = 知识问答</strong>：概念、原理、配置、参数、对比、选型<br>
+        <strong>D = 操作/排查</strong>：查看 Pod/日志、运维操作、故障排查、异常诊断
+        <br><br>
+        <span class="data-tag input">📥 输入</span> <code>intent_prompt</code>（含用户问题 + Few-shot 示例）<br>
+        <span class="data-tag output">📤 输出</span> <code>"A"</code> 或 <code>"D"</code><br>
+        <span class="data-tag context">⚙️ 参数</span> <code>temperature=0.1</code>, <code>max_tokens=1000</code><br>
+        <span class="data-tag ws">📡 推送</span> "🧠 正在识别用户意图..." → "✅ 用户意图识别: 问答类/操作类"
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div><div class="arrow-label">if intent == "D"</div></div>
+
+    <div class="flow-card highlight-purple">
+      <div class="card-header">
+        <div class="card-icon purple">🔍</div>
+        <div>
+          <div class="card-title">Step 3 — 二级子分类 (simple / complex)</div>
+          <div class="card-subtitle">web.py → classify_d_sub_type（仅 D 类触发）</div>
+        </div>
+      </div>
+      <div class="card-body">
+        当一级分类为 D 时，进一步用 LLM 判断操作复杂度：
+        <br><br>
+        <strong>simple</strong>：查看状态、获取信息、执行单命令<br>
+        <strong>complex</strong>：故障排查、异常分析、根因定位、多步诊断
+        <br><br>
+        <span class="data-tag input">📥 输入</span> <code>sub_type_prompt</code>（含 Few-shot 示例）<br>
+        <span class="data-tag output">📤 输出</span> <code>"simple"</code> 或 <code>"complex"</code><br>
+        <span class="data-tag ws">📡 推送</span> "🔍 正在判断操作复杂度..." → "✅ 操作类型: 简单操作/复杂操作"
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div><div class="arrow-label">路由到三大分支</div></div>
+
+    <div class="branch-container">
+      <div class="branch-card" style="border-top: 3px solid var(--accent-green);">
+        <div class="branch-label a-type">A 知识问答</div>
+        <div style="font-size:0.88rem; color:var(--text-secondary); line-height:1.6;">
+          <code>process_qa_intent</code><br>
+          → ChromaDB 知识库检索<br>
+          → LLM 基于原文生成答案<br>
+          → 流式输出到前端
+        </div>
+      </div>
+      <div class="branch-card" style="border-top: 3px solid var(--accent-purple);">
+        <div class="branch-label d-simple">D-simple 简单操作</div>
+        <div style="font-size:0.88rem; color:var(--text-secondary); line-height:1.6;">
+          <code>process_ops_intent</code><br>
+          → Skill 向量库检索 + Rerank<br>
+          → 提取&筛选工具<br>
+          → 构建强制调用上下文<br>
+          → Agent Loop 执行
+        </div>
+      </div>
+      <div class="branch-card" style="border-top: 3px solid var(--accent-orange);">
+        <div class="branch-label d-complex">D-complex RCA排障</div>
+        <div style="font-size:0.88rem; color:var(--text-secondary); line-height:1.6;">
+          <code>process_troubleshooting_intent</code><br>
+          → Skill 向量库检索 + Rerank<br>
+          → RCAEngine 分步执行<br>
+          → 逐步通知前端<br>
+          → 生成 RCA 报告
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ======================== Tab 3: 三大分支 ======================== -->
+<div class="tab-panel" id="tab-branches">
+
+  <!-- 分支 A -->
+  <h2 style="color:var(--accent-green); margin-bottom:20px;">🟢 分支 A：知识问答 (process_qa_intent)</h2>
+  <div class="mermaid-wrapper" style="margin-bottom:40px;">
+    <div class="mermaid">
+flowchart LR
+    A1["用户问题"] --> A2["ChromaDB<br/>search_knowledge<br/>return_scores=True"]
+    A2 --> A3{"有结果<br/>且得分合格?"}
+    A3 -->|"是"| A4["取 Top3 结果<br/>截断至4000字"]
+    A3 -->|"否"| A5["📭 回答'不知道'"]
+    A4 --> A6["构建 QA Prompt<br/>原文 + 用户问题"]
+    A6 --> A7["☁️ LLM 生成<br/>Markdown 格式答案"]
+    A7 --> A8["📤 流式输出<br/>到前端"]
+    
+    style A1 fill:#42e695,color:#000
+    style A7 fill:#a855f7,color:#fff
+    </div>
+  </div>
+
+  <!-- 分支 D-simple -->
+  <h2 style="color:var(--accent-purple); margin-bottom:20px;">🟣 分支 D-simple：简单操作 (process_ops_intent)</h2>
+  <div class="mermaid-wrapper" style="margin-bottom:40px;">
+    <div class="mermaid">
+flowchart TD
+    B1["用户问题"] --> B2["intent_routing_store<br/>.search_skills(limit=4)"]
+    B2 --> B3["_rerank_route_candidates<br/>取 Top1"]
+    B3 --> B4["从 Skill YAML 提取<br/>type=tool 的工具名"]
+    B4 --> B5["在 agent_loop.tools<br/>筛选已注册工具"]
+    B5 --> B6{"筛选后<br/>工具数量?"}
+    
+    B6 -->|"= 1"| B7["🔒 强制调用模式<br/>构建【重要指令】<br/>必须立即调用工具"]
+    B6 -->|"> 1"| B8["🤔 自主决策模式<br/>LLM 自行选择工具"]
+    B6 -->|"= 0"| B9["无工具可用<br/>LLM 自由推理"]
+    
+    B7 --> B10["_run_agent_loop<br/>additional_context + tool_names_filter"]
+    B8 --> B10
+    B9 --> B10
+    
+    B10 --> B11["process_direct → _process_message"]
+    B11 --> B12["build_messages<br/>系统提示 + additional_context"]
+    B12 --> B13["☁️ LLM<br/>provider.chat(messages, tools)"]
+    B13 --> B14{"has_tool_calls?"}
+    B14 -->|"是"| B15["_repair_tool_call<br/>→ tools.execute"]
+    B14 -->|"否"| B16["_fallback_exec<br/>提取命令自动执行"]
+    B15 --> B17["📤 拼接结果输出"]
+    B16 --> B17
+    
+    style B1 fill:#a855f7,color:#fff
+    style B7 fill:#42e695,color:#000
+    style B13 fill:#a855f7,color:#fff
+    style B15 fill:#f7a84f,color:#000
+    </div>
+  </div>
+
+  <!-- 分支 D-complex -->
+  <h2 style="color:var(--accent-orange); margin-bottom:20px;">🟠 分支 D-complex：RCA 排障 (process_troubleshooting_intent)</h2>
+  <div class="mermaid-wrapper">
+    <div class="mermaid">
+flowchart TD
+    C1["用户问题"] --> C2["intent_routing_store<br/>.search_skills(limit=4)"]
+    C2 --> C3["_rerank_route_candidates<br/>取 Top1"]
+    C3 --> C4["_execute_rca_skill"]
+    C4 --> C5["RCASkillLoader<br/>加载 Skill YAML"]
+    C5 --> C6["RCAEngine.execute<br/>分步执行 Skill"]
+    
+    C6 --> C7["Step 1: type=tool<br/>调用 k8s 工具"]
+    C7 --> C8["Step 2: type=llm<br/>LLM 分析结果"]
+    C8 --> C9["Step N: ..."]
+    
+    C9 --> C10["生成 RCAReport<br/>to_markdown()"]
+    C10 --> C11["📤 输出报告"]
+    
+    C6 -.->|"每步回调"| CB["rca_stream_callback<br/>实时通知前端"]
+    
+    style C1 fill:#f7a84f,color:#000
+    style C6 fill:#f7a84f,color:#000
+    style C10 fill:#42e695,color:#000
+    </div>
+  </div>
+</div>
+
+<!-- ======================== Tab 4: 数据流转 ======================== -->
+<div class="tab-panel" id="tab-data">
+  <div class="flow-container">
+
+    <div class="flow-card highlight-blue">
+      <div class="card-header">
+        <div class="card-icon blue">📦</div>
+        <div><div class="card-title">① 前端 → 后端：用户消息</div></div>
+      </div>
+      <div class="card-body">
+        <span class="data-tag input">类型</span> 纯文本 string<br>
+        <span class="data-tag ws">传输</span> WebSocket <code>ws.send(message)</code><br>
+        <span class="data-tag context">示例</span> <code>"查看 rocketmq broker pod"</code>
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="flow-card highlight-purple">
+      <div class="card-header">
+        <div class="card-icon purple">📦</div>
+        <div><div class="card-title">② 意图分类请求 → LLM</div></div>
+      </div>
+      <div class="card-body">
+        <span class="data-tag input">类型</span> <code>messages: list[dict]</code><br>
+        <span class="data-tag context">内容</span> <code>[{"role": "user", "content": intent_prompt}]</code><br>
+        <span class="data-tag tool">参数</span> <code>model</code>, <code>max_tokens=1000</code>, <code>temperature=0.1</code><br>
+        <span class="data-tag output">返回</span> <code>"A"</code> 或 <code>"D"</code>
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="flow-card highlight-green">
+      <div class="card-header">
+        <div class="card-icon green">📦</div>
+        <div><div class="card-title">③ Skill 向量库检索</div></div>
+      </div>
+      <div class="card-body">
+        <span class="data-tag input">输入</span> <code>user_input: str</code>, <code>limit=4</code><br>
+        <span class="data-tag output">输出</span> <code>list[dict]</code>：<code>[{text, metadata: {skill_name, description, ...}}]</code><br>
+        <span class="data-tag context">后处理</span> <code>_rerank_route_candidates()</code> → 取 Top1
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="flow-card highlight-orange">
+      <div class="card-header">
+        <div class="card-icon orange">📦</div>
+        <div><div class="card-title">④ Skill 上下文构建 (additional_context)</div></div>
+      </div>
+      <div class="card-body">
+        <span class="data-tag context">内容结构</span>
+        <div class="detail-section">
+          <ul>
+            <li><code># 运维 Skill 参考: get_rocketmq_pods</code></li>
+            <li><code>描述: 获取 RocketMQ 相关 Pod 列表</code></li>
+            <li><code>类型: sop</code></li>
+            <li><code>## 参考排查步骤:</code> 各步骤 type / tool / prompt</li>
+            <li><code>## 可用工具: kubectl_get_pods</code></li>
+            <li><code>## 【重要指令】 必须立即调用 kubectl_get_pods</code> <span class="data-tag tool">仅单工具时</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="flow-card highlight-cyan">
+      <div class="card-header">
+        <div class="card-icon cyan">📦</div>
+        <div><div class="card-title">⑤ Agent Loop 消息组装</div></div>
+      </div>
+      <div class="card-body">
+        <code>ContextBuilder.build_messages()</code> 构建最终 LLM 请求：
+        <div class="detail-section">
+          <h4>messages 数组结构</h4>
+          <ul>
+            <li><strong>[0] system</strong>: <code>build_system_prompt()</code> + <code>"\n\n## Additional Context\n{additional_context}"</code></li>
+            <li><strong>[1] user</strong>: 用户原始输入文本</li>
+          </ul>
+          <h4 style="margin-top:12px;">tools 数组</h4>
+          <ul>
+            <li>通过 <code>tool_names_filter</code> 筛选：<code>get_definitions_by_names(filter)</code></li>
+            <li>每个工具包含 <code>name</code>, <code>description</code>, <code>parameters</code> (JSON Schema)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="flow-card highlight-pink">
+      <div class="card-header">
+        <div class="card-icon pink">📦</div>
+        <div><div class="card-title">⑥ LLM 响应 → 工具执行 → 结果</div></div>
+      </div>
+      <div class="card-body">
+        <span class="data-tag output">LLM 响应</span> <code>response.content</code> + <code>response.tool_calls</code><br><br>
+        
+        <strong>若有 tool_calls：</strong><br>
+        <code>_repair_tool_call()</code> → <code>tools.execute(name, args)</code> → 拼接结果<br><br>
+        
+        <strong>若无 tool_calls：</strong><br>
+        <code>_fallback_exec_on_empty_response()</code> → 推断命令 / 提取代码块自动执行<br><br>
+
+        <span class="data-tag ws">📡 流式推送</span> 通过 <code>stream_callback</code> 实时发送 JSON 到前端：
+        <div class="detail-section">
+          <ul>
+            <li><code>type: "stream_chunk"</code></li>
+            <li><code>content_type: "tool" | "text" | "reasoning" | "completion"</code></li>
+            <li><code>tool_name</code>, <code>tool_status</code>, <code>tool_result</code>, <code>tool_args</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="flow-card highlight-green">
+      <div class="card-header">
+        <div class="card-icon green">📦</div>
+        <div><div class="card-title">⑦ 最终输出 → 前端渲染</div></div>
+      </div>
+      <div class="card-body">
+        <span class="data-tag output">最终文本</span> <code>response</code> 通过 <code>websocket.send_text()</code> 发送<br>
+        <span class="data-tag ws">完成信号</span> <code>{"type":"stream_chunk","content_type":"completion","is_completed":true}</code><br><br>
+        前端 <code>ws.onmessage</code> 根据 <code>content_type</code> 分类渲染：
+        <div class="detail-section">
+          <ul>
+            <li><strong>tool</strong> → 工具调用卡片（开始/成功/失败）</li>
+            <li><strong>knowledge</strong> → 知识库检索状态</li>
+            <li><strong>text</strong> → Markdown 渲染</li>
+            <li><strong>completion</strong> → 恢复输入框可用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- end .content -->
+
+<script>
+  // 初始化 Mermaid
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#2d2d4a',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#4f8ef7',
+      lineColor: '#4f8ef7',
+      secondaryColor: '#1a2e1a',
+      tertiaryColor: '#2e2a1a',
+      fontFamily: 'Segoe UI, PingFang SC, sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: {
+      curve: 'basis',
+      padding: 20,
+      useMaxWidth: true,
+    }
+  });
+
+  // Tab 切换
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

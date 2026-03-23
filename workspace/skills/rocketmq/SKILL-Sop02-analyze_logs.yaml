@@ -1,0 +1,154 @@
+# RocketMQ SOP 技能：分析日志并识别错误模式
+skill:
+  # 技能名称：用于分析 RocketMQ 组件日志，识别错误模式并输出根因建议
+  name: analyze_rocketmq_logs
+  
+  # 技能版本号
+  version: "1.0"
+  
+  # 技能类型：sop 表示标准操作流程（由多个步骤组成的复合技能）
+  type: sop
+
+  # 技能描述：说明该技能的功能
+  description: |
+    分析 RocketMQ 组件日志，识别错误模式、异常 log 并输出根因建议
+    
+    使用场景：用户询问 "分析日志"、"日志报错原因"、"Broker 日志异常分析"、
+    "查找 ERROR 根因"、"日志中有什么错误"、"分析 log 错误模式"、"日志排障" 等
+
+  # 输入参数定义：定义该技能需要的输入参数及其类型
+  input_schema:
+    namespace: string
+    component_keyword: string
+    log_path: string
+    log_keyword: string
+    exclude_keywords: string
+    lines: number
+
+  # 输出参数定义：定义该技能返回的结果数据结构
+  output_schema:
+    summary: string
+    root_cause: string
+    recommendation: string
+    priority: string
+    confidence: float
+    need_more_check: boolean
+
+  # 执行步骤（按顺序执行）
+  execution:
+    steps:
+
+    # 步骤1：获取日志内容
+    - id: get_logs
+      type: skill
+      skill: get_rocketmq_logs
+      input:
+        namespace: "{{namespace}}"
+        component_keyword: "{{component_keyword}}"
+        log_path: "{{log_path}}"
+        log_keyword: "{{log_keyword}}"
+        exclude_keywords: "{{exclude_keywords}}"
+        lines: "{{lines}}"
+
+    # 步骤2：分析日志内容
+    - id: analyze_logs
+      type: llm
+      input_from:
+        - get_logs.log_content
+      prompt: |
+        分析 RocketMQ 组件的日志内容，提取关键错误信息和异常模式。
+
+        日志内容:
+        {{log_content}}
+
+        请分析并输出JSON格式:
+        {
+          "error_count": "错误数量统计",
+          "error_types": "发现的错误类型列表（如 ERROR、WARN、Exception 等）",
+          "critical_errors": "关键错误详情（包含时间戳、错误信息）",
+          "error_patterns": "错误模式分析（如重复错误、关联错误）",
+          "suggestions": "初步排查建议"
+        }
+      output_schema:
+        error_count: string
+        error_types: string
+        critical_errors: string
+        error_patterns: string
+        suggestions: string
+
+    # 步骤3：根据错误类型确定根本原因
+    - id: determine_log_issue
+      type: root_cause_definition
+      logic:
+        - when:
+            error_types: "OutOfMemoryError"
+          root_cause: "JVM 内存溢出"
+          solution: |
+            检查 JVM 堆内存配置 (-Xmx)
+            分析 heap dump 查找内存泄漏
+            考虑增加内存限制
+
+        - when:
+            error_types: "Connection refused"
+          root_cause: "服务连接失败，可能是目标服务未启动或端口不通"
+          solution: |
+            检查目标服务状态
+            检查网络连通性
+            检查防火墙规则
+
+        - when:
+            error_types: "DiskQuotaExhausted"
+          root_cause: "磁盘空间不足"
+          solution: |
+            清理日志文件和过期数据
+            检查 commitlog 目录大小
+            考虑扩容磁盘
+
+        - when:
+            error_types: "HAConnectionNotReady"
+          root_cause: "Broker 主从同步异常"
+          solution: |
+            检查主从 Broker 网络连接
+            检查 haListenPort 端口
+            查看 Broker 配置是否一致
+
+    # 步骤4：生成最终报告
+    - id: conclusion
+      type: llm
+      input_from:
+        - get_logs.log_content
+        - analyze_logs.error_count
+        - analyze_logs.critical_errors
+        - determine_log_issue.root_cause
+        - determine_log_issue.solution
+      prompt: |
+        根据 RocketMQ 日志分析结果生成最终报告。
+
+        日志摘要:
+        - 错误数量: {{error_count}}
+        - 关键错误: {{critical_errors}}
+        - 根因分析: {{root_cause}}
+        - 建议方案: {{solution}}
+
+        请输出JSON格式:
+        {
+          "summary": "问题概述",
+          "root_cause": "根本原因",
+          "recommendation": "修复建议",
+          "priority": "处理优先级（高/中/低）"
+        }
+      output_schema:
+        summary: string
+        root_cause: string
+        recommendation: string
+        priority: string
+
+  # 策略配置
+  policy:
+    timeout: 30
+    retry: 1
+
+  # 信号配置
+  signal:
+    enable_confidence: true
+    enable_fallback: true

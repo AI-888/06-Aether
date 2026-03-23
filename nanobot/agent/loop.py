@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Agent loop: the core processing engine."""
 
 import asyncio
@@ -135,7 +136,12 @@ class AgentLoop:
         self._register_rca_tools()
 
     def _register_rca_tools(self) -> None:
-        """条件注册 RCA（根因分析）相关工具。"""
+        """条件注册 RCA（根因分析）相关工具。
+
+        完整初始化链路：
+        SecurityGuard → AuditLogger → RCASkillLoader → RuleMatchEngine
+        → IntentClassifier → RCAEngine → RCARouter → 注册 Tool
+        """
         try:
             from nanobot.config import load_config
             config = load_config()
@@ -146,8 +152,10 @@ class AgentLoop:
 
             from nanobot.rca.audit import AuditLogger
             from nanobot.rca.engine import RCAEngine
+            from nanobot.rca.intent import IntentClassifier
             from nanobot.rca.loader import RCASkillLoader
             from nanobot.rca.router import RCARouter
+            from nanobot.rca.rule_engine import RuleMatchEngine
             from nanobot.rca.security import SecurityGuard
 
             # 初始化安全校验层
@@ -156,8 +164,20 @@ class AgentLoop:
             # 初始化审计日志
             audit = AuditLogger(log_dir=config.rca.audit_log_dir)
 
-            # 初始化 Skill 加载器
-            skill_loader = RCASkillLoader(skill_dir=config.rca.skill_dir)
+            # 初始化 IntentRoutingStore（RAG 向量检索）
+            intent_routing_store = None
+            try:
+                from nanobot.knowledge.intent_routing_store import get_intent_routing_store
+                intent_routing_store = get_intent_routing_store(self.workspace, config)
+                logger.info("[RCA] IntentRoutingStore 已初始化")
+            except Exception as e:
+                logger.warning(f"[RCA] IntentRoutingStore 初始化失败，RAG 检索不可用: {e}")
+
+            # 初始化 Skill 加载器（传入 intent_routing_store 用于 RAG 注册）
+            skill_loader = RCASkillLoader(
+                skill_dir=config.rca.skill_dir,
+                intent_routing_store=intent_routing_store,
+            )
             loaded_count = skill_loader.load_all()
             logger.info(f"[RCA] 已加载 {loaded_count} 个 RCA Skill")
 
@@ -165,21 +185,44 @@ class AgentLoop:
             if config.rca.hot_reload:
                 skill_loader.start_watcher()
 
-            # 初始化执行引擎
+            # 初始化规则匹配引擎，加载 intent_rules 配置
+            rule_engine = RuleMatchEngine()
+            if config.rca.intent_rules:
+                rule_engine.load_rules(config.rca.intent_rules)
+                logger.info(
+                    f"[RCA] 已加载 {rule_engine.rule_count} 条意图匹配规则, "
+                    f"覆盖 Skill: {rule_engine.skill_names}"
+                )
+
+            # 初始化意图分类器（两阶段：规则匹配 → LLM 备用）
+            rca_model = config.rca.model or self.model
+            intent_classifier = IntentClassifier(
+                rule_engine=rule_engine,
+                provider=self.provider,
+                skill_names=skill_loader.list_skill_names(),
+                model=rca_model,
+            )
+
+            # 初始化执行引擎（传入 skill_loader 以支持 skill 步骤执行）
             engine = RCAEngine(
                 provider=self.provider,
                 tool_registry=self.tools,
                 security_guard=security,
                 audit_logger=audit,
-                model=config.rca.model or self.model,
+                skill_loader=skill_loader,
+                model=rca_model,
                 max_step_timeout=config.rca.max_step_timeout,
                 max_total_timeout=config.rca.max_total_timeout,
             )
 
-            # 初始化路由控制器
+            # 初始化路由控制器（传入 intent_classifier + intent_store）
             router = RCARouter(
                 skill_loader=skill_loader,
                 engine=engine,
+                intent_classifier=intent_classifier,
+                intent_store=intent_routing_store,
+                provider=self.provider,
+                model=rca_model,
             )
 
             # 注册工具

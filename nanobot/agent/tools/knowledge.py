@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Knowledge base tools for storing and retrieving domain-specific knowledge."""
 
 import json
@@ -6,15 +7,21 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from nanobot.agent.tools.base import Tool
-from nanobot.config.loader import load_config
-from nanobot.knowledge.store_factory import get_chroma_store
-from nanobot.knowledge.store import DomainKnowledgeManager
 
 
 def _create_chroma_store_with_config(workspace: Path):
     """创建或复用带有正确配置的 ChromaKnowledgeStore 实例."""
+    from nanobot.config.loader import load_config
+    from nanobot.knowledge.store_factory import get_chroma_store
+
     config = load_config()
     return get_chroma_store(workspace, cfg=config)
+
+
+def _get_domain_knowledge_manager():
+    """延迟导入 DomainKnowledgeManager 以避免 chromadb 依赖问题。"""
+    from nanobot.knowledge.store import DomainKnowledgeManager
+    return DomainKnowledgeManager
 
 
 class KnowledgeSearchTool(Tool):
@@ -68,6 +75,7 @@ class KnowledgeSearchTool(Tool):
         """Search knowledge base."""
         try:
             from loguru import logger
+            from nanobot.config.loader import load_config
             config = load_config()
 
             logger.info(f"[KNOWLEDGE] 🔍 Search request:")
@@ -223,6 +231,7 @@ class KnowledgeAddTool(Tool):
                       preview_available: bool = True) -> str:
         """Add knowledge to the knowledge base."""
         try:
+            from nanobot.config.loader import load_config
             config = load_config()
             workspace = Path(config.agents.defaults.workspace)
 
@@ -312,11 +321,13 @@ class DomainKnowledgeTool(Tool):
                       admin_api: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
         """Execute domain knowledge action."""
         try:
+            from nanobot.config.loader import load_config
             config = load_config()
             workspace = Path(config.agents.defaults.workspace)
 
             # Use ChromaKnowledgeStore for vector-based knowledge storage
             store = _create_chroma_store_with_config(workspace)
+            DomainKnowledgeManager = _get_domain_knowledge_manager()
             domain_manager = DomainKnowledgeManager(store, "rocketmq")
 
             if action == "search_troubleshooting":
@@ -416,6 +427,7 @@ class KnowledgeExportTool(Tool):
     async def execute(self, domain: Optional[str] = None, format: str = "json") -> str:
         """Export knowledge base."""
         try:
+            from nanobot.config.loader import load_config
             config = load_config()
             workspace = Path(config.agents.defaults.workspace)
 

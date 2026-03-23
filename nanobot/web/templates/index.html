@@ -60,6 +60,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            position: relative;
         }
 
         .chat-header {
@@ -719,6 +720,42 @@
             animation: pulse 1.5s infinite;
         }
 
+        /* "回到底部"浮动按钮 */
+        .scroll-to-bottom-btn {
+            position: absolute;
+            bottom: 16px;
+            right: 24px;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+            z-index: 50;
+            transition: all 0.25s ease;
+            animation: scrollBtnFadeIn 0.25s ease-out;
+        }
+
+        .scroll-to-bottom-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 22px rgba(99, 102, 241, 0.55);
+        }
+
+        .scroll-to-bottom-btn.visible {
+            display: flex;
+        }
+
+        @keyframes scrollBtnFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         /* AI消息wrapper样式简化 - 保留用户消息兼容 */
         .message.ai .message-wrapper {
             justify-content: flex-start;
@@ -760,6 +797,9 @@
             </div>
         </div>
 
+        <!-- 回到底部浮动按钮 -->
+        <button class="scroll-to-bottom-btn" id="scrollToBottomBtn" onclick="forceScrollToBottom()" title="回到最新消息">⬇</button>
+
         <div class="input-container">
             <div class="input-wrapper">
                 <input autocomplete="off" id="messageInput" placeholder="Ask me about rocketmq..." type="text">
@@ -778,10 +818,46 @@
     const sendButton = document.getElementById("sendButton");
     let isTyping = false;
     let isProcessing = false; // 标记是否正在处理请求
+    let userScrolledUp = false; // 标记用户是否手动上滑
+    const SCROLL_THRESHOLD = 60; // 距底部多少px以内视为"在底部"
 
-    // Auto-scroll to bottom
+    // 检测用户是否已滚动到底部附近
+    function isNearBottom() {
+        return messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < SCROLL_THRESHOLD;
+    }
+
+    // 监听滚动事件，检测用户手动上滑
+    messagesDiv.addEventListener('scroll', function() {
+        if (isNearBottom()) {
+            userScrolledUp = false;
+            hideScrollToBottomBtn();
+        } else {
+            userScrolledUp = true;
+            showScrollToBottomBtn();
+        }
+    });
+
+    // Auto-scroll to bottom（仅在用户未手动上滑时生效）
     function scrollToBottom() {
+        if (!userScrolledUp) {
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    }
+
+    // 强制滚动到底部（用于用户点击"回到底部"按钮）
+    function forceScrollToBottom() {
+        userScrolledUp = false;
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        hideScrollToBottomBtn();
+    }
+
+    // "回到底部"按钮的显示/隐藏
+    const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
+    function showScrollToBottomBtn() {
+        if (scrollToBottomBtn) scrollToBottomBtn.classList.add('visible');
+    }
+    function hideScrollToBottomBtn() {
+        if (scrollToBottomBtn) scrollToBottomBtn.classList.remove('visible');
     }
 
     // Add user message
@@ -1980,6 +2056,10 @@
             isProcessing = true; // 标记为正在处理
             sendButton.disabled = true; // 禁用发送按钮
             messageInput.disabled = true; // 禁用输入框
+
+            // 发送新消息时重置滚动状态，确保用户能看到回复
+            userScrolledUp = false;
+            hideScrollToBottomBtn();
 
             addUserMessage(message);
             showTypingIndicator();

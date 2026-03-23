@@ -1,10 +1,14 @@
+from __future__ import annotations
 """Web interface for nanobot with intent classification."""
 
 from pathlib import Path
 from typing import Any
+import os
+import yaml as yaml_lib
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
+from pydantic import BaseModel
 from loguru import logger
 
 from nanobot.agent import AgentLoop
@@ -422,14 +426,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
 async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
     """
-    使用LLM对用户意图进行分类
-    
+    使用LLM对用户意图进行分类（A/D 两级分类）
+
     Args:
         user_input: 用户输入
         websocket: WebSocket连接
-        
+
     Returns:
-        'A' 表示知识问答，'B' 表示运维操作，'C' 表示故障排查
+        'A' 表示知识问答，'D' 表示操作/排查请求
     """
     intent_prompt = f"""
     你是一个意图分类器。
@@ -437,13 +441,10 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
     任务：根据用户问题判断意图，只输出一个字母：
 
     A = 知识问答
-    概念、原理、配置、参数、教程、文档、对比、选型
+    概念、原理、配置、参数、教程、文档、对比、选型等纯知识类问题
 
-    B = 运维查询
-    查询当前系统状态，例如 pod、日志、集群状态、运行情况
-
-    C = 故障排查
-    系统报错、异常、超时、连接失败、消息积压等问题
+    D = 操作/排查请求
+    查询系统状态、查看 pod/日志/集群、运维操作、故障排查、报错分析、异常诊断等需要实际操作或分步排查的问题
 
     示例：
 
@@ -453,22 +454,28 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
     Q: kafka 和 rocketmq 区别
     A
 
+    Q: rocketmq 消息类型有哪些
+    A
+
     Q: 查看 rocketmq broker pod
-    B
+    D
 
     Q: 查询 broker 日志
-    B
+    D
 
     Q: rocketmq 消息积压怎么办
-    C
+    D
 
     Q: broker 报 timeout 错误
-    C
+    D
+
+    Q: 帮我重启 broker
+    D
 
     用户问题：
     {user_input}
 
-    只输出 A、B 或 C：
+    只输出 A 或 D：
     """
 
     try:
@@ -483,7 +490,7 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
         response = await provider.chat(
             messages=[{"role": "user", "content": intent_prompt}],
             model=config.agents.defaults.model,
-            max_tokens=1000,  # 只需要返回A/B/C
+            max_tokens=1000,  # 只需要返回 A/D
             temperature=0.1,  # 低温度确保稳定输出
             purpose="intent_classification",
         )
@@ -491,15 +498,11 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
         intent = response.content.strip().upper()
 
         # 验证返回结果
-        if intent not in ['A', 'B', 'C']:
+        if intent not in ['A', 'D']:
             await websocket.send_text(f"⚠️ 意图识别结果异常: {intent}，默认为问答类\n")
             return "A"
 
-        intent_type = "问答类"
-        if intent == "B":
-            intent_type = "运维操作类"
-        if intent == "C":
-            intent_type = "排障类"
+        intent_type = "问答类" if intent == "A" else "操作/排查类"
 
         await websocket.send_text(f"✅ 用户意图识别: {intent_type} ({intent})\n\n")
 
@@ -528,20 +531,108 @@ async def process_user_message_streaming(user_input: str, websocket: WebSocket):
     # 第一步：用户意图识别
     user_intent = await classify_user_intent(user_input, websocket)
 
-    # 根据意图决定处理流程
+    # 根据意图决定处理流程（A/D 两级分类）
     if user_intent == "A":
-        # 问答类：查询知识库
+        # A 类：知识问答 → 查询知识库
         await process_qa_intent(user_input, websocket, start_time)
-    elif user_intent == "B":
-        # 运维操作：查 tools 索引 top2，作为系统补充上下文进入 loop
-        await process_ops_intent(user_input, websocket, start_time)
-    elif user_intent == "C":
-        # 故障排查：查 skills 索引 top2，作为系统补充上下文进入 loop
-        await process_troubleshooting_intent(user_input, websocket, start_time)
+    elif user_intent == "D":
+        # D 类：操作/排查请求 → 统一进入 Skill 执行流程
+        # D 类内部子分类：简单操作 → 搜索原子 Skill；复杂操作（RCA分析）→ 搜索 SOP Skill
+        sub_type = await classify_d_sub_type(user_input, websocket)
+        if sub_type == "simple":
+            # 简单操作：搜索原子 Skill（查 tools 索引），提取工具后进入 LLM loop
+            await process_ops_intent(user_input, websocket, start_time)
+        else:
+            # 复杂操作（RCA分析）：搜索 SOP Skill，执行分步诊断
+            await process_troubleshooting_intent(user_input, websocket, start_time)
     else:
         # 非法值默认 A
         await websocket.send_text(f"⚠️ 意图值非法: {user_intent}，默认按 A 问答类处理\n")
         await process_qa_intent(user_input, websocket, start_time)
+
+
+async def classify_d_sub_type(user_input: str, websocket: WebSocket) -> str:
+    """
+    D 类意图的子分类：区分简单操作和复杂操作（RCA分析）
+
+    Args:
+        user_input: 用户输入
+        websocket: WebSocket连接
+
+    Returns:
+        'simple' 表示简单操作（查状态/执行命令），'complex' 表示复杂操作（故障排查/RCA分析）
+    """
+    sub_type_prompt = f"""
+    你是一个运维操作分类器。用户的问题已被识别为操作/排查类，现在需要进一步判断操作的复杂程度。
+
+    任务：根据用户问题判断是简单操作还是复杂操作，只输出一个词：
+
+    simple = 简单操作
+    查看状态、获取信息、执行单个命令、查询 pod/日志/配置/指标等
+
+    complex = 复杂操作（RCA分析）
+    故障排查、异常分析、根因定位、多步骤诊断、消息积压分析、性能问题排查等
+
+    示例：
+
+    Q: 查看 rocketmq broker pod
+    simple
+
+    Q: 查询 broker 日志
+    simple
+
+    Q: 查看集群节点状态
+    simple
+
+    Q: rocketmq 消息积压怎么办
+    complex
+
+    Q: broker 报 timeout 错误怎么排查
+    complex
+
+    Q: 集群性能下降的原因分析
+    complex
+
+    Q: 消费者连接不上怎么处理
+    complex
+
+    用户问题：
+    {user_input}
+
+    只输出 simple 或 complex：
+    """
+
+    try:
+        await websocket.send_text("🔍 正在判断操作复杂度...\n")
+
+        if not provider:
+            await websocket.send_text("⚠️ LLM服务未初始化，默认为简单操作\n")
+            return "simple"
+
+        response = await provider.chat(
+            messages=[{"role": "user", "content": sub_type_prompt}],
+            model=config.agents.defaults.model,
+            max_tokens=100,
+            temperature=0.1,
+            purpose="d_sub_classification",
+        )
+
+        sub_type = response.content.strip().lower()
+
+        # 验证返回结果
+        if sub_type not in ['simple', 'complex']:
+            await websocket.send_text(f"⚠️ 子分类结果异常: {sub_type}，默认为简单操作\n")
+            return "simple"
+
+        sub_type_label = "简单操作" if sub_type == "simple" else "复杂操作（RCA分析）"
+        await websocket.send_text(f"✅ 操作类型: {sub_type_label}\n\n")
+
+        return sub_type
+
+    except Exception as e:
+        logger.error(f"D类子分类失败: {e}")
+        await websocket.send_text(f"⚠️ 操作类型判断失败: {str(e)}，默认为简单操作\n")
+        return "simple"
 
 
 def _build_retrieval_context(title: str, results: list[dict], limit: int = 2) -> str | None:
@@ -603,7 +694,9 @@ def _rerank_route_candidates(query: str, results: list[dict[str, Any]]) -> list[
 
 
 async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: float):
-    """处理运维操作意图：检索 Skill → rerank top1 → 提取工具 → 筛选已注册工具 → LLM 决策。
+    """处理 D 类简单操作意图：检索 Skill → rerank top1 → 提取工具 → 筛选已注册工具 → LLM 决策。
+
+    D 类子分类为 simple 时调用此函数。
 
     流程：
     1. 在统一 skills 向量库中检索匹配的 Skill（YAML 格式）
@@ -629,13 +722,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        return await process_troubleshooting_intent(
-            user_input,
-            websocket,
-            start_time,
-            additional_context=None,
-            use_skills_retrieval=False,
-        )
+        return await _run_agent_loop(user_input, websocket, None, None)
 
     # ── Step 1: 通知前端开始检索 Skill 库 ──
     await websocket.send_text(json.dumps({
@@ -669,21 +756,23 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "未检索到匹配 Skill，进入 LLM 自由推理",
+            "content": "未检索到匹配的运维 Skill",
             "knowledge_status": "no_results",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        await websocket.send_text("🔧 未匹配到运维 Skill，进入 AI 自由推理...\n\n")
-        return await process_troubleshooting_intent(
-            user_input,
-            websocket,
-            start_time,
-            additional_context=None,
-            use_skills_retrieval=False,
-        )
+        await websocket.send_text("🔧 未匹配到运维 Skill，无法执行该操作。\n\n")
+        completion_message = {
+            'type': 'stream_chunk',
+            'content_type': 'completion',
+            'content': '处理完成',
+            'is_completed': True,
+            'timestamp': time.time(),
+        }
+        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        return
 
     # ── Step 2: 通知前端检索结果（rerank 前） ──
     raw_preview_md = _build_retrieval_context("Skill 检索原始结果", skill_results, limit=len(skill_results)) or ""
@@ -706,20 +795,23 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "Rerank 后无有效结果，进入 LLM 自由推理",
+            "content": "Rerank 后无有效结果，无法执行该操作",
             "knowledge_status": "no_results",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        return await process_troubleshooting_intent(
-            user_input,
-            websocket,
-            start_time,
-            additional_context=None,
-            use_skills_retrieval=False,
-        )
+        await websocket.send_text("🔧 Skill 重排序后无有效结果，无法执行该操作。\n\n")
+        completion_message = {
+            'type': 'stream_chunk',
+            'content_type': 'completion',
+            'content': '处理完成',
+            'is_completed': True,
+            'timestamp': time.time(),
+        }
+        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        return
 
     top1_meta = top1.get("metadata", {}) or {}
     matched_skill_name = top1_meta.get("skill_name", "")
@@ -732,11 +824,16 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         skill_loader.load_all()
         skill_obj = skill_loader.get_skill(matched_skill_name)
 
-        if skill_obj and hasattr(skill_obj, "steps"):
-            for step in skill_obj.steps:
-                if step.type.value == "tool" and step.tool:
-                    if step.tool not in skill_tool_names:
-                        skill_tool_names.append(step.tool)
+        if skill_obj:
+            if hasattr(skill_obj, "steps") and skill_obj.steps:
+                # SOP Skill：从 steps 中提取 type=tool 的步骤
+                for step in skill_obj.steps:
+                    if step.type.value == "tool" and step.tool:
+                        if step.tool not in skill_tool_names:
+                            skill_tool_names.append(step.tool)
+            elif hasattr(skill_obj, "tool") and skill_obj.tool:
+                # Atomic Skill：直接从 tool 字段提取
+                skill_tool_names.append(skill_obj.tool)
             logger.info(f"[WEB] Skill '{matched_skill_name}' 引用的工具: {skill_tool_names}")
     except Exception as e:
         logger.warning(f"[WEB] 从 Skill 提取工具列表失败: {e}")
@@ -768,12 +865,13 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
 
     # ── Step 7: 构建 Skill 上下文，传入 LLM loop ──
     # 将 Skill 的完整描述和步骤作为 additional_context，
-    # 将筛选后的工具名作为 tool_names_filter，让 LLM 自主决策
+    # 将筛选后的工具名作为 tool_names_filter。
+    # 当仅匹配到 1 个已注册工具时，强制 LLM 必须调用该工具（确定性执行）。
     skill_context_parts = [f"# 运维 Skill 参考: {matched_skill_name}"]
     if skill_obj:
         skill_context_parts.append(f"描述: {skill_obj.description}")
         skill_context_parts.append(f"类型: {skill_obj.type}")
-        if skill_obj.steps:
+        if hasattr(skill_obj, "steps") and skill_obj.steps:
             skill_context_parts.append("\n## 参考排查步骤:")
             for i, step in enumerate(skill_obj.steps, 1):
                 step_desc = f"  {i}. [{step.type.value}] {step.id}"
@@ -783,23 +881,43 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
                     prompt_preview = step.prompt.strip()[:120]
                     step_desc += f"\n     提示: {prompt_preview}..."
                 skill_context_parts.append(step_desc)
+        elif hasattr(skill_obj, "tool") and skill_obj.tool:
+            skill_context_parts.append(f"\n## 绑定工具: {skill_obj.tool}")
         if filtered_tool_names:
             skill_context_parts.append(f"\n## 可用工具: {', '.join(filtered_tool_names)}")
-            skill_context_parts.append("请根据用户问题和以上 Skill 参考，自主判断是否需要调用工具以及调用哪个工具。")
+            # 当仅有 1 个已注册工具时，强制 LLM 必须调用该工具
+            if len(filtered_tool_names) == 1:
+                tool_name = filtered_tool_names[0]
+                skill_context_parts.append(
+                    f"\n## 【重要指令】\n"
+                    f"系统已为你匹配到精确的运维工具 `{tool_name}`。\n"
+                    f"你**必须立即调用** `{tool_name}` 工具来执行用户请求。\n"
+                    f"请从用户问题中提取工具所需的参数，然后直接发起 tool_call。\n"
+                    f"**禁止**跳过工具调用而直接用文本回答。"
+                )
+            else:
+                skill_context_parts.append(
+                    "请根据用户问题和以上 Skill 参考，自主判断是否需要调用工具以及调用哪个工具。"
+                )
     additional_context = "\n".join(skill_context_parts)
 
-    await websocket.send_text(
-        f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
-        f"（可用工具: {', '.join(filtered_tool_names) if filtered_tool_names else '无'}），"
-        f"进入 AI 分析...\n\n"
-    )
+    # 根据工具数量选择不同的日志文案
+    if filtered_tool_names and len(filtered_tool_names) == 1:
+        await websocket.send_text(
+            f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
+            f"，正在调用工具 `{filtered_tool_names[0]}` ...\n\n"
+        )
+    else:
+        await websocket.send_text(
+            f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
+            f"（可用工具: {', '.join(filtered_tool_names) if filtered_tool_names else '无'}），"
+            f"进入 AI 分析...\n\n"
+        )
 
-    return await process_troubleshooting_intent(
+    return await _run_agent_loop(
         user_input,
         websocket,
-        start_time,
         additional_context=additional_context,
-        use_skills_retrieval=False,
         tool_names_filter=filtered_tool_names or None,
     )
 
@@ -1041,27 +1159,16 @@ async def process_troubleshooting_intent(
         user_input: str,
         websocket: WebSocket,
         start_time: float,
-        additional_context: str | None = None,
-        use_skills_retrieval: bool = True,
-        tool_names_filter: list[str] | None = None,
 ):
-    """处理排查类意图：搜索 Skill → rerank top1 → RCA Engine 执行。
+    """处理 D 类复杂操作意图：搜索 SOP Skill → rerank top1 → RCA Engine 执行。
 
-    当 B 类（运维）调用时，通过 use_skills_retrieval=False 跳过 skill 检索，
-    直接使用传入的 additional_context 和 tool_names_filter 进入 LLM loop。
-
-    当 C 类（排障）直接调用时，执行 Skill 检索 → rerank → RCA Engine 流程。
+    D 类子分类为 complex 时调用此函数，执行 SOP Skill 分步诊断流程。
     """
 
     import time
     import json
 
-    # ─── B 类入口：跳过 skill 检索，直接进入 LLM loop ───
-    if not use_skills_retrieval:
-        await websocket.send_text("🔧 检测到运维操作类问题，进入AI分析...\n\n")
-        return await _run_agent_loop(user_input, websocket, additional_context, tool_names_filter)
-
-    # ─── C 类排障流程：搜索 Skill → rerank → RCA Engine ───
+    # ─── complex 类排障流程：搜索 SOP Skill → rerank → RCA Engine ───
 
     if not intent_routing_store:
         await websocket.send_text("⚠️ Skill 索引未初始化，回退到 LLM 自由推理。\n")
@@ -1109,15 +1216,23 @@ async def process_troubleshooting_intent(
         await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "未检索到匹配 Skill，回退到 LLM 自由推理",
+            "content": "未检索到匹配的排障 Skill",
             "knowledge_status": "no_results",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        await websocket.send_text("🔧 未匹配到排障 Skill，进入 AI 自由推理...\n\n")
-        return await _run_agent_loop(user_input, websocket, None, None)
+        await websocket.send_text("🔧 未匹配到排障 Skill，无法执行排障诊断。\n\n")
+        completion_message = {
+            'type': 'stream_chunk',
+            'content_type': 'completion',
+            'content': '处理完成',
+            'is_completed': True,
+            'timestamp': time.time(),
+        }
+        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        return
 
     # Step 2: 通知前端检索结果（rerank 前）
     raw_preview_md = _build_retrieval_context("Skill 检索原始结果", skill_results, limit=len(skill_results)) or ""
@@ -1140,14 +1255,23 @@ async def process_troubleshooting_intent(
         await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "Rerank 后无有效结果，回退到 LLM 自由推理",
+            "content": "Rerank 后无有效结果，无法执行排障诊断",
             "knowledge_status": "no_results",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        return await _run_agent_loop(user_input, websocket, None, None)
+        await websocket.send_text("🔧 Skill 重排序后无有效结果，无法执行排障诊断。\n\n")
+        completion_message = {
+            'type': 'stream_chunk',
+            'content_type': 'completion',
+            'content': '处理完成',
+            'is_completed': True,
+            'timestamp': time.time(),
+        }
+        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        return
 
     top1_meta = top1.get("metadata", {}) or {}
     matched_skill_name = top1_meta.get("skill_name", "")
@@ -1296,7 +1420,7 @@ async def _run_agent_loop(
     additional_context: str | None = None,
     tool_names_filter: list[str] | None = None,
 ):
-    """通用的 agent loop 执行入口（用于 B 类运维和 C 类排障回退）。"""
+    """通用的 agent loop 执行入口（用于 D 类简单操作和复杂操作回退）。"""
     import time
     import json
 
@@ -1432,3 +1556,211 @@ async def chat_endpoint(message: dict):
 
     response = await process_user_message(user_input)
     return {"response": response}
+
+
+# ---------------------------------------------------------------------------
+# Skill Management API
+# ---------------------------------------------------------------------------
+class SkillSaveRequest(BaseModel):
+    """Skill save request model."""
+    path: str
+    content: str
+
+
+class SkillDeleteRequest(BaseModel):
+    """Skill delete request model."""
+    path: str
+
+
+class SkillCreateRequest(BaseModel):
+    """Skill create request model."""
+    dir: str
+    path: str
+    content: str
+
+
+@web_app.get("/skills")
+async def get_skills_page():
+    """Serve the Skill management page."""
+    html_content = load_html_template("skill.html")
+    return HTMLResponse(content=html_content)
+
+
+@web_app.get("/api/skills/list")
+async def list_skills(dir: str):
+    """List all skills in the specified directory."""
+    skill_dir = Path(dir).expanduser().resolve()
+    
+    if not skill_dir.exists():
+        return {"skills": {}, "error": "Directory does not exist"}
+    
+    skills = {}
+    
+    # Walk through directory
+    for root, dirs, files in os.walk(skill_dir):
+        rel_root = Path(root).relative_to(skill_dir)
+        category = str(rel_root) if str(rel_root) != "." else ""
+        
+        # Find SKILL*.yaml and SKILL*.yml files
+        skill_files = [f for f in files if f.startswith("SKILL") and (f.endswith(".yaml") or f.endswith(".yml"))]
+        
+        if skill_files:
+            if category not in skills:
+                skills[category] = []
+            
+            for filename in skill_files:
+                file_path = Path(root) / filename
+                skill_type = "workflow"  # default
+                skill_name = ""  # YAML中的skill name字段
+                
+                # Try to read skill type, name and output_schema from YAML skill section
+                output_schema = {}
+                try:
+                    import yaml
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        doc = yaml.safe_load(f)
+                    if isinstance(doc, dict) and 'skill' in doc:
+                        skill_section = doc['skill']
+                        if isinstance(skill_section, dict):
+                            skill_type = skill_section.get('type', 'workflow')
+                            skill_name = skill_section.get('name', '')
+                            # 获取 output_schema（主要用于 atomic skill）
+                            raw_os = skill_section.get('output_schema', {})
+                            if isinstance(raw_os, dict):
+                                output_schema = raw_os
+                except Exception:
+                    pass
+                
+                skills[category].append({
+                    "name": filename,
+                    "skill_name": skill_name,  # YAML内部定义的skill名称
+                    "path": str(Path(category) / filename) if category else filename,
+                    "type": skill_type,
+                    "output_schema": output_schema  # 原子skill的输出参数定义
+                })
+    
+    # Sort skills in each category
+    for cat in skills:
+        skills[cat].sort(key=lambda x: x["name"])
+    
+    return {"skills": skills}
+
+
+@web_app.get("/api/skills/read")
+async def read_skill(path: str):
+    """Read skill file content."""
+    # Get skill directory from config or use default
+    skill_dir = config.rca.skill_dir if config else Path.home() / ".nanobot" / "workspace" / "skills"
+    skill_dir = Path(skill_dir).expanduser().resolve()
+    
+    file_path = (skill_dir / path).resolve()
+    
+    # Security check: ensure file is within skill directory
+    try:
+        file_path.relative_to(skill_dir)
+    except ValueError:
+        return {"error": "Access denied: path outside skill directory"}
+    
+    if not file_path.exists():
+        return {"error": "File not found"}
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return {"content": content}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@web_app.post("/api/skills/save")
+async def save_skill(request: SkillSaveRequest):
+    """Save skill file content."""
+    # Get skill directory from config or use default
+    skill_dir = config.rca.skill_dir if config else Path.home() / ".nanobot" / "workspace" / "skills"
+    skill_dir = Path(skill_dir).expanduser().resolve()
+    
+    file_path = (skill_dir / request.path).resolve()
+    
+    # Security check: ensure file is within skill directory
+    try:
+        file_path.relative_to(skill_dir)
+    except ValueError:
+        return {"error": "Access denied: path outside skill directory"}
+    
+    try:
+        # Validate YAML content
+        yaml_lib.safe_load(request.content)
+        
+        # Write file
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(request.content)
+        
+        logger.info(f"[WEB] Saved skill file: {file_path}")
+        return {"success": True, "message": "Saved successfully"}
+    except yaml_lib.YAMLError as e:
+        return {"error": f"Invalid YAML: {str(e)}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@web_app.post("/api/skills/create")
+async def create_skill(request: SkillCreateRequest):
+    """Create a new skill file."""
+    skill_dir = Path(request.dir).expanduser().resolve()
+    
+    if not skill_dir.exists():
+        skill_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_path = (skill_dir / request.path).resolve()
+    
+    # Security check
+    try:
+        file_path.relative_to(skill_dir)
+    except ValueError:
+        return {"error": "Access denied: path outside skill directory"}
+    
+    if file_path.exists():
+        return {"error": "File already exists"}
+    
+    try:
+        # Validate YAML content
+        yaml_lib.safe_load(request.content)
+        
+        # Create file
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(request.content)
+        
+        logger.info(f"[WEB] Created skill file: {file_path}")
+        return {"success": True, "message": "Created successfully", "path": str(file_path)}
+    except yaml_lib.YAMLError as e:
+        return {"error": f"Invalid YAML: {str(e)}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@web_app.post("/api/skills/delete")
+async def delete_skill(request: SkillDeleteRequest):
+    """Delete a skill file."""
+    # Get skill directory from config or use default
+    skill_dir = config.rca.skill_dir if config else Path.home() / ".nanobot" / "workspace" / "skills"
+    skill_dir = Path(skill_dir).expanduser().resolve()
+    
+    file_path = (skill_dir / request.path).resolve()
+    
+    # Security check
+    try:
+        file_path.relative_to(skill_dir)
+    except ValueError:
+        return {"error": "Access denied: path outside skill directory"}
+    
+    if not file_path.exists():
+        return {"error": "File not found"}
+    
+    try:
+        file_path.unlink()
+        logger.info(f"[WEB] Deleted skill file: {file_path}")
+        return {"success": True, "message": "Deleted successfully"}
+    except Exception as e:
+        return {"error": str(e)}

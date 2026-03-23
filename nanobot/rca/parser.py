@@ -1,32 +1,44 @@
 """RCA Skill YAML 解析与校验。
 
-负责将原始 YAML 字典解析为 RCASkill 数据结构，
-并提供完整的格式校验能力。
+负责将原始 YAML 字典解析为 AtomicSkill 或 SOPSkill 数据结构，
+按 type 字段区分两类 Skill，并提供完整的格式校验能力。
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from loguru import logger
 
 from nanobot.rca.schema import (
+    AtomicSkill,
     OutputSchema,
-    RCASkill,
     RootCauseRule,
     SkillStep,
+    SkillType,
+    SOPSkill,
     StepType,
 )
 
-# 顶层必需字段
-_REQUIRED_TOP_FIELDS = {"name", "version", "description", "type", "steps"}
+# Atomic Skill 顶层必需字段
+_ATOMIC_REQUIRED_FIELDS = {"name", "version", "description", "type", "output_schema"}
+
+# SOP Skill 顶层必需字段
+_SOP_REQUIRED_FIELDS = {"name", "version", "description", "type", "execution"}
 
 # 各步骤类型必需的专用字段
 _STEP_REQUIRED_FIELDS: dict[StepType, set[str]] = {
+    StepType.SKILL: {"skill"},
     StepType.LLM: {"prompt"},
     StepType.TOOL: {"tool"},
     StepType.ROOT_CAUSE_DEFINITION: {"logic"},
 }
+
+# {{stepId.field}} 模板变量正则
+_TEMPLATE_VAR_PATTERN = re.compile(r"\{\{\s*([\w]+)\.([\w]+)\s*\}\}")
+# {{simpleVar}} 简单变量正则
+_SIMPLE_VAR_PATTERN = re.compile(r"\{\{\s*([\w]+)\s*\}\}")
 
 
 class SkillValidationError(Exception):
@@ -37,39 +49,92 @@ class SkillValidationError(Exception):
         super().__init__(f"Skill 校验失败: {'; '.join(errors)}")
 
 
-def validate(raw: dict[str, Any]) -> list[str]:
-    """校验原始 YAML 字典内容。
+def _extract_skill_data(raw: dict[str, Any]) -> dict[str, Any]:
+    """从原始字典中提取 skill 数据节点。"""
+    data = raw.get("skill", raw) if isinstance(raw, dict) else raw
+    if not isinstance(data, dict):
+        raise SkillValidationError(["Skill 内容必须是字典类型"])
+    return data
+
+
+def validate_atomic(raw: dict[str, Any]) -> list[str]:
+    """校验 Atomic Skill 原始 YAML 字典。
 
     Args:
-        raw: 从 YAML 文件中解析出的字典，应包含 "skill" 根节点或直接是 skill 内容
+        raw: 从 YAML 文件解析出的字典
 
     Returns:
         错误列表，空列表表示校验通过
     """
     errors: list[str] = []
-
-    # 支持 skill 根节点或直接内容
     data = raw.get("skill", raw) if isinstance(raw, dict) else raw
 
     if not isinstance(data, dict):
         return ["Skill 内容必须是字典类型"]
 
     # 1. 顶层字段完整性
-    missing = _REQUIRED_TOP_FIELDS - set(data.keys())
+    missing = _ATOMIC_REQUIRED_FIELDS - set(data.keys())
     if missing:
         errors.append(f"缺少必需的顶层字段: {', '.join(sorted(missing))}")
 
-    # 2. steps 必须是列表
-    steps = data.get("steps")
-    if steps is not None and not isinstance(steps, list):
-        errors.append("steps 必须是列表类型")
-        return errors  # steps 格式错误时无法继续校验
+    # 2. output_schema 必需且非空
+    output_schema = data.get("output_schema")
+    if not output_schema:
+        errors.append("Atomic Skill 必须定义非空的 output_schema")
+    elif not isinstance(output_schema, dict):
+        errors.append("output_schema 必须是字典类型")
+    elif len(output_schema) == 0:
+        errors.append("Atomic Skill 的 output_schema 不能为空")
 
-    if not steps:
-        errors.append("steps 列表不能为空")
+    # 3. type 字段值校验
+    skill_type = data.get("type", "")
+    if skill_type != SkillType.ATOMIC.value:
+        errors.append(f"Atomic Skill 的 type 必须为 'atomic'，当前值: '{skill_type}'")
+
+    return errors
+
+
+def validate_sop(raw: dict[str, Any]) -> list[str]:
+    """校验 SOP Skill 原始 YAML 字典。
+
+    Args:
+        raw: 从 YAML 文件解析出的字典
+
+    Returns:
+        错误列表，空列表表示校验通过
+    """
+    errors: list[str] = []
+    data = raw.get("skill", raw) if isinstance(raw, dict) else raw
+
+    if not isinstance(data, dict):
+        return ["Skill 内容必须是字典类型"]
+
+    # 1. 顶层字段完整性
+    missing = _SOP_REQUIRED_FIELDS - set(data.keys())
+    if missing:
+        errors.append(f"缺少必需的顶层字段: {', '.join(sorted(missing))}")
+
+    # 2. type 字段值校验
+    skill_type = data.get("type", "")
+    if skill_type != SkillType.SOP.value:
+        errors.append(f"SOP Skill 的 type 必须为 'sop'，当前值: '{skill_type}'")
+
+    # 3. execution.steps 校验
+    execution = data.get("execution")
+    if not isinstance(execution, dict):
+        errors.append("SOP Skill 必须包含 execution 字段且为字典类型")
         return errors
 
-    # 3. 步骤级校验
+    steps = execution.get("steps")
+    if steps is not None and not isinstance(steps, list):
+        errors.append("execution.steps 必须是列表类型")
+        return errors
+
+    if not steps:
+        errors.append("execution.steps 列表不能为空")
+        return errors
+
+    # 4. 步骤级校验
     seen_ids: set[str] = set()
     valid_types = {t.value for t in StepType}
 
@@ -103,7 +168,9 @@ def validate(raw: dict[str, Any]) -> list[str]:
         required = _STEP_REQUIRED_FIELDS.get(step_type, set())
         for field_name in required:
             if not step.get(field_name):
-                errors.append(f"{prefix}: type={step_type_str} 时必须包含 '{field_name}' 字段")
+                errors.append(
+                    f"{prefix}: type={step_type_str} 时必须包含 '{field_name}' 字段"
+                )
 
         # input_from 引用有效性
         input_from = step.get("input_from")
@@ -125,43 +192,174 @@ def validate(raw: dict[str, Any]) -> list[str]:
                                 "未定义或不是前置步骤"
                             )
 
+        # input 模板变量引用有效性（{{stepId.field}} 格式）
+        step_input = step.get("input")
+        if isinstance(step_input, dict):
+            input_schema_keys = set(data.get("input_schema", {}).keys())
+            for key, value in step_input.items():
+                if isinstance(value, str):
+                    # 检查 {{stepId.field}} 引用
+                    for match in _TEMPLATE_VAR_PATTERN.finditer(value):
+                        ref_step_id = match.group(1)
+                        # 如果引用的不是外部输入参数，则必须是前置步骤
+                        if ref_step_id not in seen_ids and ref_step_id not in input_schema_keys:
+                            logger.warning(
+                                f"{prefix}: input 模板变量 '{match.group(0)}' "
+                                f"引用的 '{ref_step_id}' 未定义或不是前置步骤"
+                            )
+
     return errors
 
 
-def parse_yaml(raw: dict[str, Any]) -> RCASkill:
-    """将原始 YAML 字典解析为 RCASkill 数据结构。
+def validate(raw: dict[str, Any]) -> list[str]:
+    """校验原始 YAML 字典内容（自动检测类型）。
+
+    兼容旧代码，自动根据 type 字段分派到对应的校验函数。
 
     Args:
         raw: 从 YAML 文件中解析出的字典
 
     Returns:
-        解析后的 RCASkill 对象
+        错误列表，空列表表示校验通过
+    """
+    data = raw.get("skill", raw) if isinstance(raw, dict) else raw
+    if not isinstance(data, dict):
+        return ["Skill 内容必须是字典类型"]
+
+    skill_type = data.get("type", "")
+    if skill_type == SkillType.ATOMIC.value:
+        return validate_atomic(raw)
+    elif skill_type == SkillType.SOP.value:
+        return validate_sop(raw)
+    else:
+        # 未知类型时给出提示
+        return [f"未知的 Skill type: '{skill_type}'，允许值: atomic, sop"]
+
+
+def _extract_atomic_tool(data: dict[str, Any]) -> str | None:
+    """从 Atomic Skill 数据中提取绑定的 Tool 名称。
+
+    Atomic Skill YAML 中通过 execution.steps 声明底层工具绑定，
+    提取第一个步骤中的 tool 字段作为绑定的 ToolRegistry 工具名。
+
+    Args:
+        data: Skill 数据字典（已去除顶层 "skill" 包装）
+
+    Returns:
+        绑定的工具名称，若未声明则返回 None
+    """
+    execution = data.get("execution")
+    if not isinstance(execution, dict):
+        return None
+
+    steps = execution.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return None
+
+    first_step = steps[0]
+    if isinstance(first_step, dict):
+        tool = first_step.get("tool")
+        if isinstance(tool, str) and tool.strip():
+            return tool.strip()
+
+    return None
+
+
+def parse_atomic_skill(raw: dict[str, Any]) -> AtomicSkill:
+    """将原始 YAML 字典解析为 AtomicSkill 数据结构。
+
+    Args:
+        raw: 从 YAML 文件中解析出的字典
+
+    Returns:
+        解析后的 AtomicSkill 对象
 
     Raises:
         SkillValidationError: 校验不通过时抛出
     """
-    # 校验
-    errors = validate(raw)
+    errors = validate_atomic(raw)
     if errors:
         raise SkillValidationError(errors)
 
-    # 提取 skill 数据
     data = raw.get("skill", raw) if isinstance(raw, dict) else raw
 
-    # 解析步骤列表
-    steps: list[SkillStep] = []
-    for step_raw in data.get("steps", []):
-        step = _parse_step(step_raw)
-        steps.append(step)
+    # 从 execution.steps 中提取绑定的 Tool 名称
+    tool_name = _extract_atomic_tool(data)
 
-    return RCASkill(
+    return AtomicSkill(
         name=str(data.get("name", "")),
         version=str(data.get("version", "")),
         description=str(data.get("description", "")),
-        type=str(data.get("type", "workflow")),
+        type="atomic",
+        input_schema=dict(data.get("input_schema", {})),
+        output_schema=dict(data.get("output_schema", {})),
+        tool=tool_name,
+    )
+
+
+def parse_sop_skill(raw: dict[str, Any]) -> SOPSkill:
+    """将原始 YAML 字典解析为 SOPSkill 数据结构。
+
+    Args:
+        raw: 从 YAML 文件中解析出的字典
+
+    Returns:
+        解析后的 SOPSkill 对象
+
+    Raises:
+        SkillValidationError: 校验不通过时抛出
+    """
+    errors = validate_sop(raw)
+    if errors:
+        raise SkillValidationError(errors)
+
+    data = raw.get("skill", raw) if isinstance(raw, dict) else raw
+
+    # 从 execution.steps 解析步骤列表
+    execution = data.get("execution", {})
+    steps: list[SkillStep] = []
+    for step_raw in execution.get("steps", []):
+        step = _parse_step(step_raw)
+        steps.append(step)
+
+    return SOPSkill(
+        name=str(data.get("name", "")),
+        version=str(data.get("version", "")),
+        description=str(data.get("description", "")),
+        type="sop",
         input_schema=dict(data.get("input_schema", {})),
         steps=steps,
     )
+
+
+def parse_yaml(raw: dict[str, Any]) -> AtomicSkill | SOPSkill:
+    """将原始 YAML 字典解析为 Skill 数据结构（自动检测类型）。
+
+    按 type 字段区分，分派到 parse_atomic_skill 或 parse_sop_skill。
+
+    Args:
+        raw: 从 YAML 文件中解析出的字典
+
+    Returns:
+        解析后的 AtomicSkill 或 SOPSkill 对象
+
+    Raises:
+        SkillValidationError: 校验不通过时抛出
+    """
+    data = raw.get("skill", raw) if isinstance(raw, dict) else raw
+    if not isinstance(data, dict):
+        raise SkillValidationError(["Skill 内容必须是字典类型"])
+
+    skill_type = data.get("type", "")
+
+    if skill_type == SkillType.ATOMIC.value:
+        return parse_atomic_skill(raw)
+    elif skill_type == SkillType.SOP.value:
+        return parse_sop_skill(raw)
+    else:
+        raise SkillValidationError(
+            [f"未知的 Skill type: '{skill_type}'，允许值: atomic, sop"]
+        )
 
 
 def _parse_step(raw: dict[str, Any]) -> SkillStep:
@@ -190,6 +388,7 @@ def _parse_step(raw: dict[str, Any]) -> SkillStep:
     return SkillStep(
         id=str(raw.get("id", "")),
         type=step_type,
+        skill=raw.get("skill"),
         prompt=raw.get("prompt"),
         tool=raw.get("tool"),
         input=raw.get("input"),

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Cron service for scheduling agent tasks."""
 
 import asyncio

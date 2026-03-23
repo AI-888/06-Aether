@@ -1,3 +1,4 @@
+from __future__ import annotations
 """MCP (Model Context Protocol) tool for accessing external services."""
 
 import asyncio

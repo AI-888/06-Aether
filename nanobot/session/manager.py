@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Session management for conversation history."""
 
 import json

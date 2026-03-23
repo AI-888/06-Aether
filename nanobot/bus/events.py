@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Event types for the message bus."""
 
 from dataclasses import dataclass, field

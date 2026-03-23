@@ -1,3 +1,4 @@
+from __future__ import annotations
 """File system tools: read, write, edit."""
 
 from pathlib import Path

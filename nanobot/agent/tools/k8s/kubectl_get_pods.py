@@ -1,3 +1,4 @@
+from __future__ import annotations
 """kubectl get pods 工具 —— 根据组件名字关键字查询匹配的 Pod。"""
 
 import re

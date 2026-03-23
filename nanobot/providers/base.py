@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Base LLM provider interface."""
 
 from abc import ABC, abstractmethod

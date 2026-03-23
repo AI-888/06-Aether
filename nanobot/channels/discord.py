@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Discord channel implementation using Discord Gateway websocket."""
 
 import asyncio

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """DingTalk/DingDing channel implementation using Stream Mode."""
 
 import asyncio

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Heartbeat service - periodic agent wake-up to check for tasks."""
 
 import asyncio

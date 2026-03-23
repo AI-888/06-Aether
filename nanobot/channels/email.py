@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Email channel implementation using IMAP polling + SMTP replies."""
 
 import asyncio

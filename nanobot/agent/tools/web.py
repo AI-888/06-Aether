@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Web tools: web_search and web_fetch."""
 
 import html

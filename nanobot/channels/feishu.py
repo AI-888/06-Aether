@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Feishu/Lark channel implementation using lark-oapi SDK with WebSocket long connection."""
 
 import asyncio

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Memory system for persistent agent memory."""
 
 from datetime import datetime

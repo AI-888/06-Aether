@@ -1,0 +1,57 @@
+# RocketMQ 原子技能：获取 Pod 列表
+skill:
+  # 技能名称：用于获取 RocketMQ 各组件的 Pod 列表
+  name: get_rocketmq_pods
+  
+  # 技能版本号
+  version: "1.0"
+  
+  # 技能类型：atomic 表示原子技能（基础技能，不可再分）
+  type: atomic
+
+  # 技能描述：详细说明该技能的功能和支持的组件
+  description: |
+    查询 RocketMQ 组件的 Pod 列表、进程状态、服务运行信息
+    
+    使用场景：用户询问 "查询 Pod"、"查看 Broker Pod"、"查询 Broker 组件"、
+    "Namesrv 进程"、"Proxy 服务状态"、"显示所有 Pod"、"查看组件运行状态"、
+    "broker 状态"、"查询全部 Pod"、"RocketMQ 组件信息" 等
+    
+    支持的组件：
+    - NameServer: ocloud-tdmq-rocketmq5-namesrv
+    - Broker: ocloud-tdmq-rocketmq5-broker
+    - Proxy: ocloud-tdmq-rocketmq5-proxy
+    - Manager: rocketmq-manager（需排除 cmq）
+    - Billing: rocketmq-billing（需排除 cmq）
+    - Operation: rocketmq-operation（需排除 cmq）
+    - Router: rocketmq-router（需排除 cmq）
+    - Disperser: rocketmq-disperser（需排除 cmq）
+
+  # 输入参数定义：定义该技能需要的输入参数及其类型
+  input_schema:
+    namespace: string          # Kubernetes 命名空间名称
+    component: string          # RocketMQ 组件类型（namesrv / broker / proxy / manager / billing / operation / router / disperser）
+
+  # 输出参数定义：定义该技能返回的结果数据结构
+  output_schema:
+    pods: list                 # Pod 列表，包含每个 Pod 的详细信息
+    total: int                 # Pod 总数
+
+  # 执行配置：定义技能的执行步骤
+  execution:
+    steps:
+      # 步骤 ID：唯一标识该执行步骤
+      - id: fetch
+        # 步骤类型：tool 表示调用外部工具
+        type: tool
+        # 使用的工具名称：kubectl 获取 Pod 列表
+        tool: kubectl_get_pods
+        # 传递给工具的输入参数
+        input:
+          namespace: "{{namespace}}"      # 命名空间，使用模板变量
+          component: "{{component}}"      # 组件类型，使用模板变量
+
+  # 信号配置：控制技能的附加行为
+  signal:
+    # 是否启用置信度评估（false 表示不评估结果的可信程度）
+    enable_confidence: false

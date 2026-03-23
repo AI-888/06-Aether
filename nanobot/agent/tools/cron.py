@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Cron tool for scheduling reminders and tasks."""
 
 from typing import Any

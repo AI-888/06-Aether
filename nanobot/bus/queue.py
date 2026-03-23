@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Async message queue for decoupled channel-agent communication."""
 
 import asyncio

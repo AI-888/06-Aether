@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Configuration schema using Pydantic."""
 
 from pathlib import Path
@@ -268,6 +269,7 @@ class RCAConfig(BaseModel):
     max_total_timeout: int = 300                                 # 整体超时时间（秒）
     security_whitelist: list[str] = Field(default_factory=list)  # 额外的工具白名单
     audit_log_dir: str = "~/.nanobot/workspace/rca_audit"        # 审计日志目录
+    intent_rules: dict[str, list[str]] = Field(default_factory=dict)  # 规则匹配配置 {skill_name: [regex_patterns]}
 
 
 class Config(BaseSettings):

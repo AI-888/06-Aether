@@ -1,3 +1,4 @@
+from __future__ import annotations
 """kubectl 查询日志工具 —— 根据组件名字关键字查找 Pod 并搜索日志。"""
 
 import re

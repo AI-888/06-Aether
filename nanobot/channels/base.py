@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Base channel interface for chat platforms."""
 
 from abc import ABC, abstractmethod

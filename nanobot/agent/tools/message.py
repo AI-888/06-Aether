@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Message tool for sending messages to users."""
 
 from typing import Any, Callable, Awaitable

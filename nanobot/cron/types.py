@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Cron types."""
 
 from dataclasses import dataclass, field

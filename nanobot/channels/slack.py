@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Slack channel implementation using Socket Mode."""
 
 import asyncio

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Spawn tool for creating background subagents."""
 
 from typing import Any, TYPE_CHECKING

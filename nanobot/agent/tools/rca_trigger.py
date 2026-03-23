@@ -150,9 +150,15 @@ class RCAListSkillsTool(Tool):
 
         lines = [f"已加载 {len(skills)} 个 RCA Skill:\n"]
         for skill in skills:
+            skill_type = skill.get("type", "unknown")
+            if skill_type == "sop":
+                detail = f"{skill.get('steps_count', 0)} 步骤"
+            else:
+                output_fields = list(skill.get("output_schema", {}).keys())
+                detail = f"输出: {', '.join(output_fields)}" if output_fields else "atomic"
             lines.append(
-                f"- **{skill['name']}** v{skill['version']}: "
-                f"{skill['description']} ({skill['steps_count']} 步骤)"
+                f"- **{skill['name']}** v{skill['version']} [{skill_type}]: "
+                f"{skill['description'][:80]} ({detail})"
             )
 
         return "\n".join(lines)

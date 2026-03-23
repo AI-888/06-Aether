@@ -1,3 +1,4 @@
+from __future__ import annotations
 """CLI commands for nanobot."""
 
 import asyncio
@@ -336,7 +337,7 @@ def gateway(
 
     if verbose:
         import logging
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.INFO)
 
     console.print(f"{__logo__} Starting nanobot gateway on port {port}...")
 
@@ -922,7 +923,7 @@ def webui(
         console.print(f"⚠️  初始化警告: {str(e)}")
 
     import uvicorn
-    uvicorn.run(web_app, host=host, port=port)
+    uvicorn.run(web_app, host=host, port=port, access_log=False)
 
 
 @cli_app.command()

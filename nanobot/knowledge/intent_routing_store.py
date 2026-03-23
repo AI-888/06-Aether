@@ -355,21 +355,13 @@ class IntentRoutingStore:
                 continue
 
             description = skill_info.get("description", "")
-            steps_count = skill_info.get("steps_count", "0")
+            file_path = skill_info.get("file_path", "")
 
-            # 获取完整 Skill 对象以拼接步骤描述
-            skill_obj = skill_loader.get_skill(name)
-            steps_desc = ""
-            if skill_obj and hasattr(skill_obj, "steps"):
-                steps_desc = " → ".join(
-                    f"{s.id}({s.type.value})" for s in skill_obj.steps
-                )
-
+            # 只向量化名字、描述和源文件地址，保持检索文本精简
             doc_text = (
                 f"Skill: {name}\n"
                 f"描述: {description}\n"
-                f"类型: {skill_info.get('type', 'workflow')}\n"
-                f"步骤({steps_count}): {steps_desc}"
+                f"源文件: {file_path}"
             )
 
             ids.append(f"skill::{name}")
@@ -383,7 +375,7 @@ class IntentRoutingStore:
 
             logger.info(
                 f"[ROUTING] 📄 Skill: {name} v{skill_info.get('version', '?')} "
-                f"({steps_count} 步骤) - {description[:60]}"
+                f"({skill_info.get('steps_count', 0)} 步骤) - {description[:60]}"
             )
 
         if not docs:

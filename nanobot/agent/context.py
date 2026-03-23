@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Context builder for assembling agent prompts."""
 
 import base64
@@ -169,12 +170,10 @@ class ContextBuilder:
 
         # System prompt
         system_prompt = self.build_system_prompt(skill_names)
-        # if channel and chat_id:
-        #     system_prompt += f"\n\n## Current Session\nChannel: {channel}\nChat ID: {chat_id}"
 
-        # # 如果存在额外上下文（如知识库查询结果），添加到系统提示中
-        # if additional_context:
-        #     system_prompt += f"\n\n## Additional Context\n{additional_context}"
+        # 如果存在额外上下文（如知识库查询结果、Skill 上下文），添加到系统提示中
+        if additional_context:
+            system_prompt += f"\n\n## Additional Context\n{additional_context}"
 
         messages.append({"role": "system", "content": system_prompt})
 

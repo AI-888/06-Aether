@@ -15,9 +15,14 @@ from typing import Any, Callable
 from loguru import logger
 
 from nanobot.rca.audit import AuditLogger
-from nanobot.rca.context import InputFromResolveError, StepContext, StepTrace
+from nanobot.rca.context import (
+    InputFromResolveError,
+    StepContext,
+    StepTrace,
+    TemplateResolveError,
+)
 from nanobot.rca.report import RCAReport, ReportGenerator
-from nanobot.rca.schema import RCASkill, SkillStep, StepType
+from nanobot.rca.schema import AtomicSkill, RCASkill, SOPSkill, SkillStep, StepType
 from nanobot.rca.security import SecurityGuard, SecurityViolationError
 from nanobot.metrics import (
     RCA_EXECUTION_DURATION,
@@ -37,6 +42,22 @@ class RCAExecutionError(Exception):
         super().__init__(f"RCA 执行错误 [步骤 '{step_id}']: {reason}")
 
 
+class SkillNotFoundError(RCAExecutionError):
+    """Atomic Skill 未找到异常。"""
+
+    def __init__(self, step_id: str, skill_name: str):
+        self.skill_name = skill_name
+        super().__init__(step_id, f"Atomic Skill '{skill_name}' 未找到")
+
+
+class ToolNotFoundError(RCAExecutionError):
+    """Atomic Skill 绑定的 Tool 未找到异常。"""
+
+    def __init__(self, step_id: str, tool_name: str):
+        self.tool_name_missing = tool_name
+        super().__init__(step_id, f"Atomic Skill 绑定的 Tool '{tool_name}' 在 ToolRegistry 中未找到")
+
+
 class RCAEngine:
     """RCA 分步执行引擎。
 
@@ -50,6 +71,7 @@ class RCAEngine:
         tool_registry: Any,
         security_guard: SecurityGuard,
         audit_logger: AuditLogger,
+        skill_loader: Any = None,
         model: str | None = None,
         max_step_timeout: int = 30,
         max_total_timeout: int = 300,
@@ -61,6 +83,7 @@ class RCAEngine:
             tool_registry: ToolRegistry 实例
             security_guard: 安全校验层
             audit_logger: 审计日志记录器
+            skill_loader: RCASkillLoader 实例（用于查找 Atomic Skill）
             model: 专用 SLM 模型名称
             max_step_timeout: 单步骤超时时间（秒）
             max_total_timeout: 整体超时时间（秒）
@@ -69,6 +92,7 @@ class RCAEngine:
         self.tools = tool_registry
         self.security = security_guard
         self.audit = audit_logger
+        self.skill_loader = skill_loader
         self.model = model
         self.max_step_timeout = max_step_timeout
         self.max_total_timeout = max_total_timeout
@@ -186,7 +210,7 @@ class RCAEngine:
                     )
                     raise RCAExecutionError(step.id, str(e))
 
-                except (InputFromResolveError, RCAExecutionError) as e:
+                except (InputFromResolveError, TemplateResolveError, RCAExecutionError) as e:
                     trace.end_time = time.time()
                     trace.status = "error"
                     trace.error_message = str(e)
@@ -253,7 +277,9 @@ class RCAEngine:
         ctx: StepContext,
     ) -> dict[str, Any]:
         """根据步骤类型分发执行。"""
-        if step.type == StepType.LLM:
+        if step.type == StepType.SKILL:
+            return await self._execute_skill_step(step, ctx)
+        elif step.type == StepType.LLM:
             return await self._execute_llm_step(step, ctx)
         elif step.type == StepType.TOOL:
             return await self._execute_tool_step(step, ctx)
@@ -261,6 +287,147 @@ class RCAEngine:
             return await self._execute_rcd_step(step, ctx)
         else:
             raise RCAExecutionError(step.id, f"未知的步骤类型: {step.type}")
+
+    async def _execute_skill_step(
+        self,
+        step: SkillStep,
+        ctx: StepContext,
+    ) -> dict[str, Any]:
+        """执行 skill 类型步骤 —— Atomic Skill 的完整执行路径。
+
+        执行流程：
+        1. 查找 Atomic Skill 定义（从 skill_loader 获取）
+        2. 解析输入参数（模板替换 {{stepId.field}}）
+        3. 查找绑定的 Tool（Atomic Skill name = Tool name）
+        4. 安全校验（白名单检查）
+        5. 通过 ToolRegistry 执行工具调用
+        6. 按 output_schema 提取并校验输出
+        7. 存入 StepContext
+
+        Raises:
+            SkillNotFoundError: Atomic Skill 未找到
+            ToolNotFoundError: 绑定的 Tool 在 ToolRegistry 中未找到
+        """
+        skill_name = step.skill or ""
+
+        # Step 1: 查找 Atomic Skill 定义
+        if not self.skill_loader:
+            raise RCAExecutionError(
+                step.id, "skill_loader 未配置，无法执行 skill 类型步骤"
+            )
+
+        atomic = self.skill_loader.get_atomic_skill(skill_name)
+        if atomic is None:
+            raise SkillNotFoundError(step.id, skill_name)
+
+        # Step 2: 解析输入参数（模板替换）
+        resolved_input: dict[str, Any] = {}
+        if step.input:
+            resolved_input = ctx.resolve_input_template(step.input)
+        elif step.input_from:
+            resolved_input = ctx.resolve_input_from(step.input_from)
+
+        logger.debug(
+            f"[RCA] Skill 步骤 '{step.id}' → Atomic Skill '{skill_name}', "
+            f"输入: {list(resolved_input.keys())}"
+        )
+
+        # Step 3-5: 执行 Atomic Skill（底层调用 Tool）
+        raw_result = await self._call_atomic_skill(step.id, atomic, resolved_input)
+
+        # Step 6: 按 output_schema 校验输出
+        validated = self._validate_skill_output(raw_result, atomic.output_schema)
+
+        # Step 7: 存入上下文
+        ctx.set_output(step.id, validated)
+        return validated
+
+    async def _call_atomic_skill(
+        self,
+        step_id: str,
+        atomic: AtomicSkill,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Atomic Skill 底层执行 —— 通过 ToolRegistry 调用绑定的工具。
+
+        绑定规则：从 Atomic Skill YAML 的 execution.steps[0].tool 字段
+        获取底层 ToolRegistry 工具名称。若未声明则回退到 Atomic Skill 的 name。
+
+        Args:
+            step_id: 当前步骤 ID（用于错误报告）
+            atomic: Atomic Skill 定义
+            params: 已解析的输入参数
+
+        Returns:
+            工具调用的原始返回数据
+
+        Raises:
+            ToolNotFoundError: 绑定的 Tool 未找到
+            SecurityViolationError: 安全校验拒绝
+        """
+        # 优先使用 execution.steps 中声明的 tool，回退到 name
+        tool_name = atomic.tool or atomic.name
+
+        # 检查 Tool 是否存在于 ToolRegistry
+        if hasattr(self.tools, "has_tool"):
+            if not self.tools.has_tool(tool_name):
+                raise ToolNotFoundError(step_id, tool_name)
+        elif hasattr(self.tools, "get_tool"):
+            if self.tools.get_tool(tool_name) is None:
+                raise ToolNotFoundError(step_id, tool_name)
+
+        # 安全校验
+        self.security.validate_tool_call(tool_name, params)
+
+        # 通过 ToolRegistry 执行工具调用
+        raw_result = await self.tools.execute(tool_name, params)
+
+        # 确保返回字典格式
+        if isinstance(raw_result, str):
+            try:
+                parsed = json.loads(raw_result)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+            return {"result": raw_result}
+
+        if isinstance(raw_result, dict):
+            return raw_result
+
+        return {"result": str(raw_result)}
+
+    @staticmethod
+    def _validate_skill_output(
+        raw: dict[str, Any],
+        output_schema: dict[str, str],
+    ) -> dict[str, Any]:
+        """按 output_schema 提取并校验输出字段。
+
+        - 仅保留 output_schema 中声明的字段（丢弃多余字段）
+        - 缺失字段填充 None 并记录 WARNING
+        - 确保输出结构与 output_schema 一致
+
+        Args:
+            raw: 工具调用的原始返回数据
+            output_schema: Atomic Skill 的 output_schema {字段名: 类型}
+
+        Returns:
+            按 output_schema 过滤后的输出字典
+        """
+        if not output_schema:
+            return raw
+
+        validated: dict[str, Any] = {}
+        for field_name, field_type in output_schema.items():
+            if field_name in raw:
+                validated[field_name] = raw[field_name]
+            else:
+                validated[field_name] = None
+                logger.warning(
+                    f"[RCA] output_schema 字段 '{field_name}' 在工具返回中缺失，填充 None"
+                )
+        return validated
 
     async def _execute_llm_step(
         self,
@@ -270,7 +437,7 @@ class RCAEngine:
         """执行 LLM 类型步骤。
 
         流程:
-        1. 从 input_from 解析前置步骤输出
+        1. 从 input / input_from 解析前置步骤输出
         2. 渲染 prompt 模板
         3. 构建单轮 SLM 调用消息（最小上下文）
         4. 调用 LLMProvider.chat()
@@ -278,9 +445,11 @@ class RCAEngine:
         6. 校验输出是否匹配 output_schema
         7. 存入 StepContext
         """
-        # 1. 解析引用
+        # 1. 解析引用：优先使用 input 模板映射，回退到 input_from
         extra_vars: dict[str, Any] = {}
-        if step.input_from:
+        if step.input:
+            extra_vars = ctx.resolve_input_template(step.input)
+        elif step.input_from:
             extra_vars = ctx.resolve_input_from(step.input_from)
 
         # 2. 渲染 prompt
@@ -435,28 +604,28 @@ class RCAEngine:
         """执行 Tool 类型步骤。
 
         流程:
-        1. 安全校验（白名单检查）
-        2. 通过 ToolRegistry 执行工具调用
-        3. 解析返回结果
-        4. 按 output_schema 存入 StepContext
+        1. 解析 input 模板变量（支持 {{stepId.field}} 和 input_from）
+        2. 安全校验（白名单检查）
+        3. 通过 ToolRegistry 执行工具调用
+        4. 解析返回结果
+        5. 按 output_schema 存入 StepContext
         """
         tool_name = step.tool or ""
-        tool_input = dict(step.input or {})
 
-        # 解析 input 中的模板变量（支持引用前置步骤输出）
-        if step.input_from:
-            extra_vars = ctx.resolve_input_from(step.input_from)
-            for key, value in tool_input.items():
-                if isinstance(value, str) and "{{" in value:
-                    tool_input[key] = ctx.resolve_template(value, extra_vars)
+        # 1. 解析输入参数：优先使用 input 模板映射，回退到 input_from
+        tool_input: dict[str, Any] = {}
+        if step.input:
+            tool_input = ctx.resolve_input_template(step.input)
+        elif step.input_from:
+            tool_input = ctx.resolve_input_from(step.input_from)
 
-        # 1. 安全校验
+        # 2. 安全校验
         self.security.validate_tool_call(tool_name, tool_input)
 
-        # 2. 执行工具
+        # 3. 执行工具
         result = await self.tools.execute(tool_name, tool_input)
 
-        # 3-4. 解析并存储
+        # 4-5. 解析并存储
         output = self._parse_tool_output(result, step)
         ctx.set_output(step.id, output)
         return output

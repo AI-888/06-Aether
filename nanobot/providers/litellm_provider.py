@@ -1,3 +1,4 @@
+from __future__ import annotations
 """LiteLLM provider implementation for multi-provider support."""
 
 import asyncio

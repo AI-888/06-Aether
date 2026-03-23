@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aether Agent 数据流全景图</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d2e;
+    --border: #2a2d3e;
+    --accent: #6c5ce7;
+    --accent2: #00cec9;
+    --accent3: #fd79a8;
+    --accent4: #fdcb6e;
+    --text: #e2e8f0;
+    --text-dim: #8892b0;
+    --success: #00b894;
+    --warning: #fdcb6e;
+    --danger: #e17055;
+    --radius: 16px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── 头部 ── */
+  .header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+  }
+  .header h1 {
+    font-size: 2.2rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header p { color: var(--text-dim); font-size: 1rem; }
+
+  /* ── 流程容器 ── */
+  .flow-container {
+    max-width: 900px;
+    margin: 48px auto;
+    padding: 0 24px;
+    position: relative;
+  }
+  /* 中轴线 */
+  .flow-container::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--accent), var(--accent2), var(--accent3));
+    transform: translateX(-50%);
+    border-radius: 2px;
+    opacity: 0.4;
+  }
+
+  /* ── 步骤节点 ── */
+  .step {
+    position: relative;
+    margin-bottom: 0;
+    display: flex;
+    align-items: flex-start;
+    opacity: 0;
+    transform: translateY(30px);
+    animation: fadeUp 0.5s forwards;
+  }
+  .step:nth-child(1) { animation-delay: 0.1s; }
+  .step:nth-child(2) { animation-delay: 0.2s; }
+  .step:nth-child(3) { animation-delay: 0.3s; }
+  .step:nth-child(4) { animation-delay: 0.4s; }
+  .step:nth-child(5) { animation-delay: 0.5s; }
+  .step:nth-child(6) { animation-delay: 0.6s; }
+  .step:nth-child(7) { animation-delay: 0.7s; }
+  .step:nth-child(8) { animation-delay: 0.8s; }
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* 节点圆点 */
+  .step-dot {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    z-index: 2;
+    box-shadow: 0 0 20px rgba(108, 92, 231, 0.3);
+    flex-shrink: 0;
+  }
+
+  /* 卡片 */
+  .step-card {
+    width: calc(50% - 46px);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  .step-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(108, 92, 231, 0.15);
+  }
+  .step.left .step-card { margin-right: auto; }
+  .step.right .step-card { margin-left: auto; }
+
+  .step-card h3 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step-card p {
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .step-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── 分支区域 ── */
+  .branch-section {
+    max-width: 1100px;
+    margin: 64px auto;
+    padding: 0 24px;
+  }
+  .branch-section > h2 {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 36px;
+    color: var(--accent2);
+  }
+
+  .branches {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .branches { grid-template-columns: 1fr; }
+  }
+
+  .branch-col {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+  .branch-col:hover {
+    border-color: var(--accent);
+    box-shadow: 0 8px 32px rgba(108, 92, 231, 0.12);
+  }
+  .branch-header {
+    padding: 20px 24px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .branch-header .badge {
+    font-size: 0.68rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+
+  .branch-steps {
+    padding: 16px 20px;
+  }
+  .b-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .b-step:last-child { border-bottom: none; }
+  .b-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .b-step-content h4 {
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+  }
+  .b-step-content p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* ── 分支箭头连接 ── */
+  .arrow-down {
+    text-align: center;
+    padding: 8px 0;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    opacity: 0.5;
+  }
+
+  /* ── 对比表格 ── */
+  .compare-section {
+    max-width: 900px;
+    margin: 64px auto;
+    padding: 0 24px;
+  }
+  .compare-section h2 {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 28px;
+    color: var(--accent3);
+  }
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .compare-table th, .compare-table td {
+    padding: 14px 20px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.88rem;
+  }
+  .compare-table th {
+    background: rgba(108, 92, 231, 0.12);
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .compare-table td { color: var(--text-dim); }
+  .compare-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .compare-table .highlight { color: var(--text); font-weight: 600; }
+
+  /* ── 颜色主题 ── */
+  .c-purple { background: rgba(108, 92, 231, 0.15); color: #a29bfe; border: 1px solid rgba(108, 92, 231, 0.3); }
+  .c-green { background: rgba(0, 206, 201, 0.15); color: #81ecec; border: 1px solid rgba(0, 206, 201, 0.3); }
+  .c-pink { background: rgba(253, 121, 168, 0.15); color: #fd79a8; border: 1px solid rgba(253, 121, 168, 0.3); }
+  .c-yellow { background: rgba(253, 203, 110, 0.15); color: #fdcb6e; border: 1px solid rgba(253, 203, 110, 0.3); }
+  .c-blue { background: rgba(116, 185, 255, 0.15); color: #74b9ff; border: 1px solid rgba(116, 185, 255, 0.3); }
+
+  .dot-purple { background: linear-gradient(135deg, #6c5ce7, #a29bfe); }
+  .dot-green { background: linear-gradient(135deg, #00cec9, #81ecec); }
+  .dot-pink { background: linear-gradient(135deg, #e17055, #fd79a8); }
+  .dot-yellow { background: linear-gradient(135deg, #fdcb6e, #ffeaa7); }
+
+  .num-purple { background: rgba(108, 92, 231, 0.2); color: #a29bfe; }
+  .num-green { background: rgba(0, 206, 201, 0.2); color: #81ecec; }
+  .num-pink { background: rgba(253, 121, 168, 0.2); color: #fd79a8; }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    opacity: 0.6;
+  }
+
+  /* ── 关键结论卡片 ── */
+  .conclusion {
+    max-width: 900px;
+    margin: 64px auto;
+    padding: 0 24px;
+  }
+  .conclusion-card {
+    background: linear-gradient(135deg, rgba(108,92,231,0.08), rgba(0,206,201,0.08));
+    border: 1px solid rgba(108, 92, 231, 0.25);
+    border-radius: var(--radius);
+    padding: 32px;
+  }
+  .conclusion-card h2 {
+    font-size: 1.3rem;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .conclusion-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .conclusion-card li {
+    padding: 8px 0;
+    padding-left: 24px;
+    position: relative;
+    color: var(--text-dim);
+    line-height: 1.7;
+    font-size: 0.92rem;
+  }
+  .conclusion-card li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: var(--success);
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ 头部 ═══════════ -->
+<div class="header">
+  <h1>🧠 Aether Agent 数据流全景图</h1>
+  <p>用户输入 → 意图分类 → 三大处理分支 → 输出结果</p>
+</div>
+
+<!-- ═══════════ 主流程（时间线） ═══════════ -->
+<div class="flow-container">
+
+  <!-- Step 1 -->
+  <div class="step left" style="margin-bottom:48px">
+    <div class="step-dot dot-purple">💬</div>
+    <div class="step-card">
+      <h3><span class="step-tag c-purple">入口</span> 用户发送消息</h3>
+      <p>用户通过 WebSocket (<code>/ws</code>) 发送文本消息，进入 <code>process_user_message_streaming()</code></p>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step right" style="margin-bottom:48px">
+    <div class="step-dot dot-yellow">🧠</div>
+    <div class="step-card">
+      <h3><span class="step-tag c-yellow">第 1 次 LLM</span> 意图分类 A / D</h3>
+      <p><strong>A = 知识问答</strong>（概念、原理、对比等）<br>
+         <strong>D = 操作/排查</strong>（查 Pod、看日志、故障排查）<br>
+         调用 <code>classify_user_intent()</code>，温度 0.1，只输出一个字母</p>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step left" style="margin-bottom:48px">
+    <div class="step-dot dot-green">🔍</div>
+    <div class="step-card">
+      <h3><span class="step-tag c-green">仅 D 类</span> 第 2 次 LLM：子分类 simple / complex</h3>
+      <p><strong>simple = 简单运维</strong>（查状态、单命令）<br>
+         <strong>complex = 复杂排障</strong>（故障排查、根因分析）<br>
+         调用 <code>classify_d_sub_type()</code></p>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="step right" style="margin-bottom:16px">
+    <div class="step-dot dot-pink">🔀</div>
+    <div class="step-card">
+      <h3><span class="step-tag c-pink">分发</span> 进入三条独立管道</h3>
+      <p>根据分类结果，走完全不同的 3 条路径 ↓↓↓</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════ 三大分支 ═══════════ -->
+<div class="branch-section">
+  <h2>⚡ 三条处理管道（完全独立，零交叉）</h2>
+
+  <div class="branches">
+
+    <!-- ── A 类：知识问答 ── -->
+    <div class="branch-col">
+      <div class="branch-header">
+        📚 A 类 · 知识问答
+        <span class="badge c-blue">process_qa_intent</span>
+      </div>
+      <div class="branch-steps">
+        <div class="b-step">
+          <div class="b-num num-purple">1</div>
+          <div class="b-step-content">
+            <h4>检索知识库</h4>
+            <p>在 ChromaDB 向量库中语义检索相关文档片段</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-purple">2</div>
+          <div class="b-step-content">
+            <h4>LLM 总结回答</h4>
+            <p>将检索结果作为上下文，LLM 生成回答</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-purple">3</div>
+          <div class="b-step-content">
+            <h4>✅ 输出结果</h4>
+            <p>通过 WebSocket 流式推送给前端</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── D-simple：简单运维 ── -->
+    <div class="branch-col">
+      <div class="branch-header">
+        🔧 D-simple · 简单运维
+        <span class="badge c-green">process_ops_intent</span>
+      </div>
+      <div class="branch-steps">
+        <div class="b-step">
+          <div class="b-num num-green">1</div>
+          <div class="b-step-content">
+            <h4>检索 Skill 库</h4>
+            <p>在统一 Skills 向量库搜索，取 top4 候选</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-green">2</div>
+          <div class="b-step-content">
+            <h4>Rerank 取 Top1</h4>
+            <p>对候选 Skill 重排序，选出最佳匹配</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-green">3</div>
+          <div class="b-step-content">
+            <h4>提取 & 筛选工具</h4>
+            <p>从 Skill YAML 提取工具名 → 与已注册工具取交集</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-green">4</div>
+          <div class="b-step-content">
+            <h4>Agent Loop 调工具</h4>
+            <p>Skill 信息 + 工具列表 → LLM 发起 tool_call → 返回结果</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-green">5</div>
+          <div class="b-step-content">
+            <h4>✅ 输出结果</h4>
+            <p>工具执行结果通过 WebSocket 流式推送</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── D-complex：复杂排障 ── -->
+    <div class="branch-col">
+      <div class="branch-header">
+        🔬 D-complex · 复杂排障
+        <span class="badge c-pink">process_troubleshooting_intent</span>
+      </div>
+      <div class="branch-steps">
+        <div class="b-step">
+          <div class="b-num num-pink">1</div>
+          <div class="b-step-content">
+            <h4>检索 SOP Skill 库</h4>
+            <p>在统一 Skills 向量库搜索，取 top4 候选</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-pink">2</div>
+          <div class="b-step-content">
+            <h4>Rerank 取 Top1</h4>
+            <p>对候选 Skill 重排序，选出最佳匹配</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-pink">3</div>
+          <div class="b-step-content">
+            <h4>RCA Engine 分步执行</h4>
+            <p>按 SOP Skill 的 steps 逐步执行：调工具 → LLM 分析 → 下一步</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-pink">4</div>
+          <div class="b-step-content">
+            <h4>生成诊断报告</h4>
+            <p>汇总所有步骤结果，输出 Markdown 格式的 RCA 报告</p>
+          </div>
+        </div>
+        <div class="arrow-down">↓</div>
+        <div class="b-step">
+          <div class="b-num num-pink">5</div>
+          <div class="b-step-content">
+            <h4>✅ 输出报告</h4>
+            <p>诊断报告通过 WebSocket 推送给前端</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ 对比表格 ═══════════ -->
+<div class="compare-section">
+  <h2>📊 D-simple vs D-complex 关键区别</h2>
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>维度</th>
+        <th>D-simple 简单运维</th>
+        <th>D-complex 复杂排障</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="highlight">入口函数</td>
+        <td>process_ops_intent()</td>
+        <td>process_troubleshooting_intent()</td>
+      </tr>
+      <tr>
+        <td class="highlight">查到 Skill 后</td>
+        <td>→ <span style="color:#81ecec;font-weight:600">_run_agent_loop()</span><br>LLM 自主调工具</td>
+        <td>→ <span style="color:#fd79a8;font-weight:600">_execute_rca_skill()</span><br>RCA Engine 分步诊断</td>
+      </tr>
+      <tr>
+        <td class="highlight">没查到 Skill</td>
+        <td>→ _run_agent_loop(None) → LLM 自由推理 → 结束</td>
+        <td>→ _run_agent_loop(None) → LLM 自由推理 → 结束</td>
+      </tr>
+      <tr>
+        <td class="highlight">工具调用方式</td>
+        <td>LLM 通过 tool_call 机制调用<br><span style="color:#fdcb6e">单工具时强制调用</span></td>
+        <td>RCA Engine 按 Step 顺序逐个调用</td>
+      </tr>
+      <tr>
+        <td class="highlight">是否交叉调用</td>
+        <td colspan="2" style="text-align:center;color:#00b894;font-weight:700">❌ 完全独立，零耦合</td>
+      </tr>
+      <tr>
+        <td class="highlight">典型场景</td>
+        <td>"查看 broker pod 状态"<br>"获取集群节点列表"</td>
+        <td>"消息积压怎么排查"<br>"broker 超时错误分析"</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════ 结论 ═══════════ -->
+<div class="conclusion">
+  <div class="conclusion-card">
+    <h2>🎯 核心要点</h2>
+    <ul>
+      <li><strong>两次 LLM 意图分类：</strong>第 1 次分 A/D，第 2 次（仅 D 类）分 simple/complex</li>
+      <li><strong>三条管道完全独立：</strong>A 类走知识库，D-simple 走工具调用，D-complex 走 RCA 诊断</li>
+      <li><strong>D-simple 不会转入根因分析：</strong>查不到 Skill → 直接结束；查到了 → 调工具 → 结束</li>
+      <li><strong>D-complex 不会走 Agent Loop 调工具：</strong>查到 Skill → RCA Engine 分步执行 → 生成报告</li>
+      <li><strong>唯一的共享回退：</strong>两者在「没查到 Skill」时都回退到 _run_agent_loop(None) 做 LLM 自由推理</li>
+    </ul>
+  </div>
+</div>
+
+<div class="footer">
+  Aether Agent Flow Visualization · Generated at 2026-03-21
+</div>
+
+</body>
+</html>

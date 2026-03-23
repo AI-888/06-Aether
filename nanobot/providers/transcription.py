@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Voice transcription provider using Groq."""
 
 import os

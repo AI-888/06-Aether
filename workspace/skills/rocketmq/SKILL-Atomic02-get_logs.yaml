@@ -1,0 +1,64 @@
+# RocketMQ 原子技能：获取日志
+skill:
+  # 技能名称：用于获取 RocketMQ 各组件的日志内容
+  name: get_rocketmq_logs
+  
+  # 技能版本号
+  version: "1.0"
+  
+  # 技能类型：atomic 表示原子技能（基础技能，不可再分）
+  type: atomic
+
+  # 技能描述：详细说明该技能的功能、支持的组件及日志路径
+  description: |
+    查询 RocketMQ 组件的日志内容、错误日志、log 文件信息
+    
+    使用场景：用户询问 "查看日志"、"查询 Broker 日志"、"Namesrv 报错日志"、
+    "查看 log"、"Proxy 日志搜索"、"查看错误信息"、"查询 ERROR 日志"、
+    "Broker 日志关键字搜索"、"查看运行日志"、"日志排查" 等
+    
+    支持的组件及日志路径：
+    - NameServer: /root/logs/rocketmqlogs/
+    - Broker: /root/logs/rocketmqlogs/
+    - Proxy: /root/logs/rocketmqlogs/
+    - Manager: /usr/local/services/tdmq-rocketmq-manager/ /root/logs/rocketmqlogs/
+    - Billing: /usr/local/services/tdmq-rocketmq-billing/
+    - Operation: /root/logs/rocketmq-operation/ /root/logs/rocketmqlogs/
+    - Router: /data/logs/rocketmq-router/ /root/logs/rocketmqlogs/
+    - Disperser: /root/logs/
+
+  # 输入参数定义：定义该技能需要的输入参数及其类型
+  input_schema:
+    namespace: string                 # Kubernetes 命名空间名称
+    component_keyword: string         # RocketMQ 组件类型关键字（namesrv / broker / proxy / manager / billing / operation / router / disperser）
+    log_path: string                  # 日志文件路径
+    log_keyword: string               # 日志搜索关键字（用于过滤日志内容）
+    exclude_keywords: string          # 需要排除的关键字（用于过滤不需要的日志行）
+    lines: number                     # 返回的日志行数限制
+
+  # 输出参数定义：定义该技能返回的结果数据结构
+  output_schema:
+    log_content: string               # 查询到的日志内容
+
+  # 执行配置：定义技能的执行步骤
+  execution:
+    steps:
+      # 步骤 ID：唯一标识该执行步骤
+      - id: fetch
+        # 步骤类型：tool 表示调用外部工具
+        type: tool
+        # 使用的工具名称：kubectl 查询日志
+        tool: kubectl_query_log
+        # 传递给工具的输入参数
+        input:
+          namespace: "{{namespace}}"                    # 命名空间，使用模板变量
+          component_keyword: "{{component_keyword}}"    # 组件关键字，使用模板变量
+          log_path: "{{log_path}}"                      # 日志路径，使用模板变量
+          log_keyword: "{{log_keyword}}"                # 日志搜索关键字，使用模板变量
+          exclude_keywords: "{{exclude_keywords}}"      # 排除关键字，使用模板变量
+          lines: "{{lines}}"                            # 日志行数，使用模板变量
+
+  # 信号配置：控制技能的附加行为
+  signal:
+    # 是否启用置信度评估（false 表示不评估结果的可信程度）
+    enable_confidence: false

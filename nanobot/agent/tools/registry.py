@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Tool registry for dynamic tool management."""
 
 from typing import Any

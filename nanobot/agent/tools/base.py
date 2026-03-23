@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Base class for agent tools."""
 
 from abc import ABC, abstractmethod

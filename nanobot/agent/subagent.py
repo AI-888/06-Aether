@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Subagent manager for background task execution."""
 
 import asyncio

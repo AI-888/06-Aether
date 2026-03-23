@@ -124,6 +124,13 @@ RCA_SKILL_MATCH_TOTAL = Counter(
     labelnames=["matched"],
 )
 
+# 意图分类次数（区分 rule/llm 方法）
+RCA_INTENT_CLASSIFY_TOTAL = Counter(
+    "aether_rca_intent_classify_total",
+    "RCA 意图分类次数",
+    labelnames=["method"],  # "rule" / "llm"
+)
+
 # 安全拒绝次数
 RCA_SECURITY_REJECT_TOTAL = Counter(
     "aether_rca_security_reject_total",

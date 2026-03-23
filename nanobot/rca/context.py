@@ -1,6 +1,7 @@
 """RCA 步骤上下文管理。
 
-管理各步骤的输出数据，支持 input_from 引用解析和 prompt 模板渲染。
+管理各步骤的输出数据，支持 input_from 引用解析、
+{{stepId.field}} 模板映射解析和 prompt 模板渲染。
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ class StepTrace:
 
     Attributes:
         step_id: 步骤唯一标识
-        step_type: 步骤类型 (llm / tool / root_cause_definition)
+        step_type: 步骤类型 (skill / llm / tool / root_cause_definition)
         start_time: 开始执行时间戳
         end_time: 结束执行时间戳
         input_data: 步骤输入数据
@@ -137,6 +138,109 @@ class StepContext:
             result[field_name] = step_output[field_name]
 
         return result
+
+    def resolve_input_template(self, input_map: dict[str, Any]) -> dict[str, Any]:
+        """解析 input 模板映射。
+
+        将 {"pod_list": "{{step1.pods}}"} 格式的模板映射解析为实际值字典。
+        支持两种格式：
+        - {{stepId.fieldName}}: 引用前置步骤的输出字段
+        - {{inputParam}}: 引用外部输入参数
+
+        Args:
+            input_map: 输入参数映射，值可以是 {{}} 模板字符串或普通值
+
+        Returns:
+            解析后的实际值字典
+
+        Raises:
+            TemplateResolveError: 引用的步骤或字段不存在时抛出
+        """
+        result: dict[str, Any] = {}
+
+        for key, value in input_map.items():
+            if isinstance(value, str) and "{{" in value:
+                resolved = self._resolve_single_template(value)
+                result[key] = resolved
+            else:
+                # 非模板值直接透传
+                result[key] = value
+
+        return result
+
+    def _resolve_single_template(self, template: str) -> Any:
+        """解析单个模板字符串。
+
+        如果模板是纯变量引用（如 "{{step1.pods}}"），直接返回原始值（保持类型）。
+        如果模板包含混合文本（如 "prefix_{{step1.name}}_suffix"），返回字符串。
+
+        Args:
+            template: 包含 {{}} 占位符的模板字符串
+
+        Returns:
+            解析后的值
+
+        Raises:
+            TemplateResolveError: 变量无法解析时抛出
+        """
+        template = template.strip()
+
+        # 纯变量引用（整个字符串就是一个 {{...}}）：保持原始类型
+        pure_match = re.fullmatch(r"\{\{\s*([\w]+(?:\.[\w]+)?)\s*\}\}", template)
+        if pure_match:
+            var_expr = pure_match.group(1).strip()
+            return self._lookup_variable(var_expr)
+
+        # 混合模板：替换所有 {{...}} 为字符串值
+        def _replace(match: re.Match) -> str:
+            var_expr = match.group(1).strip()
+            val = self._lookup_variable(var_expr)
+            return str(val)
+
+        return re.sub(r"\{\{\s*([\w]+(?:\.[\w]+)?)\s*\}\}", _replace, template)
+
+    def _lookup_variable(self, var_expr: str) -> Any:
+        """查找变量值。
+
+        查找顺序:
+        1. stepId.fieldName → 从 _outputs 中获取
+        2. simpleVar → 从 _inputs 中获取
+
+        Args:
+            var_expr: 变量表达式，如 "step1.pods" 或 "namespace"
+
+        Returns:
+            变量的实际值
+
+        Raises:
+            TemplateResolveError: 变量不存在时抛出
+        """
+        if "." in var_expr:
+            step_id, field_name = var_expr.split(".", 1)
+
+            step_output = self._outputs.get(step_id)
+            if step_output is None:
+                raise TemplateResolveError(
+                    f"模板变量 '{{{{{var_expr}}}}}' 引用的步骤 '{step_id}' 不存在或未执行"
+                )
+
+            if field_name not in step_output:
+                raise TemplateResolveError(
+                    f"模板变量 '{{{{{var_expr}}}}}' 引用的字段 '{field_name}' "
+                    f"在步骤 '{step_id}' 的输出中不存在，"
+                    f"可用字段: {list(step_output.keys())}"
+                )
+
+            return step_output[field_name]
+
+        # 简单变量：从外部输入中获取
+        if var_expr in self._inputs:
+            return self._inputs[var_expr]
+
+        raise TemplateResolveError(
+            f"模板变量 '{{{{{var_expr}}}}}' 无法解析，"
+            f"既不是 'stepId.field' 格式，也不在外部输入参数中"
+        )
 
     def resolve_template(
         self,

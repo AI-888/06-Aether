@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Shared factory for ChromaKnowledgeStore singleton instances."""
 
 from pathlib import Path

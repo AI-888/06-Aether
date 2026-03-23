@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Knowledge base storage system for domain-specific knowledge."""
 
 import json
