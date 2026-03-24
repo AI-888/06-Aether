@@ -197,7 +197,10 @@ class RCARouter:
                 )
                 RCA_SKILL_MATCH_TOTAL.labels(matched="true").inc()
                 inputs = self._build_skill_inputs(fault_input, skill)
-                return await self.engine.execute(skill, inputs)
+                return await self.engine.execute(
+                    skill, inputs,
+                    context={"user_input": fault_input.description},
+                )
             else:
                 logger.warning(
                     f"[RCA-ROUTER] 意图分类命中 '{intent.skill_name}'，"
@@ -210,7 +213,10 @@ class RCARouter:
             logger.info(f"[RCA-ROUTER] D 类意图 → RAG 匹配 Skill '{skill.name}'")
             RCA_SKILL_MATCH_TOTAL.labels(matched="true").inc()
             inputs = self._build_skill_inputs(fault_input, skill)
-            return await self.engine.execute(skill, inputs)
+            return await self.engine.execute(
+                skill, inputs,
+                context={"user_input": fault_input.description},
+            )
 
         # 3c. 降级报告
         logger.warning("[RCA-ROUTER] D 类意图 → 未找到匹配的 Skill，返回降级报告")
@@ -242,12 +248,35 @@ class RCARouter:
             输入参数字典
         """
         inputs: dict[str, Any] = {**fault_input.data}
-        # 对 input_schema 中未提供的字段，填充 None 让工具使用默认值
-        # 避免将 description 原文错误地填入技术参数（如 namespace）
-        for key in skill.input_schema:
+        # 对 input_schema 中未提供的字段，按类型填充默认空值
+        # 避免设置 None 导致工具参数校验失败
+        for key, schema_type in skill.input_schema.items():
             if key not in inputs:
-                inputs[key] = None
+                inputs[key] = self._get_default_value_by_schema_type(schema_type)
         return inputs
+
+    @staticmethod
+    def _get_default_value_by_schema_type(schema_type: Any) -> Any:
+        """根据 schema 类型返回默认空值。"""
+        if not isinstance(schema_type, str):
+            return ""
+
+        normalized_type = schema_type.strip().lower()
+
+        if normalized_type in {"string", "str"}:
+            return ""
+        if normalized_type in {"list", "array"}:
+            return []
+        if normalized_type in {"dict", "object", "map"}:
+            return {}
+        if normalized_type in {"int", "integer"}:
+            return 0
+        if normalized_type in {"float", "number", "double"}:
+            return 0.0
+        if normalized_type in {"bool", "boolean"}:
+            return False
+
+        return ""
 
     async def _search_skill_by_rag(self, fault_input: FaultInput) -> Any:
         """通过 RAG 向量检索匹配 Skill。
