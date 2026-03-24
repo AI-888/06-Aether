@@ -1412,6 +1412,7 @@ async def _execute_rca_skill(
         from nanobot.rca.audit import AuditLogger
         from nanobot.rca.security import SecurityGuard
         from nanobot.rca.report import RCAReport
+        from nanobot.rca.router import RCARouter
 
         # 复用外部传入的 skill_loader，或新建
         if skill_loader is None:
@@ -1439,10 +1440,11 @@ async def _execute_rca_skill(
             max_total_timeout=config.rca.max_total_timeout,
         )
 
-        # 构建输入：将用户输入映射到 Skill 的 input_schema
+        # 构建输入：对 Skill 的 input_schema 中未提供的字段，按类型填充默认空值
+        # 避免设置 None 导致工具参数校验失败（如 namespace should be string）
         inputs: dict = {}
-        for key in skill.input_schema:
-            inputs[key] = user_input
+        for key, schema_type in skill.input_schema.items():
+            inputs[key] = RCARouter._get_default_value_by_schema_type(schema_type)
 
         # 定义流式回调：将每一步的执行结果实时通知前端
         async def rca_stream_callback(step_id: str, output: dict):
@@ -1465,6 +1467,8 @@ async def _execute_rca_skill(
             stream_callback=lambda step_id, output: _sync_to_async_callback(
                 rca_stream_callback, step_id, output
             ),
+            session_id="web:ui",
+            context={"user_input": user_input},
         )
 
         return report

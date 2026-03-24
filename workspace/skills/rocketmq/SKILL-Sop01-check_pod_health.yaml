@@ -1,7 +1,7 @@
 # RocketMQ SOP 技能：检查 Pod 健康状态
 skill:
-  # 技能名称：用于检查 RocketMQ Pod 的健康状态并输出异常信息
-  name: check_rocketmq_pod_health
+  # 技能名称：用于检查 RocketMQ pod状态并输出异常信息
+  name: check_rocketmq_pod_status
   
   # 技能版本号
   version: "2.0"

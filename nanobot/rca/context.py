@@ -72,12 +72,18 @@ class StepContext:
 
     Attributes:
         _inputs: 外部输入参数（对应 Skill 的 input_schema）
+        _context: 全局上下文（如 user_input），贯穿整个执行流程
         _outputs: 各步骤的输出数据 {step_id: {field: value}}
         _traces: 执行轨迹列表
     """
 
-    def __init__(self, inputs: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        inputs: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+    ):
         self._inputs: dict[str, Any] = inputs or {}
+        self._context: dict[str, Any] = context or {}
         self._outputs: dict[str, dict[str, Any]] = {}
         self._traces: list[StepTrace] = []
 
@@ -205,6 +211,7 @@ class StepContext:
         查找顺序:
         1. stepId.fieldName → 从 _outputs 中获取
         2. simpleVar → 从 _inputs 中获取
+        3. simpleVar → 从 _context（全局上下文）中获取
 
         Args:
             var_expr: 变量表达式，如 "step1.pods" 或 "namespace"
@@ -237,9 +244,13 @@ class StepContext:
         if var_expr in self._inputs:
             return self._inputs[var_expr]
 
+        # 简单变量：从全局上下文中获取
+        if var_expr in self._context:
+            return self._context[var_expr]
+
         raise TemplateResolveError(
             f"模板变量 '{{{{{var_expr}}}}}' 无法解析，"
-            f"既不是 'stepId.field' 格式，也不在外部输入参数中"
+            f"既不是 'stepId.field' 格式，也不在外部输入参数或全局上下文中"
         )
 
     def resolve_template(
@@ -250,7 +261,7 @@ class StepContext:
         """渲染 prompt 模板。
 
         将 {{变量名}} 替换为实际值。
-        查找顺序: extra_vars → _inputs（外部输入）
+        查找顺序: extra_vars → _inputs（外部输入）→ _context（全局上下文）
 
         Args:
             template: 包含 {{变量名}} 占位符的模板字符串
@@ -260,9 +271,11 @@ class StepContext:
             渲染后的字符串
         """
         merged_vars: dict[str, Any] = {}
-        # 先放 _inputs 作为基底
+        # 先放 _context 作为最低优先级基底
+        merged_vars.update(self._context)
+        # _inputs 优先级高于 _context
         merged_vars.update(self._inputs)
-        # extra_vars 优先级高于 _inputs
+        # extra_vars 优先级最高
         if extra_vars:
             merged_vars.update(extra_vars)
 

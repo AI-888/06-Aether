@@ -103,6 +103,7 @@ class RCAEngine:
         inputs: dict[str, Any],
         stream_callback: Callable | None = None,
         session_id: str | None = None,
+        context: dict[str, Any] | None = None,
     ) -> RCAReport:
         """执行完整的 RCA Skill 工作流。
 
@@ -111,13 +112,14 @@ class RCAEngine:
             inputs: 外部输入参数（对应 input_schema）
             stream_callback: 流式回调（可选）
             session_id: 会话 ID（可选，不提供时自动生成）
+            context: 全局上下文（可选），承载 user_input 等贯穿整个流程的信息
 
         Returns:
             完整的 RCA 报告
         """
         session_id = session_id or self.audit.new_session_id()
         start_time = time.time()
-        ctx = StepContext(inputs)
+        ctx = StepContext(inputs, context=context)
 
         # 记录会话开始
         self.audit.log_session_start(session_id, skill.name, inputs)
