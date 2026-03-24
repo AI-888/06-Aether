@@ -242,10 +242,11 @@ class RCARouter:
             输入参数字典
         """
         inputs: dict[str, Any] = {**fault_input.data}
-        # 将 description 映射到 Skill input_schema 中未填充的字段
+        # 对 input_schema 中未提供的字段，填充 None 让工具使用默认值
+        # 避免将 description 原文错误地填入技术参数（如 namespace）
         for key in skill.input_schema:
             if key not in inputs:
-                inputs[key] = fault_input.description
+                inputs[key] = None
         return inputs
 
     async def _search_skill_by_rag(self, fault_input: FaultInput) -> Any:

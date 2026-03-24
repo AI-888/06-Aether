@@ -44,7 +44,7 @@ class ToolRegistry:
             if tool.name in names
         ]
 
-    async def execute(self, name: str, params: dict[str, Any]) -> str:
+    async def execute(self, name: str, params: dict[str, Any]) -> dict[str, Any]:
         """
         Execute a tool by name with given parameters.
         
@@ -53,22 +53,35 @@ class ToolRegistry:
             params: Tool parameters.
         
         Returns:
-            Tool execution result as string.
+            Dict with keys:
+                - result: 工具执行结果字符串
+                - commands: 本次执行的命令列表
         
         Raises:
             KeyError: If tool not found.
         """
         tool = self._tools.get(name)
         if not tool:
-            return f"Error: Tool '{name}' not found"
+            return {"result": f"Error: Tool '{name}' not found", "commands": []}
 
         try:
             errors = tool.validate_params(params)
             if errors:
-                return f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors)
-            return await tool.execute(**params)
+                return {
+                    "result": f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors),
+                    "commands": [],
+                }
+            raw = await tool.execute(**params)
+            # 兼容旧工具仍返回 str 的情况
+            if isinstance(raw, str):
+                return {"result": raw, "commands": []}
+            if isinstance(raw, dict):
+                raw.setdefault("result", "")
+                raw.setdefault("commands", [])
+                return raw
+            return {"result": str(raw), "commands": []}
         except Exception as e:
-            return f"Error executing {name}: {str(e)}"
+            return {"result": f"Error executing {name}: {str(e)}", "commands": []}
 
     @property
     def tool_names(self) -> list[str]:

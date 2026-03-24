@@ -382,22 +382,40 @@ class RCAEngine:
         # 通过 ToolRegistry 执行工具调用
         raw_result = await self.tools.execute(tool_name, params)
 
-        # 检查工具返回是否为错误信息
-        if isinstance(raw_result, str) and raw_result.startswith("Error:"):
-            logger.error(f"[RCA] 工具 '{tool_name}' 执行失败: {raw_result}")
-            # 区分错误类型：参数校验失败 vs 其他执行错误
-            if "missing required" in raw_result or "Invalid parameters" in raw_result:
+        # 新版返回格式为 dict: {"result": str, "commands": list, ...}
+        # 提取 result 字段和 commands 用于日志
+        if isinstance(raw_result, dict):
+            tool_commands = raw_result.get("commands", [])
+            if tool_commands:
+                logger.info(f"[RCA] 🔧 工具执行命令: {tool_commands}")
+            result_str = raw_result.get("result", "")
+            # 检查工具返回是否为错误信息
+            if isinstance(result_str, str) and result_str.startswith("Error:"):
+                logger.error(f"[RCA] 工具 '{tool_name}' 执行失败: {result_str}")
+                if "missing required" in result_str or "Invalid parameters" in result_str:
+                    raise RCAExecutionError(
+                        step_id,
+                        f"工具 '{tool_name}' 参数校验失败: {result_str}",
+                    )
                 raise RCAExecutionError(
                     step_id,
-                    f"工具 '{tool_name}' 参数校验失败: {raw_result}",
+                    f"工具 '{tool_name}' 执行返回错误: {result_str}",
                 )
-            raise RCAExecutionError(
-                step_id,
-                f"工具 '{tool_name}' 执行返回错误: {raw_result}",
-            )
+            return raw_result
 
-        # 确保返回字典格式
+        # 兼容旧版返回 str 的情况
         if isinstance(raw_result, str):
+            if raw_result.startswith("Error:"):
+                logger.error(f"[RCA] 工具 '{tool_name}' 执行失败: {raw_result}")
+                if "missing required" in raw_result or "Invalid parameters" in raw_result:
+                    raise RCAExecutionError(
+                        step_id,
+                        f"工具 '{tool_name}' 参数校验失败: {raw_result}",
+                    )
+                raise RCAExecutionError(
+                    step_id,
+                    f"工具 '{tool_name}' 执行返回错误: {raw_result}",
+                )
             try:
                 parsed = json.loads(raw_result)
                 if isinstance(parsed, dict):
@@ -405,9 +423,6 @@ class RCAEngine:
             except (json.JSONDecodeError, ValueError):
                 pass
             return {"result": raw_result}
-
-        if isinstance(raw_result, dict):
-            return raw_result
 
         return {"result": str(raw_result)}
 
@@ -637,16 +652,26 @@ class RCAEngine:
         self.security.validate_tool_call(tool_name, tool_input)
 
         # 3. 执行工具
-        result = await self.tools.execute(tool_name, tool_input)
+        exec_ret = await self.tools.execute(tool_name, tool_input)
+
+        # 提取 commands 日志
+        if isinstance(exec_ret, dict):
+            tool_commands = exec_ret.get("commands", [])
+            if tool_commands:
+                logger.info(f"[RCA] 🔧 工具执行命令: {tool_commands}")
 
         # 4-5. 解析并存储
-        output = self._parse_tool_output(result, step)
+        output = self._parse_tool_output(exec_ret, step)
         ctx.set_output(step.id, output)
         return output
 
     @staticmethod
     def _parse_tool_output(result: Any, step: SkillStep) -> dict[str, Any]:
         """解析工具返回结果。"""
+        # 新版返回格式为 dict: {"result": str, "commands": list, ...}
+        if isinstance(result, dict):
+            return result
+
         # 尝试解析为 JSON
         if isinstance(result, str):
             try:

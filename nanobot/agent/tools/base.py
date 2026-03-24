@@ -41,7 +41,7 @@ class Tool(ABC):
         pass
 
     @abstractmethod
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> dict[str, Any]:
         """
         Execute the tool with given parameters.
         
@@ -49,9 +49,27 @@ class Tool(ABC):
             **kwargs: Tool-specific parameters.
         
         Returns:
-            String result of the tool execution.
+            Dict with keys:
+                - result: 工具执行结果的字符串表示
+                - commands: 本次执行的命令列表（无命令时为空列表）
         """
         pass
+
+    @staticmethod
+    def make_result(result: str, commands: list[str] | None = None) -> dict[str, Any]:
+        """构建统一的工具返回值结构。
+
+        Args:
+            result: 执行结果字符串
+            commands: 本次执行的命令列表
+
+        Returns:
+            {"result": str, "commands": list[str]}
+        """
+        return {
+            "result": result,
+            "commands": commands or [],
+        }
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         """Validate tool parameters against JSON schema. Returns error list (empty if valid)."""

@@ -435,12 +435,17 @@ class AgentLoop:
                         stream_callback(tool_start_info)
 
                 try:
-                    result = await self.tools.execute(tool_name, tool_args)
+                    exec_ret = await self.tools.execute(tool_name, tool_args)
+                    result = exec_ret.get("result", "")
+                    tool_commands = exec_ret.get("commands", [])
 
                     # 计算执行耗时
                     end_time = time.time()
                     duration = end_time - start_time
 
+                    # 打印执行的命令行
+                    if tool_commands:
+                        logger.info(f"[LOOP] 🔧 工具执行命令: {tool_commands}")
                     result_preview = str(result)[:300] if result else "(empty result)"
                     logger.info(f"[LOOP] 🔧 工具输出: {result_preview}...")
                     logger.info(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
@@ -453,7 +458,8 @@ class AgentLoop:
                             "tool_name": display_tool_name,
                             "tool_args": tool_args,
                             "tool_status": "completed",
-                            "tool_result": result_preview
+                            "tool_result": result_preview,
+                            "tool_commands": tool_commands,
                         }
                         if asyncio.iscoroutinefunction(stream_callback):
                             await stream_callback(tool_result_info)
@@ -615,12 +621,16 @@ class AgentLoop:
                 start_time = time.time()
 
                 try:
-                    result = await self.tools.execute(tool_name, tool_args)
+                    exec_ret = await self.tools.execute(tool_name, tool_args)
+                    result = exec_ret.get("result", "")
+                    tool_commands = exec_ret.get("commands", [])
 
                     # 计算执行耗时
                     end_time = time.time()
                     duration = end_time - start_time
 
+                    if tool_commands:
+                        logger.info(f"[SYSTEM] 🔧 工具执行命令: {tool_commands}")
                     result_preview = str(result)[:300] if result else "(empty result)"
                     logger.info(f"[SYSTEM] 🔧 工具输出: {result_preview}...")
                     logger.info(f"[SYSTEM] ⏱️  工具执行耗时: {duration:.3f}秒")
@@ -944,8 +954,13 @@ class AgentLoop:
 
             start_time = time.time()
             try:
-                result = await self.tools.execute(tool_name, tool_args)
+                exec_ret = await self.tools.execute(tool_name, tool_args)
+                result = exec_ret.get("result", "")
+                tool_commands = exec_ret.get("commands", [])
                 duration = time.time() - start_time
+
+                if tool_commands:
+                    logger.info(f"[LOOP] 🔧 工具执行命令: {tool_commands}")
                 result_preview = str(result)[:300] if result else "(empty result)"
                 logger.info(f"[LOOP] 🔧 工具输出: {result_preview}...")
                 logger.info(f"[LOOP] ⏱️  工具执行耗时: {duration:.3f}秒")
@@ -959,6 +974,7 @@ class AgentLoop:
                         "tool_args": tool_args,
                         "tool_status": "completed",
                         "tool_result": result_preview,
+                        "tool_commands": tool_commands,
                     }
                     if asyncio.iscoroutinefunction(stream_callback):
                         await stream_callback(tool_result_info)
@@ -995,7 +1011,11 @@ class AgentLoop:
             command = self._infer_exec_command_from_text(user_text)
             if not command:
                 return None
-            result = await self.tools.execute("exec", {"command": command})
+            exec_ret = await self.tools.execute("exec", {"command": command})
+            result = exec_ret.get("result", "")
+            tool_commands = exec_ret.get("commands", [])
+            if tool_commands:
+                logger.info(f"[LOOP] 🔧 工具执行命令: {tool_commands}")
             return f"已执行命令:\n{command}\n\n结果:\n{result}"
 
         # 场景2: LLM回复了包含命令的文本，提取代码块中的命令自动执行
@@ -1026,8 +1046,13 @@ class AgentLoop:
 
             start_time = time.time()
             try:
-                result = await self.tools.execute("exec", {"command": cmd})
+                exec_ret = await self.tools.execute("exec", {"command": cmd})
+                result = exec_ret.get("result", "")
+                tool_commands = exec_ret.get("commands", [])
                 duration = time.time() - start_time
+
+                if tool_commands:
+                    logger.info(f"[LOOP] 🔧 工具执行命令: {tool_commands}")
                 result_preview = str(result)[:300] if result else "(empty result)"
                 logger.info(f"[LOOP] 🔧 命令输出: {result_preview}...")
                 logger.info(f"[LOOP] ⏱️  命令执行耗时: {duration:.3f}秒")
@@ -1041,6 +1066,7 @@ class AgentLoop:
                         "tool_args": {"command": cmd},
                         "tool_status": "completed",
                         "tool_result": result_preview,
+                        "tool_commands": tool_commands,
                     }
                     if asyncio.iscoroutinefunction(stream_callback):
                         await stream_callback(tool_result_info)

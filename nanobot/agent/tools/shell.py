@@ -61,11 +61,11 @@ class ExecTool(Tool):
             "required": ["command"]
         }
 
-    async def execute(self, command: str, working_dir: str | None = None, **kwargs: Any) -> str:
+    async def execute(self, command: str, working_dir: str | None = None, **kwargs: Any) -> dict[str, Any]:
         cwd = working_dir or self.working_dir or os.getcwd()
         guard_error = self._guard_command(command, cwd)
         if guard_error:
-            return guard_error
+            return self.make_result(guard_error, [command])
 
         try:
             process = await asyncio.create_subprocess_shell(
@@ -82,7 +82,7 @@ class ExecTool(Tool):
                 )
             except asyncio.TimeoutError:
                 process.kill()
-                return f"Error: Command timed out after {self.timeout} seconds"
+                return self.make_result(f"Error: Command timed out after {self.timeout} seconds", [command])
 
             output_parts = []
 
@@ -104,10 +104,10 @@ class ExecTool(Tool):
             if len(result) > max_len:
                 result = result[:max_len] + f"\n... (truncated, {len(result) - max_len} more chars)"
 
-            return result
+            return self.make_result(result, [command])
 
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            return self.make_result(f"Error executing command: {str(e)}", [command])
 
     def _guard_command(self, command: str, cwd: str) -> str | None:
         """Best-effort safety guard for potentially destructive commands."""

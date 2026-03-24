@@ -75,7 +75,14 @@ class KubectlQueryLogTool(Tool):
         container: str | None = None,
         lines: int = 50,
         **kwargs: Any,
-    ) -> str:
+    ) -> dict[str, Any]:
+        """执行日志查询工具。
+
+        Returns:
+            dict: {"result": str, "commands": list[str]}
+        """
+        commands_executed: list[str] = []
+
         # 安全过滤，防止 shell 注入
         safe_log_kw = log_keyword.replace("'", "'\\''")  # 单引号转义
         safe_log_path = re.sub(r"[;|&`$<>\\]", "", log_path)
@@ -93,7 +100,7 @@ class KubectlQueryLogTool(Tool):
                 filter_desc += f" 命名空间 '{namespace}'"
             if exclude_keywords:
                 filter_desc += f" 排除 '{exclude_keywords}'"
-            return f"未找到匹配 {filter_desc} 的 Pod。"
+            return self.make_result(f"未找到匹配 {filter_desc} 的 Pod。", commands_executed)
 
         results = []
         filter_info = f"关键字 '{component_keyword}'"
@@ -117,6 +124,7 @@ class KubectlQueryLogTool(Tool):
                     f"kubectl get pod {pod_name} -n {ns} "
                     r"-o jsonpath='{.spec.containers[*].name}'"
                 )
+                commands_executed.append(container_cmd)
                 container_output = await run_command(container_cmd)
                 if container_output.startswith("Error"):
                     results.append(f"[{ns}/{pod_name}] 获取容器列表失败: {container_output}\n")
@@ -143,10 +151,11 @@ class KubectlQueryLogTool(Tool):
                 f"xargs -I {{}} sh -c \"echo \\\"=== {{}} ===\"; "
                 f"grep -n \\\"{safe_log_kw}\\\" {{}} | head -{lines}\"'"
             )
+            commands_executed.append(exec_cmd)
             exec_output = await run_command(exec_cmd)
 
             results.append(f"=== Pod: {ns}/{pod_name} (容器: {target_container}) ===")
             results.append(exec_output)
             results.append("")
 
-        return "\n".join(results)
+        return self.make_result("\n".join(results), commands_executed)
