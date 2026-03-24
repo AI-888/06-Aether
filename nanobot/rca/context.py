@@ -87,6 +87,13 @@ class StepContext:
         self._outputs: dict[str, dict[str, Any]] = {}
         self._traces: list[StepTrace] = []
 
+        from loguru import logger
+        logger.debug(
+            f"[RCA][user_input追踪] StepContext.__init__, "
+            f"_context keys={list(self._context.keys())}, "
+            f"user_input={self._context.get('user_input', '<NOT_FOUND>')!r}"
+        )
+
     @property
     def inputs(self) -> dict[str, Any]:
         """获取外部输入参数。"""
@@ -242,10 +249,20 @@ class StepContext:
 
         # 简单变量：从外部输入中获取
         if var_expr in self._inputs:
+            from loguru import logger
+            logger.debug(
+                f"[RCA][user_input追踪] _lookup_variable('{var_expr}') → "
+                f"命中 _inputs, 值={self._inputs[var_expr]!r}"
+            )
             return self._inputs[var_expr]
 
         # 简单变量：从全局上下文中获取
         if var_expr in self._context:
+            from loguru import logger
+            logger.debug(
+                f"[RCA][user_input追踪] _lookup_variable('{var_expr}') → "
+                f"命中 _context, 值={self._context[var_expr]!r}"
+            )
             return self._context[var_expr]
 
         raise TemplateResolveError(
@@ -278,6 +295,13 @@ class StepContext:
         # extra_vars 优先级最高
         if extra_vars:
             merged_vars.update(extra_vars)
+
+        from loguru import logger
+        logger.debug(
+            f"[RCA][user_input追踪] resolve_template, "
+            f"merged_vars keys={list(merged_vars.keys())}, "
+            f"user_input={merged_vars.get('user_input', '<NOT_FOUND>')!r}"
+        )
 
         def _replace(match: re.Match) -> str:
             var_name = match.group(1).strip()

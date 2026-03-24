@@ -121,6 +121,11 @@ class RCAEngine:
         start_time = time.time()
         ctx = StepContext(inputs, context=context)
 
+        logger.debug(
+            f"[RCA][user_input追踪] execute() → StepContext 已创建, "
+            f"context={context!r}, ctx._context={ctx._context!r}"
+        )
+
         # 记录会话开始
         self.audit.log_session_start(session_id, skill.name, inputs)
         logger.info(f"[RCA] 开始执行 Skill '{skill.name}' v{skill.version}")
@@ -483,8 +488,20 @@ class RCAEngine:
         elif step.input_from:
             extra_vars = ctx.resolve_input_from(step.input_from)
 
+        logger.debug(
+            f"[RCA][user_input追踪] _execute_llm_step '{step.id}', "
+            f"extra_vars={extra_vars!r}, "
+            f"ctx._inputs={ctx._inputs!r}, "
+            f"ctx._context={ctx._context!r}"
+        )
+
         # 2. 渲染 prompt
         prompt = ctx.resolve_template(step.prompt or "", extra_vars)
+
+        logger.debug(
+            f"[RCA][user_input追踪] _execute_llm_step '{step.id}' 渲染后 prompt "
+            f"(前200字符): {prompt[:200]!r}"
+        )
 
         # 3. 构建消息（最小上下文，仅当前步骤）
         messages = [

@@ -197,6 +197,10 @@ class RCARouter:
                 )
                 RCA_SKILL_MATCH_TOTAL.labels(matched="true").inc()
                 inputs = self._build_skill_inputs(fault_input, skill)
+                logger.debug(
+                    f"[RCA-ROUTER][user_input追踪] 意图分类 → engine.execute, "
+                    f"user_input={fault_input.description!r}"
+                )
                 return await self.engine.execute(
                     skill, inputs,
                     context={"user_input": fault_input.description},
@@ -213,6 +217,10 @@ class RCARouter:
             logger.info(f"[RCA-ROUTER] D 类意图 → RAG 匹配 Skill '{skill.name}'")
             RCA_SKILL_MATCH_TOTAL.labels(matched="true").inc()
             inputs = self._build_skill_inputs(fault_input, skill)
+            logger.debug(
+                f"[RCA-ROUTER][user_input追踪] RAG 匹配 → engine.execute, "
+                f"user_input={fault_input.description!r}"
+            )
             return await self.engine.execute(
                 skill, inputs,
                 context={"user_input": fault_input.description},

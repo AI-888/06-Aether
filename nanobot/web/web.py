@@ -1446,6 +1446,11 @@ async def _execute_rca_skill(
         for key, schema_type in skill.input_schema.items():
             inputs[key] = RCARouter._get_default_value_by_schema_type(schema_type)
 
+        logger.debug(
+            f"[WEB][user_input追踪] _execute_rca_skill 构建的 inputs={inputs!r}, "
+            f"skill.input_schema={skill.input_schema!r}"
+        )
+
         # 定义流式回调：将每一步的执行结果实时通知前端
         async def rca_stream_callback(step_id: str, output: dict):
             step_msg = {
@@ -1461,6 +1466,10 @@ async def _execute_rca_skill(
             await websocket.send_text(json.dumps(step_msg, ensure_ascii=False))
 
         # 执行 Skill
+        logger.debug(
+            f"[WEB][user_input追踪] _execute_rca_skill → engine.execute, "
+            f"user_input={user_input!r}"
+        )
         report = await engine.execute(
             skill=skill,
             inputs=inputs,
