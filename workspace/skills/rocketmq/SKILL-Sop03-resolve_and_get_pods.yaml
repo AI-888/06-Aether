@@ -31,7 +31,7 @@ skill:
 
   # 输入参数定义
   input_schema:
-    namespace: string          # Kubernetes 命名空间名称
+    param1: string         # 用户输入的原始文本
 
   # 输出参数定义
   output_schema:
@@ -47,9 +47,9 @@ skill:
     - id: resolve_component
       type: llm
       input:
-        user_input: "{{user_input}}"
+        param1: "{{user_input}}"
       prompt: |
-        从以下用户输入中提取 RocketMQ 组件名，并映射为实际的 kubectl 查询多个关键字, 排除多个关键字
+        从以下用户输入中提取 RocketMQ 组件名，并映射为实际的 kubectl 查询多个关键字, 排除多个关键字; 
         映射规则：
         - namesrv/nameserver → ocloud-tdmq-rocketmq5-namesrv
         - broker → ocloud-tdmq-rocketmq5-broker
@@ -60,13 +60,16 @@ skill:
         - router → rocketmq-router（排除 cmq）
         - disperser → rocketmq-disperser（排除 cmq）
 
-        用户输入：{{user_input}}
+        从以下用户输入中提取k8s的命名空间， 如果不存在，则为空；
+        - ns=namesapce=命名空间
 
+        用户输入：{{param1}}
         请输出 JSON：
-        {"component_keyword": "实际关键字", "exclude_keywords": "排除关键字或空"}
+        {"namespace": "实际命名空间", component_keyword": "实际关键字", "exclude_keywords": "排除关键字或空"}
       output_schema:
         component_keyword: string
         exclude_keywords: string
+        namespace: string
 
     # ── 步骤2：调用 kubectl 获取 Pod 列表 ──
     # 使用步骤1解析后的关键字查询 Pod
@@ -74,7 +77,7 @@ skill:
       type: skill
       skill: get_rocketmq_pods
       input:
-        namespace: "{{namespace}}"
+        namespace: "{{resolve_component.namespace}}"
         component_keyword: "{{resolve_component.component_keyword}}"
         exclude_keywords: "{{resolve_component.exclude_keywords}}"
 
