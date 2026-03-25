@@ -265,8 +265,8 @@ class RCAConfig(BaseModel):
     skill_dir: str = "~/.nanobot/workspace/skills"               # Skill YAML 文件目录
     model: str = ""                                              # RCA 专用 SLM 模型（为空时使用默认模型）
     hot_reload: bool = True                                      # 是否启用热加载
-    max_step_timeout: int = 30                                   # 单步骤超时时间（秒）
-    max_total_timeout: int = 300                                 # 整体超时时间（秒）
+    max_step_timeout: int = 300                                   # 单步骤超时时间（秒）
+    max_total_timeout: int = 3000                                 # 整体超时时间（秒）
     security_whitelist: list[str] = Field(default_factory=list)  # 额外的工具白名单
     audit_log_dir: str = "~/.nanobot/workspace/rca_audit"        # 审计日志目录
     intent_rules: dict[str, list[str]] = Field(default_factory=dict)  # 规则匹配配置 {skill_name: [regex_patterns]}

@@ -1,13 +1,13 @@
 {
-	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "../.nanobot"
-		}
-	],
-	"settings": {
-		"kiroAgent.configureMCP": "Disabled"
-	}
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "../.nanobot"
+        },
+        {
+            "path": "../../root/.nanobot"
+        }
+    ]
 }

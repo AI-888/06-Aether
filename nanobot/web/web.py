@@ -711,18 +711,26 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
     from nanobot.rca.loader import RCASkillLoader
 
     if not intent_routing_store:
-        await websocket.send_text("⚠️ Skill 索引未初始化，直接进入 LLM 自由推理。\n")
+        await websocket.send_text("❌ Skill 索引未初始化，无法执行该操作。\n")
         await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "Skill 索引未初始化，跳过检索",
-            "knowledge_status": "skipped",
+            "content": "Skill 索引未初始化，无法执行操作",
+            "knowledge_status": "error",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        return await _run_agent_loop(user_input, websocket, None, None)
+        completion_message = {
+            'type': 'stream_chunk',
+            'content_type': 'completion',
+            'content': '处理完成',
+            'is_completed': True,
+            'timestamp': time.time(),
+        }
+        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        return
 
     # ── Step 1: 通知前端开始检索 Skill 库 ──
     await websocket.send_text(json.dumps({
@@ -874,16 +882,14 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
                 report_md = report.to_markdown()
                 await websocket.send_text(report_md + "\n")
             else:
-                # Skill 执行失败，回退到 LLM 自由推理
-                await websocket.send_text("⚠️ SOP Skill 执行失败，回退到 LLM 自由推理...\n\n")
-                return await _run_agent_loop(user_input, websocket, None, None)
+                # Skill 执行失败，直接返回前端失败信息
+                await websocket.send_text("❌ SOP Skill 执行失败，请检查 Skill 配置或联系管理员。\n\n")
 
         except Exception as e:
             logger.error(f"[WEB] SOP Skill 执行异常: {e}")
             await websocket.send_text(
-                f"⚠️ SOP Skill 执行异常: {str(e)}，回退到 LLM 自由推理...\n\n"
+                f"❌ SOP Skill 执行异常: {str(e)}\n\n"
             )
-            return await _run_agent_loop(user_input, websocket, None, None)
 
         # 发送完成状态
         completion_message = {
@@ -1221,18 +1227,26 @@ async def process_troubleshooting_intent(
     # ─── complex 类排障流程：搜索 SOP Skill → rerank → RCA Engine ───
 
     if not intent_routing_store:
-        await websocket.send_text("⚠️ Skill 索引未初始化，回退到 LLM 自由推理。\n")
+        await websocket.send_text("❌ Skill 索引未初始化，无法执行排障诊断。\n")
         await websocket.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
-            "content": "Skill 索引未初始化，跳过检索",
-            "knowledge_status": "skipped",
+            "content": "Skill 索引未初始化，无法执行排障诊断",
+            "knowledge_status": "error",
             "knowledge_count": 0,
             "knowledge_result": "",
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        return await _run_agent_loop(user_input, websocket, None, None)
+        completion_message = {
+            'type': 'stream_chunk',
+            'content_type': 'completion',
+            'content': '处理完成',
+            'is_completed': True,
+            'timestamp': time.time(),
+        }
+        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        return
 
     # Step 1: 通知前端开始检索 Skill 库
     await websocket.send_text(json.dumps({
@@ -1364,14 +1378,12 @@ async def process_troubleshooting_intent(
             report_md = report.to_markdown()
             await websocket.send_text(report_md + "\n")
         else:
-            # Skill 执行失败，回退到 LLM 自由推理
-            await websocket.send_text("⚠️ Skill 执行失败，回退到 LLM 自由推理...\n\n")
-            return await _run_agent_loop(user_input, websocket, None, None)
+            # Skill 执行失败，直接返回前端失败信息
+            await websocket.send_text("❌ Skill 执行失败，请检查 Skill 配置或联系管理员。\n\n")
 
     except Exception as e:
         logger.error(f"[WEB] RCA Skill 执行异常: {e}")
-        await websocket.send_text(f"⚠️ Skill 执行异常: {str(e)}，回退到 LLM 自由推理...\n\n")
-        return await _run_agent_loop(user_input, websocket, None, None)
+        await websocket.send_text(f"❌ Skill 执行异常: {str(e)}\n\n")
 
     end_time = time.time()
 
