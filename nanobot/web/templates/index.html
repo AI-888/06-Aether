@@ -648,6 +648,112 @@
             display: none;
         }
 
+        /* ── RCA 步骤卡片专用样式 ── */
+        .rca-step-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .rca-step-badge.badge-start {
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            color: #1e40af;
+        }
+        .rca-step-badge.badge-completed {
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+            color: #065f46;
+        }
+        .rca-step-badge.badge-error {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            color: #991b1b;
+        }
+        .rca-step-type-tag {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            margin-left: 6px;
+            text-transform: uppercase;
+        }
+        .rca-step-type-tag.tag-llm { background: #fef3c7; color: #92400e; }
+        .rca-step-type-tag.tag-tool { background: #e0e7ff; color: #3730a3; }
+        .rca-step-type-tag.tag-skill { background: #ede9fe; color: #5b21b6; }
+        .rca-step-type-tag.tag-root_cause_definition { background: #fce7f3; color: #9d174d; }
+
+        .rca-step-progress {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 8px;
+            margin-bottom: 6px;
+        }
+        .rca-step-progress .progress-bar {
+            flex: 1;
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .rca-step-progress .progress-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.4s ease;
+        }
+        .rca-step-progress .progress-fill.fill-start { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .rca-step-progress .progress-fill.fill-completed { background: linear-gradient(90deg, #10b981, #34d399); }
+        .rca-step-progress .progress-fill.fill-error { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .rca-step-progress .progress-text {
+            font-size: 0.72rem;
+            color: #94a3b8;
+            white-space: nowrap;
+        }
+
+        .rca-step-command {
+            margin-top: 6px;
+            padding: 8px 10px;
+            background: #1e293b;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.82rem;
+            line-height: 1.4;
+            color: #e2e8f0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .rca-step-command::before {
+            content: '$ ';
+            color: #22d3ee;
+            font-weight: 700;
+        }
+
+        .rca-step-duration {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-left: 8px;
+        }
+
+        .rca-step-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #bfdbfe;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         /* 知识库预览链接区域 */
         .msg-card .knowledge-preview-area {
             margin-top: 10px;
@@ -1233,6 +1339,12 @@
         const toolName = data.tool_name || data.toolName || data.name || '工具';
         const toolStatus = data.tool_status || 'start';
 
+        // ── 检测是否为 RCA 步骤 ──
+        const isRcaStep = !!(data.rca_step_index);
+        if (isRcaStep) {
+            return handleRcaStepCard(data);
+        }
+
         let tool_command = '';
         if (data.tool_args) {
             tool_command = data.tool_args.command || data.tool_args.query || data.tool_args.path ||
@@ -1268,6 +1380,115 @@
 
         const icon = toolStatus === 'error' ? '❌' : (toolStatus === 'completed' ? '✅' : '🔧');
         enqueueMsg('tool', icon, `工具: ${toolName}`, bodyHtml, '', { instant: true });
+    }
+
+    // ---------- RCA 步骤卡片（专用渲染） ----------
+    function handleRcaStepCard(data) {
+        const stepIndex = data.rca_step_index || 0;
+        const totalSteps = data.rca_total_steps || 0;
+        const stepType = data.rca_step_type || '';
+        const toolStatus = data.tool_status || 'start';
+        const toolName = data.tool_name || '';
+        const duration = data.rca_duration || 0;
+
+        // 步骤类型图标映射
+        const typeIconMap = {
+            'llm': '🧠',
+            'tool': '🔧',
+            'skill': '⚙️',
+            'root_cause_definition': '🎯'
+        };
+        const typeIcon = typeIconMap[stepType] || '📋';
+        const typeLabelMap = {
+            'llm': 'LLM 推理',
+            'tool': '工具调用',
+            'skill': 'Skill 执行',
+            'root_cause_definition': '根因判定'
+        };
+        const typeLabel = typeLabelMap[stepType] || stepType;
+
+        // 进度条百分比
+        const progressPct = totalSteps > 0 ? Math.round((stepIndex / totalSteps) * 100) : 0;
+        const fillClass = toolStatus === 'error' ? 'fill-error' : (toolStatus === 'completed' ? 'fill-completed' : 'fill-start');
+
+        // 构建进度条
+        const progressHtml = `<div class="rca-step-progress">` +
+            `<div class="progress-bar"><div class="progress-fill ${fillClass}" style="width:${progressPct}%"></div></div>` +
+            `<span class="progress-text">${stepIndex}/${totalSteps}</span>` +
+            `</div>`;
+
+        // 步骤类型标签
+        const typeTagClass = 'tag-' + stepType;
+        const typeTagHtml = `<span class="rca-step-type-tag ${typeTagClass}">${typeIcon} ${escHtml(typeLabel)}</span>`;
+
+        let bodyHtml = '';
+
+        switch (toolStatus) {
+            case 'start': {
+                // 步骤开始：显示步骤名、类型、进度条、描述
+                const badgeHtml = `<span class="rca-step-badge badge-start">第 ${stepIndex} 步</span>`;
+                const spinnerHtml = `<span class="rca-step-spinner"></span>`;
+
+                let descHtml = '';
+                if (data.tool_args && data.tool_args.command) {
+                    descHtml = `<div class="rca-step-command">${escHtml(data.tool_args.command)}</div>`;
+                }
+
+                bodyHtml = `${badgeHtml} ${typeTagHtml} ${spinnerHtml}` +
+                    `<div style="margin-top:6px;font-weight:600;color:#1e293b;">${escHtml(toolName)}</div>` +
+                    progressHtml +
+                    descHtml;
+                break;
+            }
+            case 'completed': {
+                // 步骤完成：显示步骤名、类型、耗时、命令、结果
+                const badgeHtml = `<span class="rca-step-badge badge-completed">第 ${stepIndex} 步 ✓</span>`;
+                const durationHtml = duration ? `<span class="rca-step-duration">⏱ ${duration}s</span>` : '';
+
+                // 命令摘要
+                let cmdHtml = '';
+                if (data.tool_args && data.tool_args.command) {
+                    cmdHtml = `<div class="rca-step-command">${escHtml(data.tool_args.command)}</div>`;
+                }
+
+                // 执行结果（可折叠）
+                let resultHtml = '';
+                const result = data.tool_result || '';
+                if (result) {
+                    const resultId = 'rca-tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+                    resultHtml = `<div class="tool-result-block">
+                        <div class="tool-result-header" onclick="(function(el){var b=el.nextElementSibling;b.classList.toggle('collapsed');el.querySelector('.arrow').textContent=b.classList.contains('collapsed')?'▶':'▼';})(this)">
+                            <span>📋 执行结果</span><span class="arrow">▼</span>
+                        </div>
+                        <div class="tool-result-body" id="${resultId}">${escHtml(result)}</div>
+                    </div>`;
+                }
+
+                bodyHtml = `${badgeHtml} ${typeTagHtml} ${durationHtml}` +
+                    `<div style="margin-top:6px;font-weight:600;color:#065f46;">${escHtml(toolName)}</div>` +
+                    progressHtml +
+                    cmdHtml +
+                    resultHtml;
+                break;
+            }
+            case 'error': {
+                // 步骤失败：显示步骤名、类型、耗时、错误信息
+                const badgeHtml = `<span class="rca-step-badge badge-error">第 ${stepIndex} 步 ✗</span>`;
+                const durationHtml = duration ? `<span class="rca-step-duration">⏱ ${duration}s</span>` : '';
+                const errorMsg = data.tool_error || '未知错误';
+
+                bodyHtml = `${badgeHtml} ${typeTagHtml} ${durationHtml}` +
+                    `<div style="margin-top:6px;font-weight:600;color:#991b1b;">${escHtml(toolName)}</div>` +
+                    progressHtml +
+                    `<div style="margin-top:6px;padding:10px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border-radius:8px;color:#991b1b;font-size:0.88rem;border:1px solid #fecaca;">${escHtml(errorMsg).replace(/\n/g,'<br/>')}</div>`;
+                break;
+            }
+        }
+
+        const iconMap = { start: '🔄', completed: '✅', error: '❌' };
+        const icon = iconMap[toolStatus] || '📋';
+        const cardLabel = `RCA 步骤 ${stepIndex}/${totalSteps}: ${toolName}`;
+        enqueueMsg('tool', icon, cardLabel, bodyHtml, '', { instant: true });
     }
 
     // ---------- 知识库查询卡片（即时渲染） ----------

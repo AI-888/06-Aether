@@ -134,10 +134,13 @@ class RCAEngine:
         last_root_cause = None
 
         try:
+            total_steps = len(skill.steps)
+
             # 按步骤顺序执行
             for i, step in enumerate(skill.steps):
+                step_index = i + 1  # 从 1 开始的步骤序号
                 logger.info(
-                    f"[RCA] 执行步骤 {i + 1}/{len(skill.steps)}: "
+                    f"[RCA] 执行步骤 {step_index}/{total_steps}: "
                     f"'{step.id}' (type={step.type.value})"
                 )
 
@@ -156,6 +159,16 @@ class RCAEngine:
                     start_time=step_start,
                 )
 
+                # ── 流式回调：步骤开始 ──
+                if stream_callback:
+                    stream_callback(step.id, {
+                        "_status": "start",
+                        "_step_index": step_index,
+                        "_total_steps": total_steps,
+                        "_step_type": step.type.value,
+                        "_step_description": step.prompt[:120] if step.prompt else (step.tool or step.skill or ""),
+                    })
+
                 try:
                     # 单步超时控制
                     output = await asyncio.wait_for(
@@ -171,9 +184,19 @@ class RCAEngine:
                     if "root_cause" in output:
                         last_root_cause = output["root_cause"]
 
-                    # 流式回调
+                    # ── 流式回调：步骤完成 ──
                     if stream_callback:
-                        stream_callback(step.id, output)
+                        # 提取命令信息（tool/skill 类型步骤可能包含 commands）
+                        commands = output.get("commands", []) if isinstance(output, dict) else []
+                        stream_callback(step.id, {
+                            **output,
+                            "_status": "completed",
+                            "_step_index": step_index,
+                            "_total_steps": total_steps,
+                            "_step_type": step.type.value,
+                            "_duration": trace.duration,
+                            "_commands": commands,
+                        })
 
                 except asyncio.TimeoutError:
                     trace.end_time = time.time()
@@ -189,6 +212,18 @@ class RCAEngine:
                         session_id, step.id, step.type.value,
                         None, {}, {}, "error", trace.duration,
                     )
+
+                    # ── 流式回调：步骤超时 ──
+                    if stream_callback:
+                        stream_callback(step.id, {
+                            "_status": "error",
+                            "_step_index": step_index,
+                            "_total_steps": total_steps,
+                            "_step_type": step.type.value,
+                            "_duration": trace.duration,
+                            "_error": trace.error_message,
+                        })
+
                     raise RCAExecutionError(
                         step.id, trace.error_message,
                         {"elapsed": trace.duration},
@@ -215,6 +250,18 @@ class RCAEngine:
                         session_id, step.id, step.type.value,
                         None, {}, {}, "error", trace.duration,
                     )
+
+                    # ── 流式回调：安全拒绝 ──
+                    if stream_callback:
+                        stream_callback(step.id, {
+                            "_status": "error",
+                            "_step_index": step_index,
+                            "_total_steps": total_steps,
+                            "_step_type": step.type.value,
+                            "_duration": trace.duration,
+                            "_error": str(e),
+                        })
+
                     raise RCAExecutionError(step.id, str(e))
 
                 except (InputFromResolveError, TemplateResolveError, RCAExecutionError) as e:
@@ -231,6 +278,18 @@ class RCAEngine:
                         session_id, step.id, step.type.value,
                         None, {}, {}, "error", trace.duration,
                     )
+
+                    # ── 流式回调：执行错误 ──
+                    if stream_callback:
+                        stream_callback(step.id, {
+                            "_status": "error",
+                            "_step_index": step_index,
+                            "_total_steps": total_steps,
+                            "_step_type": step.type.value,
+                            "_duration": trace.duration,
+                            "_error": str(e),
+                        })
+
                     raise RCAExecutionError(step.id, str(e))
 
                 else:
