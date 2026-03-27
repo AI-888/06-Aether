@@ -144,7 +144,7 @@ class KubectlGetPodsTool(Tool):
 
             async with semaphore:
                 raw = await run_command(detail_cmd)
-            logger.debug(f"[{self.name}] 📋 结果(前500字符): {raw if raw else '(空)'}")
+            logger.debug(f"[{self.name}] 📋 结果(前100字符): {raw[:100] if raw else '(空)'}")
 
             if not raw or raw.startswith("Error"):
                 logger.warning(f"[{self.name}] 获取 Pod {ns}/{pod_name} JSON 详情失败: {raw[:200]}")

@@ -1286,6 +1286,36 @@
         enqueueMsg(cls.type, cls.icon, cls.label, safeHtml);
     };
 
+    // ---------- RCA chunk 缓冲 flush 机制 ----------
+    // 将缓冲区中已收集的 chunk 写入 DOM 容器。
+    // 如果容器尚未就绪（DOM 没渲染），不做任何操作，等 afterRender 时再调。
+    // 用 _flushedIndex 记录已写入到哪一条，避免重复写入。
+    function _rcaFlushChunks(chunkId) {
+        if (!window._rcaChunkBuffer || !window._rcaChunkBuffer[chunkId]) return;
+        const buf = window._rcaChunkBuffer[chunkId];
+        const container = document.getElementById(chunkId);
+        if (!container) return; // 容器尚未渲染，等 afterRender 时再 flush
+
+        // 增量写入：从上次 flush 的位置开始
+        const startIdx = buf._flushedIndex || 0;
+        if (startIdx < buf.chunks.length) {
+            const newChunks = buf.chunks.slice(startIdx);
+            const newText = newChunks.join('\n');
+            if (container.textContent) {
+                container.textContent += '\n' + newText;
+            } else {
+                container.textContent = newText;
+            }
+            buf._flushedIndex = buf.chunks.length;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 如果所有 chunk 都已接收完毕（done=true）且已全部写入，清理缓冲区
+        if (buf.done && buf._flushedIndex >= buf.chunks.length) {
+            delete window._rcaChunkBuffer[chunkId];
+        }
+    }
+
     // ---------- 处理JSON流式分块数据 ----------
     function handleStreamChunk(data) {
         // 处理完成消息 → 恢复输入
@@ -1300,6 +1330,36 @@
                     messageInput.focus();
                 }
             });
+            return;
+        }
+
+        // ── RCA 结果分块：统一先缓存，再由 flush 机制写入 DOM ──
+        // 所有 chunk 都先进缓冲区（不管 DOM 容器是否已就绪），
+        // 由 afterRender 回调或 result_done 触发统一 flush。
+        if (data.tool_status === 'result_chunk' && data.rca_chunk_id) {
+            const chunkId = data.rca_chunk_id;
+            const chunk = data.tool_result_chunk || '';
+            if (!window._rcaChunkBuffer) window._rcaChunkBuffer = {};
+            if (!window._rcaChunkBuffer[chunkId]) {
+                window._rcaChunkBuffer[chunkId] = { chunks: [], done: false };
+            }
+            window._rcaChunkBuffer[chunkId].chunks.push(chunk);
+            // 如果容器已就绪，立即 flush（增量追加）
+            _rcaFlushChunks(chunkId);
+            return;
+        }
+
+        // RCA 结果传输完毕 — 标记 done 并做最终 flush
+        if (data.tool_status === 'result_done' && data.rca_chunk_id) {
+            const chunkId = data.rca_chunk_id;
+            if (!window._rcaChunkBuffer) window._rcaChunkBuffer = {};
+            if (!window._rcaChunkBuffer[chunkId]) {
+                window._rcaChunkBuffer[chunkId] = { chunks: [], done: true };
+            } else {
+                window._rcaChunkBuffer[chunkId].done = true;
+            }
+            // 最终 flush
+            _rcaFlushChunks(chunkId);
             return;
         }
 
@@ -1451,18 +1511,15 @@
                     cmdHtml = `<div class="rca-step-command">${escHtml(data.tool_args.command)}</div>`;
                 }
 
-                // 执行结果（可折叠）
-                let resultHtml = '';
-                const result = data.tool_result || '';
-                if (result) {
-                    const resultId = 'rca-tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
-                    resultHtml = `<div class="tool-result-block">
+                // 执行结果区域（可折叠），使用 rca_chunk_id 作为容器 ID
+                // 内容通过后续 result_chunk 消息逐块追加，不做截断
+                const chunkId = data.rca_chunk_id || ('rca-tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6));
+                const resultHtml = `<div class="tool-result-block">
                         <div class="tool-result-header" onclick="(function(el){var b=el.nextElementSibling;b.classList.toggle('collapsed');el.querySelector('.arrow').textContent=b.classList.contains('collapsed')?'▶':'▼';})(this)">
                             <span>📋 执行结果</span><span class="arrow">▼</span>
                         </div>
-                        <div class="tool-result-body" id="${resultId}">${escHtml(result)}</div>
+                        <div class="tool-result-body" id="${chunkId}" style="max-height:400px;overflow-y:auto;"></div>
                     </div>`;
-                }
 
                 bodyHtml = `${badgeHtml} ${typeTagHtml} ${durationHtml}` +
                     `<div style="margin-top:6px;font-weight:600;color:#065f46;">${escHtml(toolName)}</div>` +
@@ -1488,7 +1545,27 @@
         const iconMap = { start: '🔄', completed: '✅', error: '❌' };
         const icon = iconMap[toolStatus] || '📋';
         const cardLabel = `RCA 步骤 ${stepIndex}/${totalSteps}: ${toolName}`;
-        enqueueMsg('tool', icon, cardLabel, bodyHtml, '', { instant: true });
+
+        // completed 状态需要 afterRender 回调来 flush 缓冲区中积压的 chunk
+        const chunkIdForFlush = data.rca_chunk_id;
+        const afterRenderFn = (toolStatus === 'completed' && chunkIdForFlush) ? function() {
+            // DOM 已渲染，立即 flush 已缓存的 chunk
+            _rcaFlushChunks(chunkIdForFlush);
+
+            // 启动轮询：后续可能还有 chunk 陆续到达，持续 flush 直到 done
+            const flushInterval = setInterval(function() {
+                _rcaFlushChunks(chunkIdForFlush);
+                // 缓冲区已清理（done 且全部写入）则停止轮询
+                if (!window._rcaChunkBuffer || !window._rcaChunkBuffer[chunkIdForFlush]) {
+                    clearInterval(flushInterval);
+                }
+            }, 100); // 每 100ms 检查一次
+
+            // 安全兜底：最多轮询 60 秒后强制停止
+            setTimeout(function() { clearInterval(flushInterval); }, 60000);
+        } : null;
+
+        enqueueMsg('tool', icon, cardLabel, bodyHtml, '', { instant: true, afterRender: afterRenderFn });
     }
 
     // ---------- 知识库查询卡片（即时渲染） ----------

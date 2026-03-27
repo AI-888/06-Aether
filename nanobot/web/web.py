@@ -140,6 +140,7 @@ class WebSocketMessageQueue:
 
     async def stop(self) -> None:
         """停止消费者：发送哨兵值并等待协程退出。"""
+        logger.info(f"[WebSocketMessageQueue] 停止消费者")
         await self._queue.put(None)
         if self._consumer_task:
             try:
@@ -1540,6 +1541,17 @@ async def _execute_rca_skill(
 
         # 定义流式回调：将每一步的执行状态（开始/完成/失败）实时通知前端
         async def rca_stream_callback(step_id: str, output: dict):
+            # ── DEBUG: 打印原始 output 的所有 key 及值类型 ──
+            logger.debug(
+                f"[RCA_STREAM][{step_id}] output keys: {list(output.keys())}"
+            )
+            for k, v in output.items():
+                v_preview = repr(v)[:200] if not k.startswith("_") else repr(v)[:80]
+                logger.debug(
+                    f"[RCA_STREAM][{step_id}]   key={k!r}, type={type(v).__name__}, "
+                    f"value_preview={v_preview}"
+                )
+
             status = output.get("_status", "completed")
             step_index = output.get("_step_index", 0)
             total_steps = output.get("_total_steps", 0)
@@ -1553,6 +1565,10 @@ async def _execute_rca_skill(
 
             if status == "start":
                 # ── 步骤开始 ──
+                logger.debug(
+                    f"[RCA_STREAM][{step_id}] status=start, "
+                    f"step_index={step_index}/{total_steps}, type={step_type}"
+                )
                 step_msg = {
                     "type": "stream_chunk",
                     "content_type": "tool",
@@ -1569,8 +1585,14 @@ async def _execute_rca_skill(
                     "rca_step_type": step_type,
                     "timestamp": time.time(),
                 }
+                await ws_queue.send_text(json.dumps(step_msg, ensure_ascii=False))
+                return
             elif status == "error":
                 # ── 步骤失败 ──
+                logger.debug(
+                    f"[RCA_STREAM][{step_id}] status=error, "
+                    f"step_index={step_index}/{total_steps}, error={error_msg!r}"
+                )
                 step_msg = {
                     "type": "stream_chunk",
                     "content_type": "tool",
@@ -1585,21 +1607,57 @@ async def _execute_rca_skill(
                     "rca_duration": round(duration, 2) if duration else 0,
                     "timestamp": time.time(),
                 }
+                await ws_queue.send_text(json.dumps(step_msg, ensure_ascii=False))
+                return
             else:
                 # ── 步骤完成 ──
                 # 过滤掉内部元数据字段（以 _ 开头），只保留业务输出
                 business_output = {
                     k: v for k, v in output.items() if not k.startswith("_")
                 }
-                result_str = json.dumps(
-                    business_output, ensure_ascii=False, default=str
-                )[:800]
+
+                # ── DEBUG: 打印 business_output 的 key ──
+                logger.debug(
+                    f"[RCA_STREAM][{step_id}] business_output keys: "
+                    f"{list(business_output.keys())}"
+                )
+                for k, v in business_output.items():
+                    v_preview = repr(v)[:200]
+                    logger.debug(
+                        f"[RCA_STREAM][{step_id}]   biz key={k!r}, "
+                        f"type={type(v).__name__}, preview={v_preview}"
+                    )
+
+                # 获取完整结果文本（不做截断）
+                raw_result = business_output.get("result", "")
+                logger.debug(
+                    f"[RCA_STREAM][{step_id}] raw_result type={type(raw_result).__name__}, "
+                    f"truthy={bool(raw_result)}, is_str={isinstance(raw_result, str)}, "
+                    f"preview={repr(raw_result)[:300]}"
+                )
+
+                if raw_result and isinstance(raw_result, str):
+                    full_result = raw_result
+                else:
+                    full_result = json.dumps(
+                        business_output, ensure_ascii=False, default=str
+                    )
+
+                logger.debug(
+                    f"[RCA_STREAM][{step_id}] full_result len={len(full_result)}, "
+                    f"lines={full_result.count(chr(10))+1}, "
+                    f"first_200_chars={full_result[:200]!r}"
+                )
 
                 # 构建命令摘要
                 cmd_summary = ""
                 if commands:
                     cmd_summary = " | ".join(str(c) for c in commands[:3])
 
+                # 为当前步骤生成唯一 chunk_id，前端用它来关联追加内容
+                chunk_id = f"rca-chunk-{step_index}-{int(time.time()*1000)}"
+
+                # 先发送 completed 消息（不含 tool_result，前端创建卡片骨架）
                 step_msg = {
                     "type": "stream_chunk",
                     "content_type": "tool",
@@ -1607,7 +1665,7 @@ async def _execute_rca_skill(
                     "is_tool_call": True,
                     "tool_name": step_label,
                     "tool_status": "completed",
-                    "tool_result": result_str,
+                    "tool_result": "",
                     "tool_args": {
                         "step_type": step_type,
                         "command": cmd_summary,
@@ -1616,25 +1674,72 @@ async def _execute_rca_skill(
                     "rca_total_steps": total_steps,
                     "rca_step_type": step_type,
                     "rca_duration": round(duration, 2) if duration else 0,
+                    "rca_chunk_id": chunk_id,
                     "timestamp": time.time(),
                 }
+                await ws_queue.send_text(json.dumps(step_msg, ensure_ascii=False))
 
-            await ws_queue.send_text(json.dumps(step_msg, ensure_ascii=False))
+                # 将完整结果按每 10 行分块，逐块推送（不截断）
+                if full_result:
+                    lines = full_result.split("\n")
+                    chunk_size = 10
+                    total_chunks = (len(lines) + chunk_size - 1) // chunk_size
+                    logger.debug(
+                        f"[RCA_STREAM][{step_id}] 分块推送: "
+                        f"total_lines={len(lines)}, chunk_size={chunk_size}, "
+                        f"total_chunks={total_chunks}, chunk_id={chunk_id}"
+                    )
+                    for i in range(0, len(lines), chunk_size):
+                        chunk_text = "\n".join(lines[i:i + chunk_size])
+                        chunk_idx = i // chunk_size + 1
+                        logger.debug(
+                            f"[RCA_STREAM][{step_id}] 发送 chunk {chunk_idx}/{total_chunks}, "
+                            f"len={len(chunk_text)}"
+                        )
+                        chunk_msg = {
+                            "type": "stream_chunk",
+                            "content_type": "tool",
+                            "tool_status": "result_chunk",
+                            "rca_chunk_id": chunk_id,
+                            "rca_step_index": step_index,
+                            "tool_result_chunk": chunk_text,
+                            "timestamp": time.time(),
+                        }
+                        await ws_queue.send_text(json.dumps(chunk_msg, ensure_ascii=False))
+
+                # 发送结果结束标记
+                done_msg = {
+                    "type": "stream_chunk",
+                    "content_type": "tool",
+                    "tool_status": "result_done",
+                    "rca_chunk_id": chunk_id,
+                    "rca_step_index": step_index,
+                    "timestamp": time.time(),
+                }
+                await ws_queue.send_text(json.dumps(done_msg, ensure_ascii=False))
+                return
 
         # 执行 Skill
         logger.debug(
             f"[WEB][user_input追踪] _execute_rca_skill → engine.execute, "
             f"user_input={user_input!r}"
         )
+        # 使用 tracker 追踪所有异步回调 task，确保 chunk 全部发送完再返回
+        callback_tracker = _AsyncCallbackTracker()
+
         report = await engine.execute(
             skill=skill,
             inputs=inputs,
-            stream_callback=lambda step_id, output: _sync_to_async_callback(
+            stream_callback=lambda step_id, output: callback_tracker.fire(
                 rca_stream_callback, step_id, output
             ),
             session_id="web:ui",
             context={"user_input": user_input},
         )
+
+        # 等待所有异步回调完成（chunk 全部发送到 WebSocket）
+        await callback_tracker.wait_all()
+        logger.debug("[RCA_STREAM] 所有异步回调 task 已完成，可安全发送 completion")
 
         return report
 
@@ -1643,14 +1748,29 @@ async def _execute_rca_skill(
         return None
 
 
-def _sync_to_async_callback(async_fn, *args):
-    """将异步回调转换为同步调用（用于 RCAEngine 的 stream_callback）。"""
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(async_fn(*args))
-    except RuntimeError:
-        asyncio.run(async_fn(*args))
+class _AsyncCallbackTracker:
+    """追踪所有通过 _sync_to_async_callback 创建的异步 task，
+    确保在 engine.execute() 返回后能 await 所有未完成的 task。
+    解决 fire-and-forget 导致 chunk 消息被 completion 消息抢先的问题。
+    """
+
+    def __init__(self):
+        self._tasks: list[asyncio.Task] = []
+
+    def fire(self, async_fn, *args):
+        """同步入口：创建 task 并记录到列表。"""
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(async_fn(*args))
+            self._tasks.append(task)
+        except RuntimeError:
+            asyncio.run(async_fn(*args))
+
+    async def wait_all(self):
+        """等待所有已创建的 task 完成（在发送 completion 之前调用）。"""
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+            self._tasks.clear()
 
 
 async def _run_agent_loop(

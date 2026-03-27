@@ -492,6 +492,9 @@ class RCAEngine:
 
         return {"result": str(raw_result)}
 
+    # 工具返回中需要始终透传的通用字段（供前端展示命令和可读文本）
+    _PASSTHROUGH_FIELDS = ("result", "commands")
+
     @staticmethod
     def _validate_skill_output(
         raw: dict[str, Any],
@@ -499,8 +502,8 @@ class RCAEngine:
     ) -> dict[str, Any]:
         """按 output_schema 提取并校验输出字段。
 
-        - 仅保留 output_schema 中声明的字段（丢弃多余字段）
-        - 缺失字段填充 None 并记录 WARNING
+        - 保留 output_schema 中声明的字段（缺失填充 None 并记录 WARNING）
+        - 同时透传 result / commands 等通用字段，确保前端能展示执行命令和可读文本
         - 确保输出结构与 output_schema 一致
 
         Args:
@@ -508,12 +511,18 @@ class RCAEngine:
             output_schema: Atomic Skill 的 output_schema {字段名: 类型}
 
         Returns:
-            按 output_schema 过滤后的输出字典
+            按 output_schema 过滤后的输出字典（含通用透传字段）
         """
         if not output_schema:
             return raw
 
         validated: dict[str, Any] = {}
+
+        # 透传通用字段（result / commands），供前端展示
+        for key in RCAEngine._PASSTHROUGH_FIELDS:
+            if key in raw and key not in output_schema:
+                validated[key] = raw[key]
+
         for field_name, field_type in output_schema.items():
             if field_name in raw:
                 validated[field_name] = raw[field_name]
