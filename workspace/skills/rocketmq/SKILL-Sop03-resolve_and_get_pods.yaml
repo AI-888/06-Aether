@@ -49,23 +49,36 @@ skill:
       input:
         param1: "{{user_input}}"
       prompt: |
-        从以下用户输入中提取 RocketMQ 组件名，并映射为实际的 kubectl 查询多个关键字, 排除多个关键字; 
-        映射规则：
-        - namesrv/nameserver → ocloud-tdmq-rocketmq5-namesrv
-        - broker → ocloud-tdmq-rocketmq5-broker
-        - proxy → ocloud-tdmq-rocketmq5-proxy（排除 cmq）
-        - manager → rocketmq-manager（排除 cmq）
-        - billing → rocketmq-billing（排除 cmq）
-        - operation → rocketmq-operation（排除 cmq）
-        - router → rocketmq-router（排除 cmq）
-        - disperser → rocketmq-disperser（排除 cmq）
+        你是一个 RocketMQ 运维助手。请根据用户输入提取信息并转换为标准 JSON 格式。
 
-        从以下用户输入中提取k8s的命名空间， 如果不存在，则为空；
-        - ns=namesapce=命名空间
-
+        ### 核心任务
+        1. 识别组件名，并将其**转换**为标准全称。
+        2. 提取命名空间（如有）。
+        3. 提取排除词（如有）。
+        
+        ### 组件转换对照表（必须严格遵守）
+        - 输入包含 "broker" -> 输出 "ocloud-tdmq-rocketmq5-broker"
+        - 输入包含 "namesrv" 或 "nameserver" -> 输出 "ocloud-tdmq-rocketmq5-namesrv"
+        - 输入包含 "proxy" -> 输出 "ocloud-tdmq-rocketmq5-proxy"
+        - 输入包含 "manager" -> 输出 "ocloud-tdmq-rocketmq-manager"
+        
+        ### 学习以下示例（照样子输出）
+        用户输入：查询 rocketmq broker pod
+        输出：{"namespace": "", "component_keyword": "ocloud-tdmq-rocketmq5-broker", "exclude_keywords": ""}
+        
+        用户输入：namesrv 状态如何
+        输出：{"namespace": "", "component_keyword": "ocloud-tdmq-rocketmq5-namesrv", "exclude_keywords": ""}
+        
+        用户输入：查一下 test-ns 命名空间下的 proxy
+        输出：{"namespace": "test-ns", "component_keyword": "ocloud-tdmq-rocketmq5-proxy", "exclude_keywords": ""}
+        
+        用户输入：查询 broker，排除 cmq
+        输出：{"namespace": "", "component_keyword": "ocloud-tdmq-rocketmq5-broker", "exclude_keywords": "cmq"}
+        
+        ### 开始处理
         用户输入：{{param1}}
-        请输出 JSON：
-        {"namespace": "实际命名空间", component_keyword": "实际关键字", "exclude_keywords": "排除关键字或空"}
+        输出：{"namespace": "实际命名空间或空", "component_keyword": "映射后的关键字", "exclude_keywords": "排除关键字或空"}
+
       output_schema:
         component_keyword: string
         exclude_keywords: string
