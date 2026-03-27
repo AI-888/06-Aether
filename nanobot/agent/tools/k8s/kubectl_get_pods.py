@@ -92,6 +92,8 @@ class KubectlGetPodsTool(Tool):
         commands_executed.append(cmd)
 
         grep_output = await run_command(cmd)
+        logger.debug(f"[{self.name}] 📋 命令: {cmd}")
+        logger.debug(f"[{self.name}] 📋 结果:\n{grep_output}")
 
         # 如果 grep 没有结果或出错，直接返回
         if not grep_output.strip() or grep_output.startswith("Error"):
@@ -138,9 +140,11 @@ class KubectlGetPodsTool(Tool):
             pod_name = entry["pod_name"]
             detail_cmd = f"kubectl get pod {pod_name} -n {ns} -o json"
             commands_executed.append(detail_cmd)
+            logger.debug(f"[{self.name}] 📋 命令: {detail_cmd}")
 
             async with semaphore:
                 raw = await run_command(detail_cmd)
+            logger.debug(f"[{self.name}] 📋 结果(前500字符): {raw if raw else '(空)'}")
 
             if not raw or raw.startswith("Error"):
                 logger.warning(f"[{self.name}] 获取 Pod {ns}/{pod_name} JSON 详情失败: {raw[:200]}")
