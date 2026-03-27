@@ -78,7 +78,7 @@ class KubectlGetPodsTool(Tool):
             safe_ns = re.sub(r"[;|&`$<>\\]", "", namespace)
             cmd = f"kubectl get pods -n {safe_ns} -o wide | grep {safe_keyword}"
         else:
-            cmd = f"kubectl get pods -Ao wide | grep {safe_keyword}"
+            cmd = f"kubectl get pods -A | grep {safe_keyword}"
 
         # 添加排除关键字过滤
         if exclude_keywords:
@@ -149,7 +149,7 @@ class KubectlGetPodsTool(Tool):
             try:
                 pod_json = json.loads(raw)
             except (json.JSONDecodeError, ValueError) as e:
-                logger.warning(f"[{self.name}] 解析 Pod {ns}/{pod_name} JSON 失败: {e}")
+                logger.warning(f"[{self.name}] 解析 Pod {ns}/{pod_name} JSON 失败: {e}. 输出: {raw}")
                 return None
 
             return self._extract_pod_info(pod_json)

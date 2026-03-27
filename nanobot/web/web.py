@@ -435,7 +435,12 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
     Returns:
         'A' 表示知识问答，'D' 表示操作/排查请求
     """
-    intent_prompt = f"""
+    # 从 config 读取提示词，若未配置则使用内置默认值
+    _intent_prompt_lines = config.agents.defaults.intent_classification_prompt
+    if _intent_prompt_lines:
+        intent_prompt = "\n".join(_intent_prompt_lines).replace("{user_input}", user_input)
+    else:
+        intent_prompt = f"""
     你是一个意图分类器。
 
     任务：根据用户问题判断意图，只输出一个字母：
@@ -562,7 +567,12 @@ async def classify_d_sub_type(user_input: str, websocket: WebSocket) -> str:
     Returns:
         'simple' 表示简单操作（查状态/执行命令），'complex' 表示复杂操作（故障排查/RCA分析）
     """
-    sub_type_prompt = f"""
+    # 从 config 读取提示词，若未配置则使用内置默认值
+    _complexity_prompt_lines = config.agents.defaults.complexity_classification_prompt
+    if _complexity_prompt_lines:
+        sub_type_prompt = "\n".join(_complexity_prompt_lines).replace("{user_input}", user_input)
+    else:
+        sub_type_prompt = f"""
     你是一个运维操作分类器。用户的问题已被识别为操作/排查类，现在需要进一步判断操作的复杂程度。
 
     任务：根据用户问题判断是简单操作还是复杂操作，只输出一个词：

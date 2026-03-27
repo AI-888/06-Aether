@@ -175,6 +175,11 @@ class AgentDefaults(BaseModel):
     batch_size: int = 32
     timeout: int = 5
 
+    # 意图分类提示词（数组，使用时用 \n join 成字符串）
+    intent_classification_prompt: list[str] = Field(default_factory=list)
+    # 复杂度分类提示词（数组，使用时用 \n join 成字符串）
+    complexity_classification_prompt: list[str] = Field(default_factory=list)
+
 
 class AgentsConfig(BaseModel):
     """Agent configuration."""
