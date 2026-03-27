@@ -6,6 +6,8 @@ from typing import Any
 import os
 import yaml as yaml_lib
 
+import asyncio
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
@@ -93,6 +95,62 @@ class ConnectionManager:
     async def broadcast(self, message: str):
         for connection in self.active_connections:
             await connection.send_text(message)
+
+
+class WebSocketMessageQueue:
+    """基于内存队列的 WebSocket 消息发送器（生产-消费模式）。
+
+    生产端：业务代码调用 send_text() 将消息放入 asyncio.Queue。
+    消费端：一个独立的异步协程从队列读取消息，通过真正的 WebSocket 推送到前端。
+
+    好处：
+    - 解耦消息生产与 WebSocket 物理发送
+    - 避免在同一个协程中频繁 await send，降低阻塞风险
+    - 便于后续扩展（如消息合并、限流、缓冲等）
+    """
+
+    def __init__(self, websocket: WebSocket):
+        self._websocket = websocket
+        self._queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._consumer_task: asyncio.Task | None = None
+
+    async def send_text(self, message: str) -> None:
+        """生产端：将消息放入队列（替代直接 websocket.send_text）。"""
+        await self._queue.put(message)
+
+    async def start_consumer(self) -> None:
+        """启动消费者协程，从队列读取消息并通过 WebSocket 发送到前端。"""
+        self._consumer_task = asyncio.create_task(self._consume())
+
+    async def _consume(self) -> None:
+        """消费者主循环：持续从队列取消息并发送。"""
+        try:
+            while True:
+                message = await self._queue.get()
+                if message is None:
+                    # 收到哨兵值，退出消费者
+                    break
+                try:
+                    await self._websocket.send_text(message)
+                except Exception as e:
+                    logger.warning(f"[WebSocketMessageQueue] 消息发送失败: {e}")
+                    break
+        except asyncio.CancelledError:
+            pass
+
+    async def stop(self) -> None:
+        """停止消费者：发送哨兵值并等待协程退出。"""
+        await self._queue.put(None)
+        if self._consumer_task:
+            try:
+                await self._consumer_task
+            except asyncio.CancelledError:
+                pass
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        """关闭 WebSocket 连接（透传到底层 WebSocket）。"""
+        await self.stop()
+        await self._websocket.close(code=code, reason=reason)
 
 
 # Create FastAPI application
@@ -418,19 +476,26 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            # Process user message with real-time streaming
-            await process_user_message_streaming(data, websocket)
+            # 创建消息队列实例（生产-消费模式）
+            ws_queue = WebSocketMessageQueue(websocket)
+            await ws_queue.start_consumer()
+            try:
+                # 业务代码通过 ws_queue.send_text() 投递消息到队列
+                await process_user_message_streaming(data, ws_queue)
+            finally:
+                # 确保消费者协程正常退出
+                await ws_queue.stop()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
 
-async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
+async def classify_user_intent(user_input: str, ws_queue: WebSocketMessageQueue) -> str:
     """
     使用LLM对用户意图进行分类（A/D 两级分类）
 
     Args:
         user_input: 用户输入
-        websocket: WebSocket连接
+        ws_queue: WebSocket消息队列
 
     Returns:
         'A' 表示知识问答，'D' 表示操作/排查请求
@@ -484,11 +549,11 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
     """
 
     try:
-        await websocket.send_text("🧠 正在识别用户意图...\n")
+        await ws_queue.send_text("🧠 正在识别用户意图...\n")
 
         # 使用全局的provider进行意图分类
         if not provider:
-            await websocket.send_text("⚠️ LLM服务未初始化，跳过意图识别\n")
+            await ws_queue.send_text("⚠️ LLM服务未初始化，跳过意图识别\n")
             return "A"  # 默认为问答类
 
         # 调用LLM进行意图分类
@@ -504,22 +569,22 @@ async def classify_user_intent(user_input: str, websocket: WebSocket) -> str:
 
         # 验证返回结果
         if intent not in ['A', 'D']:
-            await websocket.send_text(f"⚠️ 意图识别结果异常: {intent}，默认为问答类\n")
+            await ws_queue.send_text(f"⚠️ 意图识别结果异常: {intent}，默认为问答类\n")
             return "A"
 
         intent_type = "问答类" if intent == "A" else "操作/排查类"
 
-        await websocket.send_text(f"✅ 用户意图识别: {intent_type} ({intent})\n\n")
+        await ws_queue.send_text(f"✅ 用户意图识别: {intent_type} ({intent})\n\n")
 
         return intent
 
     except Exception as e:
         logger.error(f"意图识别失败: {e}")
-        await websocket.send_text(f"⚠️ 意图识别失败: {str(e)}，默认为问答类(A)\n")
+        await ws_queue.send_text(f"⚠️ 意图识别失败: {str(e)}，默认为问答类(A)\n")
         return "A"  # 出错时默认回退到 A
 
 
-async def process_user_message_streaming(user_input: str, websocket: WebSocket):
+async def process_user_message_streaming(user_input: str, ws_queue: WebSocketMessageQueue):
     """Process user message with real-time streaming output."""
     import time
 
@@ -527,42 +592,42 @@ async def process_user_message_streaming(user_input: str, websocket: WebSocket):
 
     # Check if provider and agent_loop are initialized
     if not provider or not agent_loop:
-        await websocket.send_text("Error: Web UI resources not initialized. Please restart the server.")
+        await ws_queue.send_text("Error: Web UI resources not initialized. Please restart the server.")
         return
 
     # Send initial processing message
-    await websocket.send_text("🤖 AI Agent is processing your request...\n\n")
+    await ws_queue.send_text("🤖 AI Agent is processing your request...\n\n")
 
     # 第一步：用户意图识别
-    user_intent = await classify_user_intent(user_input, websocket)
+    user_intent = await classify_user_intent(user_input, ws_queue)
 
     # 根据意图决定处理流程（A/D 两级分类）
     if user_intent == "A":
         # A 类：知识问答 → 查询知识库
-        await process_qa_intent(user_input, websocket, start_time)
+        await process_qa_intent(user_input, ws_queue, start_time)
     elif user_intent == "D":
         # D 类：操作/排查请求 → 统一进入 Skill 执行流程
         # D 类内部子分类：简单操作 → 搜索原子 Skill；复杂操作（RCA分析）→ 搜索 SOP Skill
-        sub_type = await classify_d_sub_type(user_input, websocket)
+        sub_type = await classify_d_sub_type(user_input, ws_queue)
         if sub_type == "simple":
             # 简单操作：搜索原子 Skill（查 tools 索引），提取工具后进入 LLM loop
-            await process_ops_intent(user_input, websocket, start_time)
+            await process_ops_intent(user_input, ws_queue, start_time)
         else:
             # 复杂操作（RCA分析）：搜索 SOP Skill，执行分步诊断
-            await process_troubleshooting_intent(user_input, websocket, start_time)
+            await process_troubleshooting_intent(user_input, ws_queue, start_time)
     else:
         # 非法值默认 A
-        await websocket.send_text(f"⚠️ 意图值非法: {user_intent}，默认按 A 问答类处理\n")
-        await process_qa_intent(user_input, websocket, start_time)
+        await ws_queue.send_text(f"⚠️ 意图值非法: {user_intent}，默认按 A 问答类处理\n")
+        await process_qa_intent(user_input, ws_queue, start_time)
 
 
-async def classify_d_sub_type(user_input: str, websocket: WebSocket) -> str:
+async def classify_d_sub_type(user_input: str, ws_queue: WebSocketMessageQueue) -> str:
     """
     D 类意图的子分类：区分简单操作和复杂操作（RCA分析）
 
     Args:
         user_input: 用户输入
-        websocket: WebSocket连接
+        ws_queue: WebSocket消息队列
 
     Returns:
         'simple' 表示简单操作（查状态/执行命令），'complex' 表示复杂操作（故障排查/RCA分析）
@@ -613,10 +678,10 @@ async def classify_d_sub_type(user_input: str, websocket: WebSocket) -> str:
     """
 
     try:
-        await websocket.send_text("🔍 正在判断操作复杂度...\n")
+        await ws_queue.send_text("🔍 正在判断操作复杂度...\n")
 
         if not provider:
-            await websocket.send_text("⚠️ LLM服务未初始化，默认为简单操作\n")
+            await ws_queue.send_text("⚠️ LLM服务未初始化，默认为简单操作\n")
             return "simple"
 
         response = await provider.chat(
@@ -631,17 +696,17 @@ async def classify_d_sub_type(user_input: str, websocket: WebSocket) -> str:
 
         # 验证返回结果
         if sub_type not in ['simple', 'complex']:
-            await websocket.send_text(f"⚠️ 子分类结果异常: {sub_type}，默认为简单操作\n")
+            await ws_queue.send_text(f"⚠️ 子分类结果异常: {sub_type}，默认为简单操作\n")
             return "simple"
 
         sub_type_label = "简单操作" if sub_type == "simple" else "复杂操作（RCA分析）"
-        await websocket.send_text(f"✅ 操作类型: {sub_type_label}\n\n")
+        await ws_queue.send_text(f"✅ 操作类型: {sub_type_label}\n\n")
 
         return sub_type
 
     except Exception as e:
         logger.error(f"D类子分类失败: {e}")
-        await websocket.send_text(f"⚠️ 操作类型判断失败: {str(e)}，默认为简单操作\n")
+        await ws_queue.send_text(f"⚠️ 操作类型判断失败: {str(e)}，默认为简单操作\n")
         return "simple"
 
 
@@ -703,7 +768,7 @@ def _rerank_route_candidates(query: str, results: list[dict[str, Any]]) -> list[
         return fallback
 
 
-async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: float):
+async def process_ops_intent(user_input: str, ws_queue: WebSocketMessageQueue, start_time: float):
     """处理 D 类简单操作意图：检索 Skill → rerank top1 → 提取工具 → 筛选已注册工具 → LLM 决策。
 
     D 类子分类为 simple 时调用此函数。
@@ -721,8 +786,8 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
     from nanobot.rca.loader import RCASkillLoader
 
     if not intent_routing_store:
-        await websocket.send_text("❌ Skill 索引未初始化，无法执行该操作。\n")
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text("❌ Skill 索引未初始化，无法执行该操作。\n")
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": "Skill 索引未初始化，无法执行操作",
@@ -739,11 +804,11 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             'is_completed': True,
             'timestamp': time.time(),
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
         return
 
     # ── Step 1: 通知前端开始检索 Skill 库 ──
-    await websocket.send_text(json.dumps({
+    await ws_queue.send_text(json.dumps({
         "type": "stream_chunk",
         "content_type": "knowledge",
         "content": "正在检索运维 Skill 库...",
@@ -759,7 +824,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         skill_results = intent_routing_store.search_skills(user_input, limit=4)
     except Exception as e:
         logger.warning(f"[WEB] skill 检索失败: {e}")
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": f"Skill 检索失败: {str(e)}",
@@ -771,7 +836,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         }, ensure_ascii=False))
 
     if not skill_results:
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": "未检索到匹配的运维 Skill",
@@ -781,7 +846,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        await websocket.send_text("🔧 未匹配到运维 Skill，无法执行该操作。\n\n")
+        await ws_queue.send_text("🔧 未匹配到运维 Skill，无法执行该操作。\n\n")
         completion_message = {
             'type': 'stream_chunk',
             'content_type': 'completion',
@@ -789,12 +854,12 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             'is_completed': True,
             'timestamp': time.time(),
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
         return
 
     # ── Step 2: 通知前端检索结果（rerank 前） ──
     raw_preview_md = _build_retrieval_context("Skill 检索原始结果", skill_results, limit=len(skill_results)) or ""
-    await websocket.send_text(json.dumps({
+    await ws_queue.send_text(json.dumps({
         "type": "stream_chunk",
         "content_type": "knowledge",
         "content": f"Skill 检索完成，命中 {len(skill_results)} 条，正在重排序...",
@@ -826,7 +891,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         top1 = filtered_results[0] if filtered_results else None
 
     if not top1:
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": "过滤/Rerank 后无有效结果，无法执行该操作",
@@ -836,7 +901,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        await websocket.send_text("🔧 Skill 过滤/重排序后无有效结果，无法执行该操作。\n\n")
+        await ws_queue.send_text("🔧 Skill 过滤/重排序后无有效结果，无法执行该操作。\n\n")
         completion_message = {
             'type': 'stream_chunk',
             'content_type': 'completion',
@@ -844,7 +909,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             'is_completed': True,
             'timestamp': time.time(),
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
         return
 
     top1_meta = top1.get("metadata", {}) or {}
@@ -866,7 +931,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
         )
 
         # 通知前端 rerank 结果
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": f"重排序完成，最佳匹配 SOP Skill: {matched_skill_name}",
@@ -877,27 +942,27 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             "timestamp": time.time(),
         }, ensure_ascii=False))
 
-        await websocket.send_text(
+        await ws_queue.send_text(
             f"🔧 匹配到运维 SOP Skill: **{matched_skill_name}**"
             f"（共 {len(skill_obj.steps)} 步），开始逐步执行...\n\n"
         )
 
         try:
             report = await _execute_rca_skill(
-                matched_skill_name, user_input, websocket, skill_loader=skill_loader,
+                matched_skill_name, user_input, ws_queue, skill_loader=skill_loader,
             )
 
             if report:
                 # 发送 RCA 报告到前端
                 report_md = report.to_markdown()
-                await websocket.send_text(report_md + "\n")
+                await ws_queue.send_text(report_md + "\n")
             else:
                 # Skill 执行失败，直接返回前端失败信息
-                await websocket.send_text("❌ SOP Skill 执行失败，请检查 Skill 配置或联系管理员。\n\n")
+                await ws_queue.send_text("❌ SOP Skill 执行失败，请检查 Skill 配置或联系管理员。\n\n")
 
         except Exception as e:
             logger.error(f"[WEB] SOP Skill 执行异常: {e}")
-            await websocket.send_text(
+            await ws_queue.send_text(
                 f"❌ SOP Skill 执行异常: {str(e)}\n\n"
             )
 
@@ -909,7 +974,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
             'is_completed': True,
             'timestamp': time.time(),
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
         return
 
     # ── Atomic Skill / 无 steps 的 Skill：走 LLM loop 路径 ──
@@ -932,7 +997,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
 
     # ── Step 6: 通知前端 rerank 结果（含工具提取信息） ──
     tools_info = f"，提取工具: {filtered_tool_names}" if filtered_tool_names else "，未提取到可用工具"
-    await websocket.send_text(json.dumps({
+    await ws_queue.send_text(json.dumps({
         "type": "stream_chunk",
         "content_type": "knowledge",
         "content": f"重排序完成，最佳匹配 Skill: {matched_skill_name}{tools_info}",
@@ -969,12 +1034,12 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
 
     # 根据工具数量选择不同的日志文案
     if filtered_tool_names and len(filtered_tool_names) == 1:
-        await websocket.send_text(
+        await ws_queue.send_text(
             f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
             f"，准备调用工具 `{filtered_tool_names[0]}` ...\n\n"
         )
     else:
-        await websocket.send_text(
+        await ws_queue.send_text(
             f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
             f"（可用工具: {', '.join(filtered_tool_names) if filtered_tool_names else '无'}），"
             f"进入 AI 分析...\n\n"
@@ -988,7 +1053,7 @@ async def process_ops_intent(user_input: str, websocket: WebSocket, start_time: 
     )
 
 
-async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: float):
+async def process_qa_intent(user_input: str, ws_queue: WebSocketMessageQueue, start_time: float):
     """处理问答类意图：优先查询知识库"""
     import time
     import json
@@ -1000,18 +1065,18 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
     except RuntimeError as e:
         # CrossEncoder 初始化失败
         error_msg = f"❌ 知识库初始化失败: {str(e)}\n\n服务启动终止，请检查 CrossEncoder 模型配置。\n"
-        await websocket.send_text(error_msg)
+        await ws_queue.send_text(error_msg)
         # 关闭WebSocket连接
-        await websocket.close(code=1011, reason="CrossEncoder initialization failed")
+        await ws_queue.close(code=1011, reason="CrossEncoder initialization failed")
         return
     except Exception as e:
         # 其他初始化错误
         error_msg = f"❌ 知识库初始化失败: {str(e)}\n\n"
-        await websocket.send_text(error_msg)
+        await ws_queue.send_text(error_msg)
         return
 
     # 发送知识库查询开始信息
-    await websocket.send_text("📚 正在查询知识库...\n")
+    await ws_queue.send_text("📚 正在查询知识库...\n")
 
     # 搜索知识库，返回得分
     search_result = store.search_knowledge(query=user_input, return_scores=True)
@@ -1028,8 +1093,8 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
         # 获取重排序得分最高的结果
         top_score = scores[0].get('rerank_score', 0)
 
-        await websocket.send_text(f"✅ 知识库查询完成，找到 {len(knowledge_results)} 个结果\n")
-        await websocket.send_text(f"📊 最高重排序得分: {top_score:.2f}\n\n")
+        await ws_queue.send_text(f"✅ 知识库查询完成，找到 {len(knowledge_results)} 个结果\n")
+        await ws_queue.send_text(f"📊 最高重排序得分: {top_score:.2f}\n\n")
 
         # 格式化知识库结果，包含预览信息
         top_item = knowledge_results[0]
@@ -1135,10 +1200,10 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
             'timestamp': time.time(),
         }
 
-        await websocket.send_text(json.dumps(knowledge_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(knowledge_message, ensure_ascii=False))
 
         # 问答类：将知识库原文输入模型，生成 Markdown 格式答案
-        await websocket.send_text("🤖 正在基于知识库原文生成答案...\n")
+        await ws_queue.send_text("🤖 正在基于知识库原文生成答案...\n")
 
         # 取前3条，控制输入长度
         top_items = knowledge_results[:3]
@@ -1183,12 +1248,12 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
         except Exception as e:
             logger.warning(f"知识库问答模型生成失败，回退原文输出: {e}")
 
-        await websocket.send_text("📚 知识库答案：\n")
+        await ws_queue.send_text("📚 知识库答案：\n")
         if answer_markdown:
-            await websocket.send_text(answer_markdown + "\n\n")
+            await ws_queue.send_text(answer_markdown + "\n\n")
         else:
             # 兜底：模型失败时返回Top1原文
-            await websocket.send_text(f"{knowledge_results[0].content}\n\n")
+            await ws_queue.send_text(f"{knowledge_results[0].content}\n\n")
 
         # 发送处理完成状态消息，让前端按钮可以点击
         end_time = time.time()
@@ -1199,13 +1264,13 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
             'is_completed': True,
             'timestamp': end_time,
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
 
         return
     else:
         # 问答类：没有找到知识库结果，回答"不知道"
-        await websocket.send_text("📭 知识库中没有找到相关结果\n\n")
-        await websocket.send_text("🤖 抱歉，我在知识库中没有找到相关信息，无法回答您的问题。\n\n")
+        await ws_queue.send_text("📭 知识库中没有找到相关结果\n\n")
+        await ws_queue.send_text("🤖 抱歉，我在知识库中没有找到相关信息，无法回答您的问题。\n\n")
 
         # 发送处理完成状态消息，让前端按钮可以点击
         end_time = time.time()
@@ -1216,14 +1281,14 @@ async def process_qa_intent(user_input: str, websocket: WebSocket, start_time: f
             'is_completed': True,
             'timestamp': end_time,
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
 
         return
 
 
 async def process_troubleshooting_intent(
         user_input: str,
-        websocket: WebSocket,
+        ws_queue: WebSocketMessageQueue,
         start_time: float,
 ):
     """处理 D 类复杂操作意图：搜索 SOP Skill → rerank top1 → RCA Engine 执行。
@@ -1237,8 +1302,8 @@ async def process_troubleshooting_intent(
     # ─── complex 类排障流程：搜索 SOP Skill → rerank → RCA Engine ───
 
     if not intent_routing_store:
-        await websocket.send_text("❌ Skill 索引未初始化，无法执行排障诊断。\n")
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text("❌ Skill 索引未初始化，无法执行排障诊断。\n")
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": "Skill 索引未初始化，无法执行排障诊断",
@@ -1255,11 +1320,11 @@ async def process_troubleshooting_intent(
             'is_completed': True,
             'timestamp': time.time(),
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
         return
 
     # Step 1: 通知前端开始检索 Skill 库
-    await websocket.send_text(json.dumps({
+    await ws_queue.send_text(json.dumps({
         "type": "stream_chunk",
         "content_type": "knowledge",
         "content": "正在检索排障 Skill 库...",
@@ -1275,7 +1340,7 @@ async def process_troubleshooting_intent(
         skill_results = intent_routing_store.search_skills(user_input, limit=4)
     except Exception as e:
         logger.warning(f"[WEB] skill 检索失败: {e}")
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": f"Skill 检索失败: {str(e)}",
@@ -1287,7 +1352,7 @@ async def process_troubleshooting_intent(
         }, ensure_ascii=False))
 
     if not skill_results:
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": "未检索到匹配的排障 Skill",
@@ -1297,7 +1362,7 @@ async def process_troubleshooting_intent(
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        await websocket.send_text("🔧 未匹配到排障 Skill，无法执行排障诊断。\n\n")
+        await ws_queue.send_text("🔧 未匹配到排障 Skill，无法执行排障诊断。\n\n")
         completion_message = {
             'type': 'stream_chunk',
             'content_type': 'completion',
@@ -1305,12 +1370,12 @@ async def process_troubleshooting_intent(
             'is_completed': True,
             'timestamp': time.time(),
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
         return
 
     # Step 2: 通知前端检索结果（rerank 前）
     raw_preview_md = _build_retrieval_context("Skill 检索原始结果", skill_results, limit=len(skill_results)) or ""
-    await websocket.send_text(json.dumps({
+    await ws_queue.send_text(json.dumps({
         "type": "stream_chunk",
         "content_type": "knowledge",
         "content": f"Skill 检索完成，命中 {len(skill_results)} 条，正在重排序...",
@@ -1341,7 +1406,7 @@ async def process_troubleshooting_intent(
         top1 = filtered_results[0] if filtered_results else None
 
     if not top1:
-        await websocket.send_text(json.dumps({
+        await ws_queue.send_text(json.dumps({
             "type": "stream_chunk",
             "content_type": "knowledge",
             "content": "Rerank 后无有效结果，无法执行排障诊断",
@@ -1351,7 +1416,7 @@ async def process_troubleshooting_intent(
             "preview_items": [],
             "timestamp": time.time(),
         }, ensure_ascii=False))
-        await websocket.send_text("🔧 Skill 重排序后无有效结果，无法执行排障诊断。\n\n")
+        await ws_queue.send_text("🔧 Skill 重排序后无有效结果，无法执行排障诊断。\n\n")
         completion_message = {
             'type': 'stream_chunk',
             'content_type': 'completion',
@@ -1359,14 +1424,14 @@ async def process_troubleshooting_intent(
             'is_completed': True,
             'timestamp': time.time(),
         }
-        await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
         return
 
     top1_meta = top1.get("metadata", {}) or {}
     matched_skill_name = top1_meta.get("skill_name", "")
     retrieval_markdown = _build_retrieval_context("Skill Retrieval (Reranked Top1)", [top1], limit=1) or ""
 
-    await websocket.send_text(json.dumps({
+    await ws_queue.send_text(json.dumps({
         "type": "stream_chunk",
         "content_type": "knowledge",
         "content": f"重排序完成，最佳匹配 Skill: {matched_skill_name}（共检索 {len(skill_results)} 条）",
@@ -1378,22 +1443,22 @@ async def process_troubleshooting_intent(
     }, ensure_ascii=False))
 
     # Step 4: 使用 RCA Engine 执行匹配到的 Skill
-    await websocket.send_text(f"🔧 匹配到排障 Skill: **{matched_skill_name}**，开始执行分步诊断...\n\n")
+    await ws_queue.send_text(f"🔧 匹配到排障 Skill: **{matched_skill_name}**，开始执行分步诊断...\n\n")
 
     try:
-        report = await _execute_rca_skill(matched_skill_name, user_input, websocket)
+        report = await _execute_rca_skill(matched_skill_name, user_input, ws_queue)
 
         if report:
             # 发送 RCA 报告到前端
             report_md = report.to_markdown()
-            await websocket.send_text(report_md + "\n")
+            await ws_queue.send_text(report_md + "\n")
         else:
             # Skill 执行失败，直接返回前端失败信息
-            await websocket.send_text("❌ Skill 执行失败，请检查 Skill 配置或联系管理员。\n\n")
+            await ws_queue.send_text("❌ Skill 执行失败，请检查 Skill 配置或联系管理员。\n\n")
 
     except Exception as e:
         logger.error(f"[WEB] RCA Skill 执行异常: {e}")
-        await websocket.send_text(f"❌ Skill 执行异常: {str(e)}\n\n")
+        await ws_queue.send_text(f"❌ Skill 执行异常: {str(e)}\n\n")
 
     end_time = time.time()
 
@@ -1405,13 +1470,13 @@ async def process_troubleshooting_intent(
         'is_completed': True,
         'timestamp': end_time,
     }
-    await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+    await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
 
 
 async def _execute_rca_skill(
     skill_name: str,
     user_input: str,
-    websocket: WebSocket,
+    ws_queue: WebSocketMessageQueue,
     skill_loader: "RCASkillLoader | None" = None,
 ) -> "RCAReport | None":
     """加载并执行指定的 RCA Skill。
@@ -1419,7 +1484,7 @@ async def _execute_rca_skill(
     Args:
         skill_name: Skill 名称
         user_input: 用户原始输入（作为 Skill 的 description 输入）
-        websocket: WebSocket 连接，用于流式通知
+        ws_queue: WebSocket消息队列，用于流式通知
         skill_loader: 外部已初始化的 RCASkillLoader（可选，不传则内部新建）
 
     Returns:
@@ -1473,19 +1538,88 @@ async def _execute_rca_skill(
             f"skill.input_schema={skill.input_schema!r}"
         )
 
-        # 定义流式回调：将每一步的执行结果实时通知前端
+        # 定义流式回调：将每一步的执行状态（开始/完成/失败）实时通知前端
         async def rca_stream_callback(step_id: str, output: dict):
-            step_msg = {
-                "type": "stream_chunk",
-                "content_type": "tool",
-                "content": f"✅ RCA 步骤完成: {step_id}",
-                "is_tool_call": True,
-                "tool_name": f"rca_step: {step_id}",
-                "tool_status": "completed",
-                "tool_result": json.dumps(output, ensure_ascii=False, default=str)[:500],
-                "timestamp": time.time(),
-            }
-            await websocket.send_text(json.dumps(step_msg, ensure_ascii=False))
+            status = output.get("_status", "completed")
+            step_index = output.get("_step_index", 0)
+            total_steps = output.get("_total_steps", 0)
+            step_type = output.get("_step_type", "")
+            duration = output.get("_duration", 0)
+            commands = output.get("_commands", [])
+            error_msg = output.get("_error", "")
+            step_desc = output.get("_step_description", "")
+
+            step_label = f"[{step_index}/{total_steps}] {step_id}"
+
+            if status == "start":
+                # ── 步骤开始 ──
+                step_msg = {
+                    "type": "stream_chunk",
+                    "content_type": "tool",
+                    "content": f"🔄 RCA 步骤 {step_label} 开始执行",
+                    "is_tool_call": True,
+                    "tool_name": step_label,
+                    "tool_status": "start",
+                    "tool_args": {
+                        "step_type": step_type,
+                        "command": step_desc,
+                    },
+                    "rca_step_index": step_index,
+                    "rca_total_steps": total_steps,
+                    "rca_step_type": step_type,
+                    "timestamp": time.time(),
+                }
+            elif status == "error":
+                # ── 步骤失败 ──
+                step_msg = {
+                    "type": "stream_chunk",
+                    "content_type": "tool",
+                    "content": f"❌ RCA 步骤 {step_label} 执行失败",
+                    "is_tool_call": True,
+                    "tool_name": step_label,
+                    "tool_status": "error",
+                    "tool_error": error_msg,
+                    "rca_step_index": step_index,
+                    "rca_total_steps": total_steps,
+                    "rca_step_type": step_type,
+                    "rca_duration": round(duration, 2) if duration else 0,
+                    "timestamp": time.time(),
+                }
+            else:
+                # ── 步骤完成 ──
+                # 过滤掉内部元数据字段（以 _ 开头），只保留业务输出
+                business_output = {
+                    k: v for k, v in output.items() if not k.startswith("_")
+                }
+                result_str = json.dumps(
+                    business_output, ensure_ascii=False, default=str
+                )[:800]
+
+                # 构建命令摘要
+                cmd_summary = ""
+                if commands:
+                    cmd_summary = " | ".join(str(c) for c in commands[:3])
+
+                step_msg = {
+                    "type": "stream_chunk",
+                    "content_type": "tool",
+                    "content": f"✅ RCA 步骤 {step_label} 执行完成",
+                    "is_tool_call": True,
+                    "tool_name": step_label,
+                    "tool_status": "completed",
+                    "tool_result": result_str,
+                    "tool_args": {
+                        "step_type": step_type,
+                        "command": cmd_summary,
+                    } if cmd_summary else None,
+                    "rca_step_index": step_index,
+                    "rca_total_steps": total_steps,
+                    "rca_step_type": step_type,
+                    "rca_duration": round(duration, 2) if duration else 0,
+                    "timestamp": time.time(),
+                }
+
+            await ws_queue.send_text(json.dumps(step_msg, ensure_ascii=False))
 
         # 执行 Skill
         logger.debug(
@@ -1521,7 +1655,7 @@ def _sync_to_async_callback(async_fn, *args):
 
 async def _run_agent_loop(
     user_input: str,
-    websocket: WebSocket,
+    ws_queue: WebSocketMessageQueue,
     additional_context: str | None = None,
     tool_names_filter: list[str] | None = None,
 ):
@@ -1604,7 +1738,7 @@ async def _run_agent_loop(
             message_data['knowledge_count'] = context_info.get('knowledge_count', 0)
             message_data['knowledge_result'] = context_info.get('knowledge_result', '')
 
-        await websocket.send_text(json.dumps(message_data, ensure_ascii=False))
+        await ws_queue.send_text(json.dumps(message_data, ensure_ascii=False))
 
     # 为agent_loop设置流式回调
     agent_loop.stream_callback = stream_callback
@@ -1620,9 +1754,9 @@ async def _run_agent_loop(
 
     # Send the actual response
     if response and response.strip():
-        await websocket.send_text("\n" + response)
+        await ws_queue.send_text("\n" + response)
     elif not response:
-        await websocket.send_text("No response from agent.")
+        await ws_queue.send_text("No response from agent.")
 
     end_time = time.time()
 
@@ -1634,7 +1768,7 @@ async def _run_agent_loop(
         'is_completed': True,
         'timestamp': end_time,
     }
-    await websocket.send_text(json.dumps(completion_message, ensure_ascii=False))
+    await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
 
 
 async def process_user_message(user_input: str) -> str:
