@@ -298,13 +298,24 @@ class Config(BaseSettings):
         from nanobot.providers.registry import PROVIDERS
         model_lower = (model or self.agents.defaults.model).lower()
 
-        # Match by keyword (order follows PROVIDERS registry)
+        # Priority 1: local providers (e.g. ollama, vllm) — matched by explicit api_base config.
+        # Local providers use custom api_base (e.g. http://192.168.1.1:11434) which may not
+        # contain any recognizable keyword, and model names (e.g. qwen2.5:1.5b) may not match
+        # their keywords either. So we match them by presence of api_key + api_base alone.
+        for spec in PROVIDERS:
+            if not spec.is_local:
+                continue
+            p = getattr(self.providers, spec.name, None)
+            if p and p.api_key and p.api_base:
+                return p, spec.name
+
+        # Priority 2: model name keyword match (standard providers)
         for spec in PROVIDERS:
             p = getattr(self.providers, spec.name, None)
             if p and any(kw in model_lower for kw in spec.keywords) and p.api_key:
                 return p, spec.name
 
-        # Fallback: gateways first, then others (follows registry order)
+        # Fallback: first configured provider (follows registry order)
         for spec in PROVIDERS:
             p = getattr(self.providers, spec.name, None)
             if p and p.api_key:

@@ -443,15 +443,8 @@
                 <h1>RCA Skill 管理器</h1>
                 <p>可视化管理技能文件</p>
             </div>
-            <div class="dir-selector">
-                <label>Skill 目录路径</label>
-                <div class="dir-input-group">
-                    <input type="text" id="skillDirInput" placeholder="/path/to/skills" value="">
-                    <button onclick="loadSkillsFromDir()">加载</button>
-                </div>
-            </div>
             <div class="skill-list" id="skillList">
-                <div class="loading">请指定 Skill 目录</div>
+                <div class="loading">正在加载 Skill 列表...</div>
             </div>
         </div>
 
@@ -597,23 +590,18 @@
         };
 
         const API_BASE = '/api/skills';
-        const DEFAULT_SKILL_DIR = '/root/.nanobot/workspace/skills';
 
         document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('skillDirInput').value = DEFAULT_SKILL_DIR;
-            loadSkillsFromDir();
+            loadSkills();
         });
 
         /* ============================
            加载 Skill 列表
         ============================ */
-        async function loadSkillsFromDir() {
-            const dirInput = document.getElementById('skillDirInput').value.trim();
-            if (!dirInput) { showNotification('请输入 Skill 目录路径', 'error'); return; }
-            currentSkillDir = dirInput;
+        async function loadSkills() {
             document.getElementById('skillList').innerHTML = '<div class="loading">正在加载 Skill 列表...</div>';
             try {
-                const response = await fetch(`${API_BASE}/list?dir=${encodeURIComponent(dirInput)}`);
+                const response = await fetch(`${API_BASE}/list`);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 skills = data.skills || {};
@@ -1911,7 +1899,7 @@
                 });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 showNotification('删除成功！', 'success');
-                loadSkillsFromDir();
+                loadSkills();
                 document.getElementById('formEditor').style.display = 'none';
                 document.getElementById('toolbar').style.display = 'none';
                 document.getElementById('emptyState').style.display = 'flex';
@@ -1921,7 +1909,7 @@
         }
 
         function createNewSkill() {
-            if (!currentSkillDir) { showNotification('请先指定 Skill 目录', 'error'); return; }
+            if (!currentSkillDir) { showNotification('Skill 目录未配置', 'error'); return; }
             const select = document.getElementById('newSkillCategory');
             select.innerHTML = Object.keys(skills).map(c => `<option value="${c}">${c}</option>`).join('');
             const opt = document.createElement('option');
@@ -1963,7 +1951,7 @@
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 closeNewSkillModal();
                 showNotification('创建成功！', 'success');
-                loadSkillsFromDir();
+                loadSkills();
             } catch (e) {
                 showNotification(`创建失败: ${e.message}`, 'error');
             }

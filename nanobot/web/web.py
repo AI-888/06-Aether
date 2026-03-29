@@ -1946,9 +1946,10 @@ async def get_skills_page():
 
 
 @web_app.get("/api/skills/list")
-async def list_skills(dir: str):
-    """List all skills in the specified directory."""
-    skill_dir = Path(dir).expanduser().resolve()
+async def list_skills():
+    """List all skills from the configured skill directory."""
+    skill_dir_raw = config.rca.skill_dir if config else str(Path.home() / ".nanobot" / "workspace" / "skills")
+    skill_dir = Path(skill_dir_raw).expanduser().resolve()
     
     if not skill_dir.exists():
         return {"skills": {}, "error": "Directory does not exist"}
