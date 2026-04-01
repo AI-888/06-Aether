@@ -163,6 +163,13 @@ web_app = FastAPI(
 # Create connection manager instance
 manager = ConnectionManager()
 
+# 注册源代码 RAG 管理 API 路由
+try:
+    from nanobot.web.source_code_api import router as source_code_router
+    web_app.include_router(source_code_router)
+except ImportError as _sc_err:
+    logger.warning(f"[WEB] 源代码 RAG API 加载失败: {_sc_err}")
+
 # Global instances for provider and agent_loop
 provider: LLMProvider = None
 agent_loop: AgentLoop = None

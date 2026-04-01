@@ -22,6 +22,7 @@ from nanobot.agent.tools.k8s import KubectlGetPodsTool, KubectlQueryLogTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.rca_trigger import RCATriggerTool, RCAListSkillsTool
+from nanobot.agent.tools.source_code_search import SourceCodeSearchTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.base import LLMProvider
@@ -131,6 +132,9 @@ class AgentLoop:
         # kubectl 通用工具
         self.tools.register(KubectlGetPodsTool())
         self.tools.register(KubectlQueryLogTool())
+
+        # 源代码检索工具
+        self.tools.register(SourceCodeSearchTool())
 
         # RCA（根因分析）工具 - 条件注册
         self._register_rca_tools()

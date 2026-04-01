@@ -13,6 +13,13 @@ except ImportError:
     RocketMQKnowledgeInitializer = None  # type: ignore[assignment,misc]
     initialize_rocketmq_knowledge = None  # type: ignore[assignment,misc]
 
+# 源代码 RAG 子模块（完全独立于现有知识库）
+try:
+    from .source_code import SourceCodeRAGStore, SourceCodeInitStatus
+except ImportError:
+    SourceCodeRAGStore = None  # type: ignore[assignment,misc]
+    SourceCodeInitStatus = None  # type: ignore[assignment,misc]
+
 __all__ = [
     "KnowledgeStore",
     "ChromaKnowledgeStore",
@@ -22,4 +29,6 @@ __all__ = [
     "RAGConfig",
     "VectorEmbedder",
     "EmbeddingModelError",
+    "SourceCodeRAGStore",
+    "SourceCodeInitStatus",
 ]
