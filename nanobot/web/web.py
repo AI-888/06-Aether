@@ -7,8 +7,10 @@ import os
 import yaml as yaml_lib
 
 import asyncio
+import json
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from loguru import logger
@@ -481,19 +483,82 @@ async def get_full_document_content(store, item_id: str):
 async def websocket_endpoint(websocket: WebSocket):
     """Handle WebSocket connections with real-time streaming."""
     await manager.connect(websocket)
+
+    current_task: asyncio.Task | None = None
+    current_ws_queue: WebSocketMessageQueue | None = None
+
+    async def _cancel_current_task() -> None:
+        nonlocal current_task, current_ws_queue
+        if current_task and not current_task.done():
+            logger.info("[WEB] 收到终止请求，正在取消当前任务")
+            current_task.cancel()
+            try:
+                await current_task
+            except asyncio.CancelledError:
+                logger.info("[WEB] 当前任务已取消")
+            except Exception as e:
+                logger.warning(f"[WEB] 取消任务后等待结束异常: {e}")
+
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "abort_ack",
+                "content": "已终止当前请求"
+            }, ensure_ascii=False))
+        except Exception as e:
+            logger.debug(f"[WEB] 发送终止确认失败: {e}")
+
+        current_task = None
+        current_ws_queue = None
+
     try:
         while True:
             data = await websocket.receive_text()
+
+            # 控制消息（如终止）优先处理
+            control_type = None
+            try:
+                maybe_json = json.loads(data)
+                if isinstance(maybe_json, dict):
+                    control_type = maybe_json.get("type")
+            except Exception:
+                pass
+
+            if control_type == "abort":
+                await _cancel_current_task()
+                continue
+
+            # 如已有任务在执行，拒绝并发新任务
+            if current_task and not current_task.done():
+                try:
+                    if current_ws_queue:
+                        await current_ws_queue.send_text(json.dumps({
+                            "type": "warn",
+                            "content": "当前请求仍在处理中，请先终止后再发送新请求"
+                        }, ensure_ascii=False))
+                except Exception as e:
+                    logger.debug(f"[WEB] 发送并发请求告警失败: {e}")
+                continue
+
             # 创建消息队列实例（生产-消费模式）
             ws_queue = WebSocketMessageQueue(websocket)
             await ws_queue.start_consumer()
-            try:
-                # 业务代码通过 ws_queue.send_text() 投递消息到队列
-                await process_user_message_streaming(data, ws_queue)
-            finally:
-                # 确保消费者协程正常退出
-                await ws_queue.stop()
+            current_ws_queue = ws_queue
+
+            async def _runner(user_input: str, queue: WebSocketMessageQueue):
+                try:
+                    # 业务代码通过 ws_queue.send_text() 投递消息到队列
+                    await process_user_message_streaming(user_input, queue)
+                except asyncio.CancelledError:
+                    logger.info("[WEB] 流式处理任务被取消")
+                    raise
+                finally:
+                    # 确保消费者协程正常退出
+                    await queue.stop()
+
+            current_task = asyncio.create_task(_runner(data, ws_queue))
+
     except WebSocketDisconnect:
+        await _cancel_current_task()
         manager.disconnect(websocket)
 
 
@@ -1055,7 +1120,7 @@ async def process_ops_intent(user_input: str, ws_queue: WebSocketMessageQueue, s
 
     return await _run_agent_loop(
         user_input,
-        websocket,
+        ws_queue,
         additional_context=additional_context,
         tool_names_filter=filtered_tool_names or None,
     )

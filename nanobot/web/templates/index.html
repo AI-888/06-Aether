@@ -909,7 +909,7 @@
         <div class="input-container">
             <div class="input-wrapper">
                 <input autocomplete="off" id="messageInput" placeholder="Ask me about rocketmq..." type="text">
-                <button id="sendButton" onclick="sendMessage()">Send</button>
+                <button id="sendButton" onclick="sendMessage()">发送</button>
             </div>
         </div>
     </div>
@@ -926,6 +926,7 @@
     let isProcessing = false; // 标记是否正在处理请求
     let userScrolledUp = false; // 标记用户是否手动上滑
     let shouldAbortCurrentRequest = false; // 标记是否应该终止当前请求
+    let abortAckTimeoutId = null; // 终止确认超时兜底定时器
     const SCROLL_THRESHOLD = 60; // 距底部多少px以内视为"在底部"
 
     // 检测用户是否已滚动到底部附近
@@ -1262,24 +1263,40 @@
 
     // ---------- ws.onmessage — 收到消息先入队 ----------
     ws.onmessage = function(event) {
-        // 如果用户已终止请求，则忽略所有后续消息
-        if (shouldAbortCurrentRequest) {
-            return;
-        }
-        
         const response = event.data;
         hideTypingIndicator();
         isStreaming = true;
 
-        // 尝试解析JSON流式数据
+        let data = null;
         try {
-            const data = JSON.parse(response);
-            if (data.type === 'stream_chunk' || data.content_type || data.is_tool_call) {
-                handleStreamChunk(data);
-                return;
-            }
+            data = JSON.parse(response);
         } catch (e) {
-            // 非JSON，按纯文本处理
+            data = null;
+        }
+
+        // 处理后端终止确认
+        if (data && data.type === 'abort_ack') {
+            enqueueMsg('completion', '🛑', '已终止',
+                escHtml(data.content || '对话已终止'), '', {
+                afterRender: function() {
+                    resetUIState();
+                }
+            });
+            return;
+        }
+
+        // 终止后：只接收结束信号，其它消息全部忽略
+        if (shouldAbortCurrentRequest) {
+            if (data && (data.content_type === 'completion' || data.is_completed)) {
+                handleStreamChunk(data);
+            }
+            return;
+        }
+
+        // 尝试按JSON流式数据处理
+        if (data && (data.type === 'stream_chunk' || data.content_type || data.is_tool_call)) {
+            handleStreamChunk(data);
+            return;
         }
 
         // 忽略空消息
@@ -1324,8 +1341,8 @@
 
     // ---------- 处理JSON流式分块数据 ----------
     function handleStreamChunk(data) {
-        // 如果用户已终止请求，则忽略所有后续消息
-        if (shouldAbortCurrentRequest) {
+        // 终止后仅放行完成消息，其余流消息忽略
+        if (shouldAbortCurrentRequest && !(data.content_type === 'completion' || data.is_completed)) {
             return;
         }
         
@@ -2394,27 +2411,35 @@
             shouldAbortCurrentRequest = true;
             sendButton.disabled = true;
             sendButton.textContent = '终止中...';
-            
-            // 发送终止消息到后端
+
+            // 发送终止消息到后端，等待后端确认后再恢复UI
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'abort' }));
             }
-            
-            // 显示终止消息
-            addAIMessage('对话已终止。');
-            
-            // 恢复UI状态
-            resetUIState();
+
+            // 兜底：若后端终止确认丢失，2秒后强制恢复UI，避免按钮卡死
+            if (abortAckTimeoutId) {
+                clearTimeout(abortAckTimeoutId);
+            }
+            abortAckTimeoutId = setTimeout(function() {
+                if (shouldAbortCurrentRequest) {
+                    resetUIState();
+                }
+            }, 2000);
         }
     }
 
     // 恢复UI状态
     function resetUIState() {
+        if (abortAckTimeoutId) {
+            clearTimeout(abortAckTimeoutId);
+            abortAckTimeoutId = null;
+        }
         isProcessing = false;
         isStreaming = false;
         shouldAbortCurrentRequest = false;
         sendButton.disabled = false;
-        sendButton.textContent = 'Send';
+        sendButton.textContent = '发送';
         sendButton.onclick = sendMessage;
         messageInput.disabled = false;
         messageInput.focus();
