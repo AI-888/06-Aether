@@ -5,6 +5,137 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aether - 小模型Agent实现介绍</title>
     <style>
+
+        /* ===== Mermaid 容器 ===== */
+        .mermaid-container {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            margin: 20px 0;
+            overflow-x: auto;
+            display: flex;
+            justify-content: center;
+        }
+
+        .flow-chart {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .mermaid svg {
+            cursor: zoom-in;
+        }
+
+        .mermaid-preview-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            z-index: 9999;
+        }
+
+        .mermaid-preview-modal.active {
+            display: block;
+        }
+
+        .mermaid-preview-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.86);
+            backdrop-filter: blur(3px);
+        }
+
+        .mermaid-preview-dialog {
+            position: relative;
+            z-index: 1;
+            width: min(1200px, calc(100vw - 48px));
+            height: min(86vh, calc(100vh - 48px));
+            margin: 24px auto;
+            background: rgba(15, 23, 42, 0.98);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+        }
+
+        .mermaid-preview-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(15, 23, 42, 0.92);
+        }
+
+        .mermaid-preview-title {
+            font-size: 0.92rem;
+            color: var(--text-muted);
+        }
+
+        .mermaid-preview-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .mermaid-preview-btn {
+            background: rgba(99, 102, 241, 0.18);
+            color: var(--text-bright);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            border-radius: 8px;
+            min-width: 34px;
+            height: 34px;
+            padding: 0 10px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: var(--transition);
+        }
+
+        .mermaid-preview-btn:hover {
+            background: rgba(99, 102, 241, 0.28);
+        }
+
+        .mermaid-preview-scale {
+            min-width: 58px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .mermaid-preview-stage {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 24px;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .mermaid-preview-stage.dragging {
+            cursor: grabbing;
+        }
+
+        .mermaid-preview-content {
+            transform-origin: top center;
+            transition: transform 0.12s ease;
+        }
+
+        .mermaid-preview-content svg {
+            max-width: none;
+            height: auto;
+        }
+
+        /* 为代码高亮区域设置特定样式，防止冲突 */
+        pre code.hljs {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace !important;
+        }
+    </style>
+    <style>
         :root {
             --primary: #6366f1;
             --primary-light: #818cf8;
@@ -189,8 +320,14 @@
         }
 
         @keyframes pageIn {
-            from { opacity: 0; transform: translateY(16px); }
-            to   { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* ===== 页码指示器 ===== */
@@ -249,27 +386,12 @@
             radial-gradient(ellipse 50% 40% at 10% 60%, rgba(139, 92, 246, 0.08), transparent);
         }
 
-        .hero-grid {
-            position: absolute;
-            inset: 0;
-            opacity: 0.03;
-            background-image: linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-            background-size: 60px 60px;
-        }
-
         .hero-particles {
             position: absolute;
             inset: 0;
             overflow: hidden;
         }
 
-        .particle {
-            position: absolute;
-            border-radius: 50%;
-            animation: float linear infinite;
-            opacity: 0;
-        }
 
         @keyframes float {
             0% {
@@ -307,28 +429,6 @@
             }
         }
 
-        .hero-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 16px;
-            border-radius: 100px;
-            background: rgba(99, 102, 241, 0.15);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: var(--primary-light);
-            font-size: 0.85rem;
-            font-weight: 500;
-            margin-bottom: 24px;
-        }
-
-        .hero-badge .dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--success);
-            animation: pulse 2s ease-in-out infinite;
-        }
-
         @keyframes pulse {
             0%, 100% {
                 opacity: 1;
@@ -344,47 +444,6 @@
             line-height: 1.15;
             color: var(--text-bright);
             margin-bottom: 20px;
-        }
-
-        .hero h1 .gradient-text {
-            background: linear-gradient(135deg, var(--primary-light), var(--accent-light), #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .hero-desc {
-            font-size: 1.15rem;
-            color: var(--text-muted);
-            max-width: 680px;
-            margin: 0 auto 36px;
-            line-height: 1.8;
-        }
-
-        .hero-stats {
-            display: flex;
-            justify-content: center;
-            gap: 48px;
-            flex-wrap: wrap;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--primary-light), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .stat-label {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-top: 4px;
         }
 
         .hero-nav-cards {
@@ -690,59 +749,6 @@
             border: 1px solid var(--border);
         }
 
-        .flow-step {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 18px;
-            border-radius: var(--radius-sm);
-            font-size: 0.85rem;
-            font-weight: 500;
-            white-space: nowrap;
-        }
-
-        .flow-arrow {
-            color: var(--text-muted);
-            font-size: 1.2rem;
-            flex-shrink: 0;
-        }
-
-        .flow-step.blue {
-            background: rgba(99, 102, 241, 0.15);
-            color: var(--primary-light);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-        }
-
-        .flow-step.cyan {
-            background: rgba(6, 182, 212, 0.15);
-            color: var(--accent-light);
-            border: 1px solid rgba(6, 182, 212, 0.3);
-        }
-
-        .flow-step.purple {
-            background: rgba(139, 92, 246, 0.15);
-            color: #c4b5fd;
-            border: 1px solid rgba(139, 92, 246, 0.3);
-        }
-
-        .flow-step.green {
-            background: rgba(16, 185, 129, 0.15);
-            color: #6ee7b7;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-
-        .flow-step.amber {
-            background: rgba(245, 158, 11, 0.15);
-            color: #fcd34d;
-            border: 1px solid rgba(245, 158, 11, 0.3);
-        }
-
-        .flow-step.red {
-            background: rgba(239, 68, 68, 0.15);
-            color: #fca5a5;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
         /* ===== 标签页 ===== */
         .tabs {
             margin: 24px 0;
@@ -929,43 +935,6 @@
             color: var(--text-muted);
         }
 
-        /* ===== 回到顶部 ===== */
-        .back-to-top {
-            position: fixed;
-            bottom: 32px;
-            right: 32px;
-            z-index: 999;
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            background: var(--primary);
-            color: #fff;
-            border: none;
-            font-size: 1.2rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: var(--transition);
-            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
-        }
-
-        .back-to-top.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .back-to-top:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-
-        /* ===== 进度条 ===== */
-        /* 进度条隐藏（PPT模式不需要） */
-        .progress-bar { display: none; }
-
         /* ===== section 在 PPT 模式下的样式 ===== */
         .ppt-page .section {
             min-height: auto;
@@ -1034,18 +1003,6 @@
             transform: none;
         }
 
-        /* ===== back-to-top 隐藏 ===== */
-        .back-to-top { display: none !important; }
-
-        /* ===== Footer ===== */
-        .footer {
-            text-align: center;
-            padding: 40px 24px;
-            border-top: 1px solid var(--border);
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
         .footer a {
             color: var(--primary-light);
             text-decoration: none;
@@ -1055,111 +1012,13 @@
             text-decoration: underline;
         }
 
-        /* ===== 架构层级卡片 ===== */
-        .arch-layer {
-            border-left: 3px solid;
-            padding: 20px 24px;
-            background: var(--bg-card);
-            border-radius: 0 var(--radius) var(--radius) 0;
-            margin-bottom: 16px;
-            transition: var(--transition);
-        }
-
-        .arch-layer:hover {
-            transform: translateX(4px);
-        }
-
-        .arch-layer.intent {
-            border-color: #a78bfa;
-        }
-
-        .arch-layer.knowledge {
-            border-color: var(--accent);
-        }
-
-        .arch-layer.rca {
-            border-color: var(--warning);
-        }
-
         .arch-layer h4 {
             font-size: 1rem;
             color: var(--text-bright);
             margin-bottom: 6px;
         }
 
-        .arch-layer .modules {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 8px;
-        }
-
-        /* ===== Mermaid 容器 ===== */
-        .mermaid-container {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 32px;
-            margin: 20px 0;
-            overflow-x: auto;
-            display: flex;
-            justify-content: center;
-        }
-
-        .mermaid-container .mermaid {
-            max-width: 100%;
-        }
-
-        /* ===== 指标仪表盘 ===== */
-        .metric-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            transition: var(--transition);
-        }
-
-        .metric-card:hover {
-            border-color: rgba(99, 102, 241, 0.4);
-        }
-
-        .metric-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            flex-shrink: 0;
-        }
-
-        .metric-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .metric-name {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            margin-bottom: 2px;
-        }
-
-        .metric-value {
-            font-size: 0.88rem;
-            font-weight: 600;
-            color: var(--text-bright);
-        }
-
-        .metric-type {
-            font-size: 0.7rem;
-        }
     </style>
-    <!-- Mermaid CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body>
 
@@ -1171,14 +1030,14 @@
             <span>Aether</span>
         </a>
         <ul class="nav-links" id="navLinks">
-            <li><a href="javascript:void(0)" onclick="showPage('background')" data-page="background">背景</a></li>
             <li><a href="javascript:void(0)" onclick="showPage('hero')" data-page="hero">大纲</a></li>
-            <li><a href="javascript:void(0)" onclick="showPage('overview')" data-page="overview">架构概览</a></li>
-            <li><a href="javascript:void(0)" onclick="showPage('rerank')" data-page="rerank">Rerank</a></li>
-            <li><a href="javascript:void(0)" onclick="showPage('knowledge')" data-page="knowledge">知识库</a></li>
-            <li><a href="javascript:void(0)" onclick="showPage('intent')" data-page="intent">意图分类</a></li>
-            <li><a href="javascript:void(0)" onclick="showPage('rca')" data-page="rca">RCA 分析</a></li>
-            <li><a href="javascript:void(0)" onclick="showPage('metrics')" data-page="metrics">监控指标</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('background')" data-page="background">背景</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('rerank')" data-page="rerank">知识库</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('intent')" data-page="intent">分级路由</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('knowledge')" data-page="knowledge">重新设计Skill</a>
+            </li>
+            <li><a href="javascript:void(0)" onclick="showPage('rca')" data-page="rca">Lora微调</a></li>
+            <li><a href="javascript:void(0)" onclick="showPage('overview')" data-page="overview">总结</a></li>
         </ul>
         <button class="nav-mobile-btn" id="mobileBtn" onclick="toggleMobileNav()">☰</button>
     </div>
@@ -1187,1387 +1046,1371 @@
 <!-- PPT 视口容器 -->
 <div class="ppt-viewport" id="pptViewport">
 
-<!-- 页面: background -->
-<div class="ppt-page" id="page-background">
-<section class="section" id="background">
-    <div class="section-header reveal">
-        <span class="section-tag" style="background:rgba(139,92,246,0.15);color:#a78bfa;">Background</span>
-        <h2 class="section-title">项目背景</h2>
-        <p class="section-desc">为什么在边缘环境中构建小模型 Agent？业务痛点与技术动机</p>
-    </div>
-
-    <!-- 业务痛点 -->
-    <div class="grid-2 reveal" style="margin-bottom:24px;">
-        <div class="card">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(239,68,68,0.15);">🚨</div>
-                <h3>业务场景痛点</h3>
+    <!-- 页面: background -->
+    <div class="ppt-page" id="page-background">
+        <section class="section" id="background">
+            <div class="section-header reveal">
+                <span class="section-tag" style="background:rgba(139,92,246,0.15);color:#a78bfa;">Background</span>
+                <p class="section-desc">为什么在边缘环境中构建小模型 Agent？业务痛点与技术动机</p>
             </div>
-            <p style="margin-bottom:16px;">在大规模分布式系统的运维场景中，故障排查面临以下核心挑战：</p>
-            <ul style="list-style:none;display:flex;flex-direction:column;gap:12px;">
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--danger);font-size:1.1rem;flex-shrink:0;">⚡</span>
-                    <span><strong style="color:var(--text-bright);">响应时效压力：</strong>线上故障需要在分钟级内定位根因，人工排查链路长、依赖经验积累，难以规模化复制。</span>
-                </li>
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--warning);font-size:1.1rem;flex-shrink:0;">📊</span>
-                    <span><strong style="color:var(--text-bright);">信息爆炸：</strong>监控告警、日志、链路追踪数据量庞大，工程师需在海量信息中快速筛选关键信号。</span>
-                </li>
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--primary-light);font-size:1.1rem;flex-shrink:0;">🔒</span>
-                    <span><strong style="color:var(--text-bright);">数据安全约束：</strong>生产环境数据敏感，无法将日志、配置等信息上传至公有云大模型 API，需要本地化部署。</span>
-                </li>
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--accent);font-size:1.1rem;flex-shrink:0;">💰</span>
-                    <span><strong style="color:var(--text-bright);">资源成本限制：</strong>边缘节点算力有限，无法运行 70B+ 大参数模型，需要在资源约束下实现智能化能力。</span>
-                </li>
-            </ul>
-        </div>
-        <div class="card">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(99,102,241,0.15);">💡</div>
-                <h3>技术选型动机</h3>
+
+            <!-- 业务痛点卡片式展示 -->
+            <div class="reveal" style="margin-bottom:36px;">
+                <div class="grid-4" style="gap:20px;">
+                    <!-- 痛点1 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(239,68,68,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(239,68,68,0.15);color:var(--danger);">🚨</div>
+                            <h3 style="font-size:1rem;font-weight:700;">痛点1：直播式排障</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            私有化场景下，故障排查依赖专家"直播式"远程指导，响应慢、效率低、知识难以沉淀复用。
+                        </p>
+                    </div>
+
+                    <!-- 痛点2 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(245,158,11,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(245,158,11,0.15);color:var(--warning);">📚</div>
+                            <h3 style="font-size:1rem;font-weight:700;">痛点2：文档迷宫</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            文档越多，越难以派上用场。驻场人员、二线产品面临数款、数个版本的文档，真正遇上问题时，无从查起。
+                        </p>
+                    </div>
+
+                    <!-- 痛点3 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(99,102,241,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(99,102,241,0.15);color:var(--primary-light);">🔍
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">痛点3：信息黑盒</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            获取基本信息难。组件多，日志在哪儿、什么关键字的日志、如何排查日志、Pod是如何组成的，对于其他人都是黑盒。
+                        </p>
+                    </div>
+
+                    <!-- 痛点4 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(16,185,129,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(16,185,129,0.15);color:var(--success);">💻</div>
+                            <h3 style="font-size:1rem;font-weight:700;">痛点4：算力限制</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            不是所有客户都有显卡，但是我们需要服务所有客户。在有限算力下实现智能排障，是产品普及的关键。
+                        </p>
+                    </div>
+
+                </div>
             </div>
-            <p style="margin-bottom:16px;">基于上述痛点，Aether 选择构建<strong style="color:var(--primary-light);">小模型 Agent</strong> 方案：</p>
-            <ul style="list-style:none;display:flex;flex-direction:column;gap:12px;">
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
-                    <span><strong style="color:var(--text-bright);">轻量化部署：</strong>基于 7B 级小模型 + RAG 知识增强，在 CPU/低显存环境下即可运行，无需 GPU 集群。</span>
-                </li>
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
-                    <span><strong style="color:var(--text-bright);">知识可控：</strong>通过 ChromaDB 向量知识库管理领域知识，支持增量更新，模型推理结果可追溯、可解释。</span>
-                </li>
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
-                    <span><strong style="color:var(--text-bright);">Skill 编排：</strong>将排障经验固化为结构化 Skill，Agent 自动编排执行，实现"直播式排障"的自动化闭环。</span>
-                </li>
-                <li style="display:flex;align-items:flex-start;gap:10px;">
-                    <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
-                    <span><strong style="color:var(--text-bright);">数据私有化：</strong>全链路本地部署，敏感数据不出域，满足企业级安全合规要求。</span>
-                </li>
-            </ul>
-        </div>
-    </div>
 
-    <!-- 核心理念 -->
-    <div class="card reveal" style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-color:rgba(139,92,246,0.3);">
-        <div class="card-header">
-            <div class="icon" style="background:linear-gradient(135deg,var(--primary),#a78bfa);color:#fff;">🎯</div>
-            <h3>核心理念：直播式排障</h3>
-        </div>
-        <p style="line-height:1.9;">
-            Aether 的核心目标是实现 <strong style="color:var(--accent-light);">"直播式排障"</strong>——
-            当故障发生时，Agent 像一位经验丰富的工程师一样，
-            <strong style="color:#a78bfa;">实时感知告警信号</strong>、
-            <strong style="color:var(--warning);">自动检索相关知识</strong>、
-            <strong style="color:var(--success);">逐步执行排查 Skill</strong>，
-            最终输出结构化的根因分析报告，将平均故障定位时间（MTTR）从小时级压缩至分钟级。
-        </p>
-    </div>
-</section>
-</div>
-
-<!-- 页面: hero -->
-<div class="ppt-page" id="page-hero">
-<section class="hero" id="hero">
-    <div class="hero-particles" id="particles"></div>
-    <div class="hero-content">
-        <h1>项目核心模块</h1>
-        <div class="hero-nav-cards" style="margin-top:60px;display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:20px;padding:0 20px;max-width:1000px;width:100%;">
-            <a href="javascript:void(0)" onclick="showPage('background')" class="hero-nav-card">
-                <div class="card-icon">🌐</div>
-                <div class="card-title">背景</div>
-                <div class="card-sub">为什么构建小模型 Agent</div>
-            </a>
-            <a href="javascript:void(0)" onclick="showPage('overview')" class="hero-nav-card">
-                <div class="card-icon">🏗️</div>
-                <div class="card-title">架构概览</div>
-                <div class="card-sub">整体系统架构设计</div>
-            </a>
-            <a href="javascript:void(0)" onclick="showPage('rerank')" class="hero-nav-card">
-                <div class="card-icon">🔄</div>
-                <div class="card-title">Rerank 重排序</div>
-                <div class="card-sub">CrossEncoder 二次精排</div>
-            </a>
-            <a href="javascript:void(0)" onclick="showPage('knowledge')" class="hero-nav-card">
-                <div class="card-icon">📚</div>
-                <div class="card-title">知识库系统</div>
-                <div class="card-sub">ChromaDB + RAG</div>
-            </a>
-            <a href="javascript:void(0)" onclick="showPage('intent')" class="hero-nav-card">
-                <div class="card-icon">🧠</div>
-                <div class="card-title">意图分类</div>
-                <div class="card-sub">A/D 两级分类</div>
-            </a>
-            <a href="javascript:void(0)" onclick="showPage('rca')" class="hero-nav-card">
-                <div class="card-icon">🔍</div>
-                <div class="card-title">RCA 分析</div>
-                <div class="card-sub">Skill 编排引擎</div>
-            </a>
-        </div>
-    </div>
-</section>
-</div>
-
-<!-- 页面: overview -->
-<div class="ppt-page" id="page-overview">
-<section class="section" id="overview">
-    <div class="section-header reveal">
-        <span class="section-tag blue">Architecture</span>
-        <h2 class="section-title">整体架构概览</h2>
-        <p class="section-desc">分层架构设计，各模块职责清晰、松耦合、可独立扩展</p>
-    </div>
-
-    <div class="mermaid-container reveal">
-        <div class="mermaid">
-            graph TB
-            subgraph Input["🎯 用户输入"]
-            A["用户查询 / 故障描述"]
-            end
-            subgraph Intent["🧠 意图分类层"]
-            B["IntentClassifier\nA/D 两级分类"]
-            B1["规则引擎\nRuleMatchEngine"]
-            B2["LLM 快速分类"]
-            end
-            subgraph Knowledge["📚 知识库层"]
-            C["ChromaKnowledgeStore\n向量知识库"]
-            C1["VectorEmbedder\n文本向量化"]
-            C3["CrossEncoder\nRerank 重排序"]
-            C4["IntentRoutingStore\n意图路由索引"]
-            end
-            subgraph RCA["🔍 RCA 执行层"]
-            D["RCARouter\n路由控制器"]
-            D1["RCAEngine\n分步执行引擎"]
-            D2["RCASkillLoader\nSkill 加载器"]
-            D3["SecurityGuard\n安全校验"]
-            end
-            subgraph Output["📋 输出"]
-            E["RCAReport\n结构化报告"]
-            end
-            A --> B
-            B --> B1
-            B1 -->|未命中| B2
-            B -->|"A 类: 知识问答"| C
-            B -->|"D 类: 操作/排查"| D
-            D --> D1
-            D -->|"RAG 检索 Skill"| C4
-            D1 --> D2
-            D1 --> D3
-            C --> C1
-            C --> C3
-            D1 --> E
-            style Input fill:#1e293b,stroke:#6366f1,color:#e2e8f0
-            style Intent fill:#1e293b,stroke:#a78bfa,color:#e2e8f0
-            style Knowledge fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-            style RCA fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-            style Output fill:#1e293b,stroke:#10b981,color:#e2e8f0
-        </div>
-    </div>
-
-    <div class="reveal" style="margin-top:32px;">
-        <div class="arch-layer intent">
-            <h4>🧠 意图分类层</h4>
-            <p style="font-size:0.9rem;color:var(--text-muted);">判断用户意图类型，路由到对应处理流程</p>
-            <div class="modules">
-                <span class="badge purple">IntentClassifier</span>
-                <span class="badge purple">RuleMatchEngine</span>
+            <!-- 技术选型动机 -->
+            <div class="reveal" style="margin-bottom:36px;">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:rgba(99,102,241,0.15);">💡</div>
+                        <h3>技术选型动机</h3>
+                    </div>
+                    <p style="margin-bottom:16px;">基于上述痛点，Aether 选择构建<strong
+                            style="color:var(--primary-light);">小模型 Agent</strong> 方案：</p>
+                    <ul style="list-style:none;display:flex;flex-direction:column;gap:12px;">
+                        <li style="display:flex;align-items:flex-start;gap:10px;">
+                            <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
+                            <span><strong style="color:var(--text-bright);">超低成本：</strong>基于 <=9B 级小模型 + RAG 知识增强，在 CPU/低显存环境下即可运行，无需 GPU 集群。</span>
+                        </li>
+                        <li style="display:flex;align-items:flex-start;gap:10px;">
+                            <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
+                            <span><strong style="color:var(--text-bright);">知识可控：</strong>通过 ChromaDB 向量知识库管理领域知识，支持增量更新，模型推理结果可追溯、可解释。</span>
+                        </li>
+                        <li style="display:flex;align-items:flex-start;gap:10px;">
+                            <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
+                            <span><strong style="color:var(--text-bright);">Skill 编排：</strong>将排障经验固化为结构化 Skill，Agent 自动编排执行，实现"直播式排障"的自动化闭环。</span>
+                        </li>
+                        <li style="display:flex;align-items:flex-start;gap:10px;">
+                            <span style="color:var(--success);font-size:1.1rem;flex-shrink:0;">✅</span>
+                            <span><strong style="color:var(--text-bright);">数据私有化：</strong>全链路本地部署，敏感数据不出域，满足企业级安全合规要求。</span>
+                        </li>
+                    </ul>
+                </div>
             </div>
-        </div>
-        <div class="arch-layer knowledge">
-            <h4>📚 知识库层</h4>
-            <p style="font-size:0.9rem;color:var(--text-muted);">知识存储、语义检索、结果重排序</p>
-            <div class="modules">
-                <span class="badge cyan">ChromaKnowledgeStore</span>
-                <span class="badge cyan">VectorEmbedder</span>
-                <span class="badge cyan">CrossEncoder</span>
-            </div>
-        </div>
-        <div class="arch-layer rca">
-            <h4>🔍 RCA 执行层</h4>
-            <p style="font-size:0.9rem;color:var(--text-muted);">Skill 编排执行、根因分析、报告生成</p>
-            <div class="modules">
-                <span class="badge amber">RCAEngine</span>
-                <span class="badge amber">RCARouter</span>
-                <span class="badge amber">RCASkillLoader</span>
-            </div>
-        </div>
-    </div>
-</section>
-</div>
 
-<!-- 页面: rerank -->
-<div class="ppt-page" id="page-rerank">
-<section class="section" id="rerank">
-    <div class="section-header reveal">
-        <span class="section-tag blue">Rerank</span>
-        <h2 class="section-title">Rerank 重排序系统</h2>
-        <p class="section-desc">通过 CrossEncoder 交叉编码器对初步检索结果进行二次精排，显著提升结果相关性</p>
-    </div>
-
-    <!-- 设计目标 -->
-    <div class="card reveal" style="margin-bottom:24px;">
-        <div class="card-header">
-            <div class="icon" style="background:rgba(99,102,241,0.15);">🎯</div>
-            <h3>设计目标</h3>
-        </div>
-        <p>在 RAG 检索场景中，向量相似度搜索（Embedding + L2 距离）虽然能快速召回候选文档，但<strong
-                style="color:var(--warning);">召回精度有限</strong>。Rerank 系统通过引入 <strong
-                style="color:var(--primary-light);">CrossEncoder 交叉编码器</strong>对初步检索结果进行二次精排，显著提升最终返回结果的相关性。
-        </p>
-    </div>
-
-    <!-- 技术方案流程 -->
-    <div class="reveal">
-        <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">📐 技术方案流程</h3>
-        <div class="flow-container">
-            <div class="flow-step blue">🔤 用户 Query</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-step cyan">📊 Embedding 向量化</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-step purple">🔍 Chroma 向量检索<br><small>L2 距离 → 相似度</small></div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-step amber">📋 Top-K 候选</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-step red" style="box-shadow:0 0 20px rgba(239,68,68,0.2);">⚡ CrossEncoder 重排序</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-step purple">📈 Sigmoid 归一化</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-step green">✅ 阈值过滤 & 排序</div>
-        </div>
-    </div>
-
-    <!-- 核心实现 -->
-    <div class="grid-2 reveal" style="margin-top:24px;">
-        <div class="card">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(6,182,212,0.15);">⚙️</div>
-                <h3>模型初始化</h3>
-            </div>
-            <p style="margin-bottom:12px;"><code>_init_cross_encoder</code> 方法：</p>
-            <ul class="feature-list">
-                <li>使用 <code>sentence_transformers.CrossEncoder</code> 加载本地重排序模型</li>
-                <li>模型路径通过 <code>RAGConfig.rerank_model_path</code> 配置</li>
-                <li>自动检测 CUDA 可用性，优先使用 GPU 加速</li>
-                <li>模型初始化失败会<strong style="color:var(--danger);">终止服务启动</strong></li>
-            </ul>
-        </div>
-        <div class="card">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(139,92,246,0.15);">📊</div>
-                <h3>重排序流程</h3>
-            </div>
-            <p style="margin-bottom:12px;"><code>_rerank_results</code> 方法：</p>
-            <ul class="feature-list">
-                <li>构建 Query-Document 对</li>
-                <li>CrossEncoder 打分（原始分数 -10 ~ 10）</li>
-                <li>Sigmoid 归一化到百分制 (0-100)</li>
-                <li>阈值过滤（默认 60 分）</li>
-                <li>按重排序分数降序排列</li>
-            </ul>
-        </div>
-    </div>
-
-    <!-- 代码示例 -->
-    <div class="reveal" style="margin-top:24px;">
-        <div class="code-block-header">
-            <span>Python — 核心流程伪代码</span>
-            <span class="badge blue">store.py</span>
-        </div>
-        <div class="code-block">
-            <span class="keyword">def</span> <span class="func">_rerank_results</span>(query, results):
-            <span class="comment"># 1. 构建 Query-Document 对</span>
-            pairs = [(query, result[<span class="string">'document'</span>]) <span class="keyword">for</span> result
-            <span class="keyword">in</span> results]
-
-            <span class="comment"># 2. CrossEncoder 打分（原始分数通常在 -10 ~ 10 之间）</span>
-            scores = cross_encoder.predict(pairs)
-
-            <span class="comment"># 3. Sigmoid 归一化到百分制 (0-100)</span>
-            scaled_scores = [<span class="number">1</span> / (<span class="number">1</span> + exp(-score)) * <span
-                class="number">100</span> <span class="keyword">for</span> score <span class="keyword">in</span> scores]
-
-            <span class="comment"># 4. 阈值过滤（默认 60 分）</span>
-            filtered = [r <span class="keyword">for</span> r, s <span class="keyword">in</span> zip(results,
-            scaled_scores) <span class="keyword">if</span> s >= threshold]
-
-            <span class="comment"># 5. 按重排序分数降序排列</span>
-            <span class="keyword">return</span> sorted(filtered, key=<span class="keyword">lambda</span> x: x[<span
-                class="string">'rerank_score'</span>], reverse=<span class="keyword">True</span>)
-        </div>
-    </div>
-
-    <!-- 配置参数 -->
-    <div class="reveal" style="margin-top:24px;">
-        <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">⚙️ 配置参数</h3>
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                <tr>
-                    <th>参数</th>
-                    <th>配置项</th>
-                    <th>默认值</th>
-                    <th>说明</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr>
-                    <td>模型路径</td>
-                    <td><code>rerank_model_path</code></td>
-                    <td><code>""</code></td>
-                    <td>CrossEncoder 本地模型路径</td>
-                </tr>
-                <tr>
-                    <td>重排序阈值</td>
-                    <td><code>rerank_threshold</code></td>
-                    <td><code>0.8</code> / <code>60.0</code></td>
-                    <td>低于阈值的结果将被过滤</td>
-                </tr>
-                <tr>
-                    <td>最大输入长度</td>
-                    <td><code>max_length</code></td>
-                    <td><code>512</code></td>
-                    <td>CrossEncoder 输入文本最大 token 数</td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- 监控 -->
-    <div class="card reveal" style="margin-top:24px;">
-        <div class="card-header">
-            <div class="icon" style="background:rgba(16,185,129,0.15);">📈</div>
-            <h3>监控指标</h3>
-        </div>
-        <p>系统通过 Prometheus 指标 <code>RERANK_DURATION</code> 记录每次重排序的耗时和状态（<span class="badge green">success</span>
-            / <span class="badge red">error</span>），便于性能监控和告警。</p>
-    </div>
-</section>
-</div>
-
-<!-- 页面: knowledge -->
-<div class="ppt-page" id="page-knowledge">
-<section class="section" id="knowledge">
-    <div class="section-header reveal">
-        <span class="section-tag cyan">Knowledge Base</span>
-        <h2 class="section-title">知识库系统 (RAG)</h2>
-        <p class="section-desc">基于 ChromaDB 向量数据库，提供完整的知识 CRUD 和语义检索能力</p>
-    </div>
-
-    <!-- 系统架构 Mermaid -->
-    <div class="mermaid-container reveal">
-        <div class="mermaid">
-            graph TB
-            subgraph Ingest["📥 知识入库流程"]
-            A1["原始文档"] --> A2["TextChunker\n文本分块"]
-            A2 --> A3["VectorEmbedder\n向量化"]
-            A3 --> A4["ChromaDB\n持久化存储"]
-            end
-            subgraph Search["🔍 知识检索流程"]
-            B1["用户 Query"] --> B2["VectorEmbedder\n查询向量化"]
-            B2 --> B3["ChromaDB\n向量相似度搜索"]
-            B3 --> B4["相似度阈值过滤"]
-            B4 --> B5["CrossEncoder\nRerank 重排序"]
-            B5 --> B6["去重 & 构建结果"]
-            end
-            subgraph Storage["💾 存储结构"]
-            C1["knowledge_rocketmq"]
-            C2["knowledge_kubernetes"]
-            C3["knowledge_..."]
-            end
-            A4 --> C1
-            A4 --> C2
-            B3 --> C1
-            B3 --> C2
-            style Ingest fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-            style Search fill:#1e293b,stroke:#6366f1,color:#e2e8f0
-            style Storage fill:#1e293b,stroke:#10b981,color:#e2e8f0
-        </div>
-    </div>
-
-    <!-- 核心组件 Tabs -->
-    <div class="tabs reveal">
-        <div class="tab-nav">
-            <button class="tab-btn active" onclick="switchTab(event, 'kb-store')">ChromaKnowledgeStore</button>
-            <button class="tab-btn" onclick="switchTab(event, 'kb-embedder')">VectorEmbedder</button>
-            <button class="tab-btn" onclick="switchTab(event, 'kb-chunker')">TextChunker</button>
-            <button class="tab-btn" onclick="switchTab(event, 'kb-routing')">IntentRoutingStore</button>
-        </div>
-
-        <!-- Tab: ChromaKnowledgeStore -->
-        <div class="tab-panel active" id="kb-store">
-            <div class="card" style="margin-bottom:20px;">
+            <!-- 核心理念 -->
+            <div class="card reveal"
+                 style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-color:rgba(139,92,246,0.3);">
                 <div class="card-header">
-                    <div class="icon" style="background:rgba(6,182,212,0.15);">💾</div>
-                    <h3>ChromaKnowledgeStore <span class="badge cyan">核心</span></h3>
+                    <div class="icon" style="background:linear-gradient(135deg,var(--primary),#a78bfa);color:#fff;">🎯
+                    </div>
+                    <h3>基于<a href="https://github.com/HKUDS/nanobot">Nanobot【港大开源】</a>，二次开发</h3>
                 </div>
-                <p style="margin-bottom:16px;">整个知识库系统的核心类，基于 <strong style="color:var(--accent-light);">ChromaDB</strong>
-                    向量数据库实现。</p>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁 文件位置：<code>nanobot/knowledge/store.py</code>
-                </p>
+                <p>1. 够小</p>
+                <p>2. 够简单</p>
             </div>
+        </section>
+    </div>
 
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>能力</th>
-                        <th>方法</th>
-                        <th>说明</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr>
-                        <td><span class="badge green">入库</span></td>
-                        <td><code>add_knowledge()</code></td>
-                        <td>文本分块 → 向量化 → 批量存储到 Chroma</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge blue">检索</span></td>
-                        <td><code>search_knowledge(query=...)</code></td>
-                        <td>向量相似度搜索 + Rerank 重排序</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge purple">过滤</span></td>
-                        <td><code>search_knowledge(domain=...)</code></td>
-                        <td>基于领域/分类/标签的精确过滤</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge amber">更新</span></td>
-                        <td><code>update_knowledge()</code></td>
-                        <td>删除旧向量 → 重新分块向量化 → 存储</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge red">删除</span></td>
-                        <td><code>delete_knowledge()</code></td>
-                        <td>删除所有关联的向量分块</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge cyan">导出</span></td>
-                        <td><code>export_knowledge()</code></td>
-                        <td>按 item_id 分组合并分块，导出 JSON</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div style="margin-top:20px;">
-                <div class="code-block-header">
-                    <span>Python — KnowledgeItem 数据模型</span>
-                    <span class="badge cyan">@dataclass</span>
-                </div>
-                <div class="code-block">
-                    <span class="decorator">@dataclass</span>
-                    <span class="keyword">class</span> <span class="func">KnowledgeItem</span>:
-                    id: str <span class="comment"># 唯一标识 (格式: {domain}_{timestamp})</span>
-                    domain: str <span class="comment"># 领域 (如 "rocketmq", "kubernetes")</span>
-                    category: str <span class="comment"># 分类 (如 "troubleshooting", "configuration")</span>
-                    title: str <span class="comment"># 标题</span>
-                    content: str <span class="comment"># 内容</span>
-                    tags: List[str] <span class="comment"># 标签列表</span>
-                    source: str <span class="comment"># 来源 ("user" / "system")</span>
-                    priority: int <span class="comment"># 优先级 (1-5)</span>
-                    source_url: str <span class="comment"># 原文档链接</span>
-                    file_path: str <span class="comment"># 本地文件路径</span>
-                    preview_available: bool <span class="comment"># 是否可预览</span>
+    <!-- 页面: hero -->
+    <div class="ppt-page" id="page-hero">
+        <section class="hero" id="hero">
+            <div class="hero-particles" id="particles"></div>
+            <div class="hero-content">
+                <div class="hero-nav-cards"
+                     style="margin-top:60px;display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:20px;padding:0 20px;max-width:1000px;width:100%;">
+                    <a href="javascript:void(0)" onclick="showPage('background')" class="hero-nav-card">
+                        <div class="card-icon">🌐</div>
+                        <div class="card-title">背景</div>
+                        <div class="card-sub">为什么构建小模型+Agent</div>
+                    </a>
+                    <a href="javascript:void(0)" onclick="showPage('rerank')" class="hero-nav-card">
+                        <div class="card-icon">📚</div>
+                        <div class="card-title">知识库</div>
+                        <div class="card-sub">ChromaDB + RAG</div>
+                    </a>
+                    <a href="javascript:void(0)" onclick="showPage('intent')" class="hero-nav-card">
+                        <div class="card-icon">🗺️</div>
+                        <div class="card-title">分级路由</div>
+                        <div class="card-sub">A/D 两级分类与路由</div>
+                    </a>
+                    <a href="javascript:void(0)" onclick="showPage('knowledge')" class="hero-nav-card">
+                        <div class="card-icon">🛠️</div>
+                        <div class="card-title">重新设计Skill</div>
+                        <div class="card-sub">优化技能匹配与执行</div>
+                    </a>
+                    <a href="javascript:void(0)" onclick="showPage('rca')" class="hero-nav-card">
+                        <div class="card-icon">🧬</div>
+                        <div class="card-title">LoRA微调</div>
+                        <div class="card-sub">适配 RocketMQ 场景</div>
+                    </a>
+                    <a href="javascript:void(0)" onclick="showPage('overview')" class="hero-nav-card">
+                        <div class="card-icon">✨</div>
+                        <div class="card-title">总结</div>
+                        <div class="card-sub">项目核心优势与成果</div>
+                    </a>
                 </div>
             </div>
-        </div>
+        </section>
+    </div>
 
-        <!-- Tab: VectorEmbedder -->
-        <div class="tab-panel" id="kb-embedder">
-            <div class="card">
+    <!-- 页面: overview -->
+    <div class="ppt-page" id="page-overview">
+        <section class="section" id="overview">
+            <div class="section-header reveal">
+                <span class="section-tag green">Summary</span>
+            </div>
+
+            <!-- 核心优势模块 -->
+            <div class="reveal" style="margin-top:48px;margin-bottom:48px;">
+                <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;text-align:center;">
+                    核心优势</h3>
+                <div class="grid-2" style="gap:20px;">
+                    <!-- 优势1：更低成本 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(16,185,129,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(16,185,129,0.15);color:var(--success);">💰
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">1/5 成本运行/训练</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            基于1～9B级小模型设计，在CPU/低显存环境下即可运行，大幅降低部署门槛。知识增强策略替代大参数量，实现低成本运行、训练、迭代。
+                        </p>
+                    </div>
+
+                    <!-- 优势2：更专业 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(99,102,241,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon"
+                                 style="background:rgba(99,102,241,0.15);color:var(--primary-light);">🎯
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">更专业的领域能力</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            通过领域知识增强和RCA技能编排，具备专业运维排障能力。结构化Skill体系确保推理结果可追溯、可解释、可复用。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 经验 -->
+            <div class="reveal" style="margin-top:48px;margin-bottom:48px;">
+                <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;text-align:center;">
+                    经验总结</h3>
+                <div class="grid-2" style="gap:20px;">
+                    <!-- 经验1 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(16,185,129,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(16,185,129,0.15);color:var(--success);">💰
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">核心：领域数据质量</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            真实有效的数据，直接决定Agent的准确性
+                        </p>
+                    </div>
+
+                    <!-- 经验2 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(99,102,241,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon"
+                                 style="background:rgba(99,102,241,0.15);color:var(--primary-light);">🎯
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">小模型提示词优化</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            完形填空式优化
+                        </p>
+                    </div>
+
+                    <!-- 去掉业务无关提示词 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(99,102,241,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon"
+                                 style="background:rgba(99,102,241,0.15);color:var(--primary-light);">🎯
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">去掉业务无关的系统提示词</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            AGENTS.md， SOUL.md， USER.md 等
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 后续优化方向模块 -->
+            <div class="reveal" style="margin-bottom:48px;">
+                <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;text-align:center;">
+                    后续方向</h3>
+                <div class="grid-2" style="gap:20px;">
+                    <!-- 难点1：主Agent打通 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(139,92,246,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(139,92,246,0.15);color:#a78bfa;">🔗</div>
+                            <h3 style="font-size:1rem;font-weight:700;">与其他主Agent打通</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            与企业现有AI Agent、监控告警平台、运维中台等系统对接，形成智能运维闭环
+                            <br/>
+                            1. TCS-Agent
+                            <br/>
+                            2. TCE Cloud Mate
+                        </p>
+                    </div>
+
+                    <!-- 难点2：代码RAG -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(239,68,68,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(239,68,68,0.15);color:var(--danger);">🧠
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">源代码RAG</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            <br/>
+                            1. 结合有版本的源代码
+                            <br/>
+                            2. 源代码排查融入SOP Skill
+                        </p>
+                    </div>
+
+                    <!-- 难点3：多轮对话 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(245,158,11,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(245,158,11,0.15);color:var(--warning);">💬
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">多轮对话难点</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            复杂排查场景需要多轮交互澄清问题。目前常规Agent利用大模型长场下文的能力保持对话连贯性、理解上下文意图、理解Skill的模式在小模型上完全跑不通。
+                            <br/>
+                            1. 耗时超乎想象
+                            <br/>
+                            2. 幻觉是常态
+                            <br/>
+                        </p>
+                    </div>
+
+                    <!-- 难点4：记忆 -->
+                    <div class="card"
+                         style="height:100%;border-color:rgba(239,68,68,0.3);transition:var(--transition);">
+                        <div class="card-header" style="margin-bottom:12px;">
+                            <div class="icon" style="background:rgba(239,68,68,0.15);color:var(--danger);">🧠
+                            </div>
+                            <h3 style="font-size:1rem;font-weight:700;">记忆难点</h3>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6;margin:0;">
+                            长期记忆与短期记忆的平衡，历史会话状态的存储与检索，如何在资源受限环境下实现高效记忆管理是关键挑战。
+                            <br/>
+                            1. 抛弃记忆
+                            <br/>
+                            2. 记忆上移到主Agent
+                        </p>
+                    </div>
+
+
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 页面: 知识库 -->
+    <div class="ppt-page" id="page-rerank">
+        <section class="section" id="rerank">
+
+            <!-- 设计目标 -->
+            <div class="reveal" style="margin-top:50px;">
+                <h3>设计目标</h3>
+                <div class="card reveal" style="margin-bottom:24px;">
+                    <p>在 RAG 检索场景中，向量相似度搜索（Embedding + L2 距离）虽然能快速召回候选文档，但<strong
+                            style="color:var(--warning);">召回精度有限</strong>。Rerank 系统通过引入 <strong
+                            style="color:var(--primary-light);">CrossEncoder 交叉编码器</strong>对初步检索结果进行二次精排，显著提升最终返回结果的相关性。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 检索流程时序图 -->
+            <div class="reveal" style="margin-top:32px;">
+                <h3>检索流程</h3>
+                <div class="mermaid-container">
+                    <div class="mermaid">
+                        sequenceDiagram
+                        participant User as 用户
+                        participant Store as ChromaKnowledgeStore
+                        participant Embedder as VectorEmbedder
+                        participant Chroma as ChromaDB
+                        participant Reranker as CrossEncoder
+
+                        User->>Store: search_knowledge(query, domain, top_k)
+                        Store->>Embedder: embed_text(query)
+                        Embedder-->>Store: query_vector
+                        loop 遍历所有相关 Collection
+                        Store->>Chroma: collection.query(query_vector, n_results)
+                        Chroma-->>Store: ids, documents, metadatas, distances
+                        end
+                        Store->>Store: L2距离 --> 相似度
+                        Store->>Store: Top-K 相似度
+                        Store->>Reranker: _rerank_results(query, candidates)
+                        Reranker-->>Store: 重排序 + Sigmoid归一化
+                        Store->>Store: 去重
+                        Store-->>User: List of KnowledgeItem
+                    </div>
+                </div>
+
+                <!-- 核心实现 -->
+                <div class="reveal" style="margin-top:24px;">
+                    <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">检索流程说明</h3>
+                    <div class="card">
+                        <ul class="feature-list">
+                            <li>接收用户 Query，构建标准化检索输入</li>
+                            <li>对 Query 执行 Embedding 向量化</li>
+                            <li>在 Chroma 中执行向量检索（L2 距离转换为相似度）</li>
+                            <li>返回 Top-K 候选文档</li>
+                            <li>使用 <b>CrossEncoder 对候选进行重排序</b>打分</li>
+                            <li>对重排序分数做 <b>Sigmoid 归一化</b></li>
+                            <li>按阈值过滤并按分数排序后返回结果</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Rerank优点总结 -->
+                <div class="reveal" style="margin-top:24px;">
+                    <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">Rerank 优点总结</h3>
+                    <div class="card reveal" style="margin-bottom:24px;margin-top: 24px;">
+                        <div class="card-header">
+                            <p>
+                                传统Agent： 向量检索--> Topk --> LLM ---> 输出结果
+                            </p>
+                        </div>
+                        <ul class="feature-list">
+                            <li><strong style="color:var(--accent-light);">核心作用：</strong>大幅度降低上下文长度，降低SLM耗时，解决“先看哪条证据”。
+                            </li>
+                            <li><strong style="color:var(--accent-light);">为什么需要：</strong>提升答案质量并降低 SLM
+                                幻觉风险。
+                            </li>
+                            <li><strong style="color:var(--accent-light);">反直觉的工程权衡：</strong>重排会增加少量时延，但是在SLM场景下相反。
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 代码示例 -->
+                <div class="reveal" style="margin-top:24px;">
+                    <div class="code-block-header">
+                        <span>Rerank流程伪代码</span>
+                        <span class="badge blue">store.py</span>
+                    </div>
+                    <pre>
+                <code class="language-python">
+def _rerank_results(query, results):
+    # 1. 构建 Query-Document 对
+    pairs = [(query, result['document']) for result in results]
+
+    # 2. CrossEncoder 打分（原始分数通常在 -10 ~ 10 之间）
+    scores = cross_encoder.predict(pairs)
+
+    # 3. Sigmoid 归一化到百分制 (0-100)
+    scaled_scores = [1 / (1 + exp(-score)) * 100 for score in scores]
+
+    # 4. 阈值过滤（默认 60 分）
+    filtered = [r for r, s in zip(results, scaled_scores) if s >= threshold]
+
+    # 5. 按重排序分数降序排列
+    return sorted(filtered, key=lambda x: x['rerank_score'], reverse=True)
+                </code>
+            </pre>
+                </div>
+
+                <!-- 各种rerank模型对比 -->
+                <div class="reveal" style="margin-top:24px;">
+                    <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">
+                        各种rerank模型怎么选？在SLM条件下，几乎没的选！<span class="badge blue">开源</span>
+                        <span class="badge blue">离线</span>
+                        <span class="badge blue">中文</span>
+                        <span class="badge blue">bge-reranker-v2-m3</span>
+                    </h3>
+                </div>
+
+                <!-- 配置体系 -->
+                <div class="reveal" style="margin-top:24px;">
+                    <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">⚙️RAG配置</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>配置项</th>
+                                <th>环境变量</th>
+                                <th>默认值</th>
+                                <th>说明</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <td><code>embedding_model</code></td>
+                                <td><code>NANOBOT_EMBEDDING_MODEL</code></td>
+                                <td><code>""</code></td>
+                                <td>Embedding 模型名称/路径</td>
+                            </tr>
+                            <tr>
+                                <td><code>chunk_size</code></td>
+                                <td><code>NANOBOT_CHUNK_SIZE</code></td>
+                                <td><code>500</code></td>
+                                <td>分块大小（字符数）</td>
+                            </tr>
+                            <tr>
+                                <td><code>chunk_overlap</code></td>
+                                <td><code>NANOBOT_CHUNK_OVERLAP</code></td>
+                                <td><code>100</code></td>
+                                <td>分块重叠大小</td>
+                            </tr>
+                            <tr>
+                                <td><code>top_k</code></td>
+                                <td><code>NANOBOT_TOP_K</code></td>
+                                <td><code>5</code></td>
+                                <td>检索返回结果数</td>
+                            </tr>
+                            <tr>
+                                <td><code>similarity_threshold</code></td>
+                                <td><code>NANOBOT_SIMILARITY_THRESHOLD</code></td>
+                                <td><code>0.0</code></td>
+                                <td>最低相似度阈值</td>
+                            </tr>
+                            <tr>
+                                <td><code>rerank_model_path</code></td>
+                                <td><code>NANOBOT_RERANK_MODEL_PATH</code></td>
+                                <td><code>""</code></td>
+                                <td>Rerank 模型路径</td>
+                            </tr>
+                            <tr>
+                                <td><code>rerank_threshold</code></td>
+                                <td><code>NANOBOT_RERANK_THRESHOLD</code></td>
+                                <td><code>0.8</code></td>
+                                <td>Rerank 过滤阈值</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+
+                <!-- 知识chunk拆分 -->
+                <div class="reveal" style="margin-top:24px;">
+
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>调优项</th>
+                                <th>推荐范围</th>
+                                <th>调优经验</th>
+                                <th>风险提示</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <td>chunk大小</td>
+                                <td><code>300~800</code> token</td>
+                                <td>先用 <code>512</code> token 作为基线，再按召回质量微调</td>
+                                <td>过小易语义缺失，过大易主题混杂</td>
+                            </tr>
+                            <tr>
+                                <td>重叠大小</td>
+                                <td><code>10%~20%</code></td>
+                                <td>从 <code>64</code> token 起步，关注跨段问答命中率变化</td>
+                                <td>过低会断上下文，过高会引入冗余与重复召回</td>
+                            </tr>
+                            <tr>
+                                <td>人工chunk border【新增支持】</td>
+                                <td>标题/步骤/代码块边界</td>
+                                <td>先规则切分再模型切分，确保结构化知识完整落入单 chunk</td>
+                                <td>规则过多会导致 chunk 分布不均，影响批处理效率</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 页面: Skill -->
+    <div class="ppt-page" id="page-knowledge">
+        <section class="section" id="knowledge">
+            <div class="section-header reveal">
+                <span class="section-tag cyan">re-design-exec-of-Skill</span>
+                <p class="section-desc">Tool --> Atomic Skill --> Sop Skill</p>
+            </div>
+            <div class="card reveal"
+                 style="margin-bottom:24px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(16,185,129,0.08));border-color:rgba(99,102,241,0.35);">
                 <div class="card-header">
-                    <div class="icon" style="background:rgba(99,102,241,0.15);">🧮</div>
-                    <h3>VectorEmbedder <span class="badge blue">向量化</span></h3>
+                    <div class="icon" style="background:linear-gradient(135deg,var(--primary),#34d399);color:#fff;">🎯
+                    </div>
+                    <h3>新设计：Embedding Skill + 分步骤执行</h3>
                 </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁 文件位置：<code>nanobot/knowledge/vector_embedder.py</code>
-                </p>
-                <p style="margin-bottom:16px;">基于 <code>sentence-transformers</code> 库实现本地文本向量化，<strong
-                        style="color:var(--success);">无需外部 API 调用</strong>。</p>
-                <ul class="feature-list">
-                    <li>使用 <code>SentenceTransformer</code> 加载本地 Embedding 模型（如
-                        <code>BAAI/bge-large-zh-v1.5</code>）
-                    </li>
-                    <li>支持单文本 (<code>embed_text</code>) 和批量 (<code>embed_batch</code>) 向量化</li>
-                    <li>空文本自动返回零向量，保证系统健壮性</li>
-                    <li>模型加载失败抛出 <code>EmbeddingModelError</code>，提供详细的排查指引</li>
-                </ul>
-            </div>
-        </div>
-
-        <!-- Tab: TextChunker -->
-        <div class="tab-panel" id="kb-chunker">
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(139,92,246,0.15);">✂️</div>
-                    <h3>TextChunker <span class="badge purple">分块</span></h3>
-                </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁 文件位置：<code>nanobot/knowledge/text_chunker.py</code>
-                </p>
-                <p style="margin-bottom:16px;">基于 <code>langchain_text_splitters.RecursiveCharacterTextSplitter</code>
-                    实现智能文本分块。</p>
-
-                <h4 style="font-size:0.95rem;color:var(--text-bright);margin-bottom:12px;">分隔符优先级（从高到低）：</h4>
-                <div class="flow-container" style="flex-direction:column;align-items:stretch;gap:4px;">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="badge red" style="min-width:24px;justify-content:center;">1</span>
-                        <span style="font-size:0.85rem;color:var(--text);">CHUNK_BOUNDARY（手动标记）</span>
+                <div class="grid-2" style="gap:16px;">
+                    <div style="padding:16px;background:rgba(239,68,68,0.06);border-radius:var(--radius-sm);border:1px solid rgba(239,68,68,0.2);">
+                        <h4 style="font-size:0.9rem;color:#fca5a5;margin-bottom:8px;">传统做法：大模型plan + exec
+                            plan</h4>
+                        <ul class="feature-list" style="margin-bottom:0;">
+                            <li><strong>处理路径</strong>：注入到模型提示词</li>
+                            <li><strong>典型问题</strong>：控制可见性/允许列表；加载与过滤；Openclaw.DEFAULT_MAX_SKILLS_LOADED_PER_SOURCE,
+                                DEFAULT_MAX_SKILLS_IN_PROMPT
+                            </li>
+                            <li><strong>耗时特征</strong>：安装越多越慢；</li>
+                        </ul>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="badge amber" style="min-width:24px;justify-content:center;">2</span>
-                        <span style="font-size:0.85rem;color:var(--text);">代码块</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="badge blue" style="min-width:24px;justify-content:center;">3</span>
-                        <span style="font-size:0.85rem;color:var(--text);">段落 (\n\n)</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="badge purple" style="min-width:24px;justify-content:center;">4</span>
-                        <span style="font-size:0.85rem;color:var(--text);">中文句号/问号/感叹号 → 英文句号/问号</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="badge cyan" style="min-width:24px;justify-content:center;">5</span>
-                        <span style="font-size:0.85rem;color:var(--text);">中文逗号 → 英文逗号 → 空格 → 字符级分割</span>
+                    <div style="padding:16px;background:rgba(16,185,129,0.06);border-radius:var(--radius-sm);border:1px solid rgba(16,185,129,0.25);">
+                        <h4 style="font-size:0.9rem;color:#6ee7b7;margin-bottom:8px;">本项目做法：Embedding Skill + 分步骤执行
+                            + 最终汇集评估</h4>
+                        <ul class="feature-list" style="margin-bottom:0;">
+                            <li><strong>处理路径</strong>：SOP Skill = 多个 Atomic Skill</li>
+                            <li><strong>核心收益</strong>：SLM执行Skill变成可能</li>
+                            <li><strong>耗时特征</strong>：取决于单步骤耗时， 每个步骤=Atomic skill，耗时可控</li>
+                        </ul>
                     </div>
                 </div>
-
-                <ul class="feature-list" style="margin-top:16px;">
-                    <li>支持 <code>CHUNK_BOUNDARY</code> 手动分块标记，精确控制分块边界</li>
-                    <li>中文友好的分隔符配置，优先在语义完整的边界处分块</li>
-                    <li>自动过滤内容过少（&lt; 10 字符）的碎片分块</li>
-                    <li>短文本（≤ chunk_size）不分块，直接返回</li>
-                </ul>
-            </div>
-        </div>
-
-        <!-- Tab: IntentRoutingStore -->
-        <div class="tab-panel" id="kb-routing">
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(245,158,11,0.15);">🗺️</div>
-                    <h3>IntentRoutingStore <span class="badge amber">路由</span></h3>
-                </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁 文件位置：<code>nanobot/knowledge/intent_routing_store.py</code>
-                </p>
-                <p style="margin-bottom:16px;">独立于知识库的向量索引系统，专门用于<strong style="color:var(--warning);">工具和
-                    Skill 的意图路由检索</strong>。</p>
-
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>索引类型</th>
-                            <th>Collection</th>
-                            <th>数据来源</th>
-                            <th>用途</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr>
-                            <td><span class="badge blue">工具索引</span></td>
-                            <td><code>ops_tools</code></td>
-                            <td>ToolRegistry + MCP Server</td>
-                            <td>匹配最相关的工具</td>
-                        </tr>
-                        <tr>
-                            <td><span class="badge amber">Skill 索引</span></td>
-                            <td><code>skills</code></td>
-                            <td>RCASkillLoader YAML</td>
-                            <td>匹配最相关的排障 Skill</td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </div>
-
                 <div class="card"
-                     style="margin-top:16px;background:rgba(6,182,212,0.05);border-color:rgba(6,182,212,0.2);">
-                    <p style="font-size:0.88rem;"><strong style="color:var(--accent-light);">🔌 MCP 工具发现：</strong>支持通过
-                        SSE 协议动态从 MCP Server 拉取工具列表，自动向量化入库。</p>
+                     style="margin-top:14px;background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.25);">
+                    <p style="margin:0;font-size:0.86rem;line-height:1.7;">
+                        <strong style="color:#93c5fd;">结论：</strong>
+                        分步骤执行将SLM执行Skill变成可能。但是：
+
+                    </p>
+                    <p>1. 开源的Skill格式无法通用， 需要转格式. 升级、维护需要自动化的工具支持（展示）</p>
+                    <p>2. 执行整体耗时偏大。分步骤后， 整体执行耗时变大， 待优化</p>
                 </div>
             </div>
-        </div>
-    </div>
+            <!-- 系统架构 Mermaid -->
+            <div class="mermaid-container reveal">
+                <h3>Skill生效流程图</h3>
+                <img class="flow-chart" src="images/2026-04-08-02.png" style="width: 30%; height: auto;">
+                <!--                    graph TB-->
+                <!--                        subgraph Input["用户输入"]-->
+                <!--                        A["用户查询 / 故障描述"]-->
+                <!--                        style A fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        end-->
+                <!--                    -->
+                <!--                        subgraph Intent["意图分类层"]-->
+                <!--                        B["IntentClassifier<br>A/D 两级分类"]-->
+                <!--                        style B fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        B1["规则引擎<br>RuleMatchEngine"]-->
+                <!--                        style B1 fill:#f0f0f0,stroke:#333,stroke-width:2px-->
+                <!--                        B2["LLM 快速分类"]-->
+                <!--                        style B2 fill:#f0f0f0,stroke:#333,stroke-width:2px-->
+                <!--                        end-->
+                <!--                    -->
+                <!--                        subgraph Knowledge["知识库层"]-->
+                <!--                        C["ChromaKnowledgeStore<br>向量知识库"]-->
+                <!--                        style C fill:#f0f0f0,stroke:#333,stroke-width:2px-->
+                <!--                        C1["VectorEmbedder<br>文本向量化"]-->
+                <!--                        style C1 fill:#f0f0f0,stroke:#333,stroke-width:2px-->
+                <!--                        C3["CrossEncoder<br>Rerank 重排序"]-->
+                <!--                        style C3 fill:#f0f0f0,stroke:#333,stroke-width:2px-->
+                <!--                        C4["IntentRoutingStore<br>意图路由索引"]-->
+                <!--                        style C4 fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        end-->
+                <!--                    -->
+                <!--                        subgraph RCA["RCA 执行层"]-->
+                <!--                        D["RCARouter<br>路由控制器"]-->
+                <!--                        style D fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        D1["RCAEngine<br>分步执行引擎"]-->
+                <!--                        style D1 fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        D2["RCASkillLoader<br>Skill 加载器"]-->
+                <!--                        style D2 fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        D3["SecurityGuard<br>安全校验"]-->
+                <!--                        style D3 fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        end-->
+                <!--                    -->
+                <!--                        subgraph Output["输出"]-->
+                <!--                        E["RCAReport<br>结构化报告"]-->
+                <!--                        style E fill:#d4edda,stroke:#155724,stroke-width:2px-->
+                <!--                        end-->
+                <!--                    -->
+                <!--                        A &ndash;&gt; B-->
+                <!--                        B &ndash;&gt; B1-->
+                <!--                        B1 -.->|未命中| B2-->
+                <!--                        B2 &ndash;&gt;|"LLM 快速分类"| C-->
+                <!--                        B &ndash;&gt;|"A 类: 知识问答"| C-->
+                <!--                        B &ndash;&gt;|"D 类: 操作/排查"| D-->
+                <!--                        D &ndash;&gt; D1-->
+                <!--                        D -.->|"RAG 检索 Skill"| C4-->
+                <!--                        D1 &ndash;&gt; D2-->
+                <!--                        D1 &ndash;&gt; D3-->
+                <!--                        C &ndash;&gt; C1-->
+                <!--                        C &ndash;&gt; C3-->
+                <!--                        D2 &ndash;&gt; E-->
+                <!--                        D3 &ndash;&gt; E-->
 
-    <!-- 检索流程时序图 -->
-    <div class="reveal" style="margin-top:32px;">
-        <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">🔄 语义检索完整流程</h3>
-        <div class="mermaid-container">
-            <div class="mermaid">
-                sequenceDiagram
-                participant User as 👤 用户
-                participant Store as 💾 ChromaKnowledgeStore
-                participant Embedder as 🧮 VectorEmbedder
-                participant Chroma as 🗄️ ChromaDB
-                participant Reranker as ⚡ CrossEncoder
-
-                User->>Store: search_knowledge(query, domain, top_k)
-                Store->>Embedder: embed_text(query)
-                Embedder-->>Store: query_vector (768维)
-                loop 遍历所有相关 Collection
-                Store->>Chroma: collection.query(query_vector, n_results)
-                Chroma-->>Store: ids, documents, metadatas, distances
-                end
-                Store->>Store: L2距离 → 相似度分数转换
-                Store->>Store: 相似度阈值过滤 + Top-K
-                Store->>Reranker: _rerank_results(query, candidates)
-                Reranker-->>Store: 重排序 + 阈值过滤后的结果
-                Store->>Store: 按 item_id 去重
-                Store-->>User: List of KnowledgeItem
             </div>
-        </div>
-    </div>
 
-    <!-- 配置体系 -->
-    <div class="reveal" style="margin-top:24px;">
-        <h3 style="font-size:1.1rem;color:var(--text-bright);margin-bottom:16px;">⚙️ RAG 配置体系</h3>
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                <tr>
-                    <th>配置项</th>
-                    <th>环境变量</th>
-                    <th>默认值</th>
-                    <th>说明</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr>
-                    <td><code>embedding_model</code></td>
-                    <td><code>NANOBOT_EMBEDDING_MODEL</code></td>
-                    <td><code>""</code></td>
-                    <td>Embedding 模型名称/路径</td>
-                </tr>
-                <tr>
-                    <td><code>chunk_size</code></td>
-                    <td><code>NANOBOT_CHUNK_SIZE</code></td>
-                    <td><code>500</code></td>
-                    <td>分块大小（字符数）</td>
-                </tr>
-                <tr>
-                    <td><code>chunk_overlap</code></td>
-                    <td><code>NANOBOT_CHUNK_OVERLAP</code></td>
-                    <td><code>100</code></td>
-                    <td>分块重叠大小</td>
-                </tr>
-                <tr>
-                    <td><code>top_k</code></td>
-                    <td><code>NANOBOT_TOP_K</code></td>
-                    <td><code>5</code></td>
-                    <td>检索返回结果数</td>
-                </tr>
-                <tr>
-                    <td><code>similarity_threshold</code></td>
-                    <td><code>NANOBOT_SIMILARITY_THRESHOLD</code></td>
-                    <td><code>0.0</code></td>
-                    <td>最低相似度阈值</td>
-                </tr>
-                <tr>
-                    <td><code>rerank_model_path</code></td>
-                    <td><code>NANOBOT_RERANK_MODEL_PATH</code></td>
-                    <td><code>""</code></td>
-                    <td>Rerank 模型路径</td>
-                </tr>
-                <tr>
-                    <td><code>rerank_threshold</code></td>
-                    <td><code>NANOBOT_RERANK_THRESHOLD</code></td>
-                    <td><code>0.8</code></td>
-                    <td>Rerank 过滤阈值</td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</section>
-</div>
+            <!-- Atomic Skill -->
+            <div class="reveal" style="margin-top:48px;">
+                <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;">
+                    Atomic Skill（原子技能）<span class="badge purple" style="margin-left:8px;">单工具封装</span></h3>
 
-<!-- 页面: intent -->
-<div class="ppt-page" id="page-intent">
-<section class="section" id="intent">
-    <div class="section-header reveal">
-        <span class="section-tag purple">Intent Classification</span>
-        <h2 class="section-title">意图分类系统</h2>
-        <p class="section-desc">A/D 两级分类 + 两阶段匹配，精准路由用户请求</p>
-    </div>
-
-    <!-- 分类概览 -->
-    <div class="grid-2 reveal">
-        <div class="card" style="border-left:3px solid #a78bfa;">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(139,92,246,0.15);">📖</div>
-                <h3>A 类 — 知识问答</h3>
-            </div>
-            <p>纯知识性问题，交由 LLM 直接回答。通过<strong style="color:#a78bfa;">关键词模式匹配</strong>快速识别。</p>
-            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;">
-                <span class="badge purple">是什么</span>
-                <span class="badge purple">什么是</span>
-                <span class="badge purple">介绍一下</span>
-                <span class="badge purple">解释一下</span>
-                <span class="badge purple">有什么区别</span>
-                <span class="badge purple">原理</span>
-                <span class="badge purple">what is</span>
-                <span class="badge purple">explain</span>
-            </div>
-        </div>
-        <div class="card" style="border-left:3px solid var(--warning);">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(245,158,11,0.15);">🔧</div>
-                <h3>D 类 — 操作/排查</h3>
-            </div>
-            <p>需要执行具体操作的请求，进入 Skill 执行流程。采用<strong style="color:var(--warning);">两阶段匹配</strong>策略。
-            </p>
-            <div style="margin-top:12px;">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                    <span class="badge green">阶段一</span>
-                    <span style="font-size:0.85rem;color:var(--text-muted);">规则匹配 (RuleMatchEngine) — 毫秒级</span>
+                <div class="card">
+                    <pre>
+                <code class="language-yaml">
+skill:
+  name: get_rocketmq_pods
+  version: "1.0"
+  type: atomic
+  description: |
+    [内部原子技能] 直接调用 kubectl_get_pods 工具获取 Pod 列表。
+  input_schema:
+    namespace: string
+    component_keyword: string
+    exclude_keywords: string
+  output_schema:
+    pods: list
+    total: int
+  execution:
+    steps:
+      - id: fetch
+        type: tool
+        tool: kubectl_get_pods
+        input:
+          namespace: "{{namespace}}"                  # 命名空间，使用模板变量
+          component_keyword: "{{component_keyword}}"  # 组件关键字，使用模板变量
+          exclude_keywords: "{{exclude_keywords}}"    # 排除关键字，使用模板变量
+                </code>
+                    </pre>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="badge amber">阶段二</span>
-                    <span style="font-size:0.85rem;color:var(--text-muted);">LLM 分类 — 回退策略</span>
+
+                <!-- SOP Skill -->
+                <div class="reveal" style="margin-top:48px;">
+                    <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;">
+                        SOP Skill（标准操作流程）<span class="badge amber" style="margin-left:8px;">多步骤编排</span></h3>
+
+                    <pre>
+                <code class="language-yaml">
+skill:
+  name: resolve_and_get_rocketmq_pods
+  version: "1.0"
+  type: sop
+  description: |
+    查询 RocketMQ 组件的 Pod 列表、进程状态、服务运行信息。自动将用户输入的组件简称映射为 Kubernetes 中的实际关键字。
+  input_schema:
+    param1: string         # 用户输入的原始文本
+  output_schema:
+    pods: list                 # Pod 列表，包含每个 Pod 的详细信息
+    total: int                 # Pod 总数
+  execution:
+    steps:
+    - id: resolve_component
+      type: llm
+      input:
+        param1: "{{user_input}}"
+      prompt: |
+        你是一个信息抽取器，只做字段提取，不做解释。
+        【任务】
+        从用户输入中提取3个字段，并输出JSON：
+
+        - namespace
+        - component_keyword
+        - exclude_keywords
+
+        【组件枚举（只能选一个）】
+        broker -> ocloud-tdmq-rocketmq5-broker
+        namesrv -> ocloud-tdmq-rocketmq5-namesrv
+        proxy -> ocloud-tdmq-rocketmq5-proxy
+        manager -> ocloud-tdmq-rocketmq-manager
+
+        【规则】
+        1. component_keyword 必须从上面枚举中选择一个
+        2. namespace 如果没有，填 ""
+        3. exclude 如果没有，填 ""
+        4. 只输出 JSON，不要任何解释
+        5. JSON 必须是一行
+        6. 必须排除 cmq
+
+        【输出格式（严格照抄key）】
+        {"namespace":"","component_keyword":"","exclude_keywords":""}
+
+        【示例】
+        输入: 查询 rocketmq broker pod
+        输出: {"namespace":"","component_keyword":"ocloud-tdmq-rocketmq5-broker","exclude_keywords":""}
+
+        输入: 查一下 test-ns 的 proxy
+        输出: {"namespace":"test-ns","component_keyword":"ocloud-tdmq-rocketmq5-proxy","exclude_keywords":""}
+
+        输入: 查询 broker 排除 cmq
+        输出: {"namespace":"","component_keyword":"ocloud-tdmq-rocketmq5-broker","exclude_keywords":"cmq"}
+
+        【开始】
+        输入: {{param1}}
+        输出:
+
+      output_schema:
+        component_keyword: string
+        exclude_keywords: string
+        namespace: string
+    - id: get_rocketmq_pods
+      type: skill
+      skill: get_rocketmq_pods
+      input:
+        namespace: "{{resolve_component.namespace}}"
+        component_keyword: "{{resolve_component.component_keyword}}"
+        exclude_keywords: "{{resolve_component.exclude_keywords}}"
+      output_schema:
+        pods: list                 # Pod 列表，包含每个 Pod 的详细信息
+        total: int                 # Pod 总数
+
+
+                </code>
+                    </pre>
+                </div>
+
+                <!-- 执行引擎 -->
+                <div class="reveal" style="margin-top:48px;">
+                    <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;">循环（steps) 执行<span class="badge red"><b>演示</b></span></h3>
+
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>步骤类型</th>
+                                <th>执行方式</th>
+                                <th>说明</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <td><span class="badge blue">skill</span></td>
+                                <td>查找 Atomic Skill → 解析输入 → 安全校验 → 执行 → 校验输出</td>
+                                <td>通过 Atomic Skill 间接调用工具</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge cyan">tool</span></td>
+                                <td>解析输入 → 安全校验 → ToolRegistry 直接执行</td>
+                                <td>直接调用 ToolRegistry 中的工具</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge purple">llm</span></td>
+                                <td>解析引用 → 渲染 Prompt → 单轮 SLM 调用 → 解析 JSON</td>
+                                <td>独立的 LLM 调用，最小上下文</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge amber">root_cause_definition</span></td>
+                                <td>收集前置步骤输出 → 遍历规则 → 条件匹配 → 输出根因</td>
+                                <td>确定性规则引擎，不依赖 LLM</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 报告生成 -->
+                <div class="reveal" style="margin-top:48px;">
+                    <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;">
+                        报告生成</h3>
+
+                    <div class="card">
+                        <div class="grid-3" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+                            <div style="padding:16px;background:rgba(99,102,241,0.05);border-radius:var(--radius-sm);border:1px solid rgba(99,102,241,0.15);">
+                                <div style="font-size:1.2rem;margin-bottom:6px;">📝</div>
+                                <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">故障摘要</h4>
+                                <p style="font-size:0.8rem;color:var(--text-muted);">从 LLM 总结步骤的 summary
+                                    字段提取</p>
+                            </div>
+                            <div style="padding:16px;background:rgba(239,68,68,0.05);border-radius:var(--radius-sm);border:1px solid rgba(239,68,68,0.15);">
+                                <div style="font-size:1.2rem;margin-bottom:6px;">🔍</div>
+                                <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">根因判断</h4>
+                                <p style="font-size:0.8rem;color:var(--text-muted);">从 root_cause_definition 或 LLM
+                                    步骤提取</p>
+                            </div>
+                            <div style="padding:16px;background:rgba(245,158,11,0.05);border-radius:var(--radius-sm);border:1px solid rgba(245,158,11,0.15);">
+                                <div style="font-size:1.2rem;margin-bottom:6px;">📊</div>
+                                <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">置信度</h4>
+                                <p style="font-size:0.8rem;color:var(--text-muted);">成功步骤数 / 总步骤数</p>
+                            </div>
+                            <div style="padding:16px;background:rgba(6,182,212,0.05);border-radius:var(--radius-sm);border:1px solid rgba(6,182,212,0.15);">
+                                <div style="font-size:1.2rem;margin-bottom:6px;">🛤️</div>
+                                <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">执行轨迹</h4>
+                                <p style="font-size:0.8rem;color:var(--text-muted);">每个步骤的 ID、类型、状态和耗时</p>
+                            </div>
+                            <div style="padding:16px;background:rgba(16,185,129,0.05);border-radius:var(--radius-sm);border:1px solid rgba(16,185,129,0.15);">
+                                <div style="font-size:1.2rem;margin-bottom:6px;">🔧</div>
+                                <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">修复建议</h4>
+                                <p style="font-size:0.8rem;color:var(--text-muted);">从 solution 和 recommendation
+                                    字段汇总</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </section>
     </div>
 
-    <!-- 分类流程 Mermaid -->
-    <div class="mermaid-container reveal" style="margin-top:24px;">
-        <div class="mermaid">
-            flowchart TD
-            A["👤 用户输入"] --> B{"A 类关键词匹配?"}
-            B -->|是| C["📖 A 类: 知识问答\n→ LLM 直接回答"]
-            B -->|否| D["🔧 D 类: 操作/排查"]
-            D --> E{"阶段一: 规则匹配\nRuleMatchEngine"}
-            E -->|命中| F["✅ 返回匹配的 Skill\nconfidence=1.0"]
-            E -->|未命中| G{"阶段二: LLM 分类"}
-            G -->|命中已知 Skill| H["🟡 返回 LLM 选择的 Skill\nconfidence=0.7"]
-            G -->|unsupported| I["❌ 未匹配\nconfidence=0.0"]
-            style C fill:#1e3a5f,stroke:#818cf8,color:#e2e8f0
-            style F fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
-            style H fill:#3a3520,stroke:#f59e0b,color:#e2e8f0
-            style I fill:#3a1a1a,stroke:#ef4444,color:#e2e8f0
-        </div>
-    </div>
-
-    <!-- 规则引擎 -->
-    <div class="grid-2 reveal" style="margin-top:24px;">
-        <div class="card">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(16,185,129,0.15);">⚡</div>
-                <h3>阶段一：规则匹配</h3>
+    <!-- 页面: intent -->
+    <div class="ppt-page" id="page-intent">
+        <section class="section" id="intent">
+            <div class="section-header reveal">
+                <span class="section-tag purple">Hierarchical Routing</span>
+                <p class="section-desc">意图分类 + 分级路由</p>
             </div>
-            <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁
-                <code>nanobot/rca/rule_engine.py</code></p>
-            <ul class="feature-list">
-                <li><strong>配置化规则</strong>：<code>{skill_name: [regex_pattern, ...]}</code> 格式</li>
-                <li><strong>毫秒级响应</strong>：预编译正则表达式</li>
-                <li><strong>动态管理</strong>：运行时 <code>add_rule</code> / <code>remove_rules</code></li>
-            </ul>
-            <div class="code-block" style="margin-top:12px;">
-                <span class="comment"># 规则配置示例</span>
-                rules_config = {
-                <span class="string">"check_pod_status"</span>: [<span class="string">"查看.*pod"</span>, <span
-                    class="string">"pod.*状态"</span>],
-                <span class="string">"check_disk_usage"</span>: [<span class="string">"磁盘.*满"</span>, <span
-                    class="string">"disk.*full"</span>],
-                }
-            </div>
-        </div>
-        <div class="card">
-            <div class="card-header">
-                <div class="icon" style="background:rgba(245,158,11,0.15);">🤖</div>
-                <h3>阶段二：LLM 分类</h3>
-            </div>
-            <p style="margin-bottom:16px;">当规则匹配未命中时，回退到 LLM 快速分类：</p>
-            <div class="timeline">
-                <div class="timeline-item">
-                    <h4>构建 Prompt</h4>
-                    <p>将所有已注册的 Skill 名称列表构建为 Prompt</p>
-                </div>
-                <div class="timeline-item">
-                    <h4>LLM 选择</h4>
-                    <p>让 LLM 从列表中选择最匹配的 Skill，或返回 <code>"unsupported"</code></p>
-                </div>
-                <div class="timeline-item">
-                    <h4>结果校验</h4>
-                    <p>精确匹配 + 忽略大小写匹配校验</p>
-                </div>
-            </div>
-            <div class="card"
-                 style="margin-top:16px;background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.2);">
-                <p style="font-size:0.85rem;"><strong style="color:var(--warning);">⚠️ 关键约束：</strong>LLM
-                    在此阶段<strong>仅用于分类</strong>，不参与执行、不生成步骤、不推理根因。</p>
-            </div>
-        </div>
-    </div>
 
-    <!-- IntentResult -->
-    <div class="reveal" style="margin-top:24px;">
-        <div class="code-block-header">
-            <span>Python — 分类结果数据结构</span>
-            <span class="badge purple">IntentResult</span>
-        </div>
-        <div class="code-block">
-            <span class="decorator">@dataclass</span>
-            <span class="keyword">class</span> <span class="func">IntentResult</span>:
-            intent_type: str <span class="comment"># "A"（知识问答）或 "D"（操作/排查）</span>
-            skill_name: str | None <span class="comment"># 匹配到的 Skill 名称（仅 D 类有值）</span>
-            match_method: str | None <span class="comment"># "rule" / "llm" / None</span>
-            confidence: float <span class="comment"># 置信度 (0.0 ~ 1.0)</span>
-        </div>
-    </div>
-</section>
-</div>
-
-<!-- 页面: rca -->
-<div class="ppt-page" id="page-rca">
-<section class="section" id="rca">
-    <div class="section-header reveal">
-        <span class="section-tag amber">Root Cause Analysis</span>
-        <h2 class="section-title">RCA 根因分析引擎</h2>
-        <p class="section-desc">Skill 编排 + 分步执行的自动化排障架构</p>
-    </div>
-
-    <!-- RCA 架构 Mermaid -->
-    <div class="mermaid-container reveal">
-        <div class="mermaid">
-            graph TB
-            subgraph SkillDef["📝 Skill 定义层"]
-            S1["Atomic Skill\n原子技能 - 单工具封装"]
-            S2["SOP Skill\n标准操作流程 - 多步骤编排"]
-            end
-            subgraph LoadRoute["🗺️ 加载与路由"]
-            L1["RCASkillLoader\nYAML 加载 + 热加载"]
-            L2["RCARouter\n意图分类 → Skill 路由"]
-            end
-            subgraph Engine["⚙️ 执行引擎"]
-            E1["RCAEngine\n分步执行"]
-            E2["StepContext\n上下文管理"]
-            E3["SecurityGuard\n安全校验"]
-            end
-            subgraph Steps["📋 步骤类型"]
-            T1["skill 步骤\n调用 Atomic Skill"]
-            T2["llm 步骤\nLLM 总结/分析"]
-            T3["tool 步骤\n直接工具调用"]
-            T4["root_cause_definition\n确定性规则引擎"]
-            end
-            subgraph Out["📊 输出"]
-            O1["RCAReport\nJSON / Markdown"]
-            end
-            S1 --> L1
-            S2 --> L1
-            L1 --> L2
-            L2 --> E1
-            E1 --> E2
-            E1 --> E3
-            E1 --> T1
-            E1 --> T2
-            E1 --> T3
-            E1 --> T4
-            E1 --> O1
-            style SkillDef fill:#1e293b,stroke:#a78bfa,color:#e2e8f0
-            style LoadRoute fill:#1e293b,stroke:#06b6d4,color:#e2e8f0
-            style Engine fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
-            style Steps fill:#1e293b,stroke:#6366f1,color:#e2e8f0
-            style Out fill:#1e293b,stroke:#10b981,color:#e2e8f0
-        </div>
-    </div>
-
-    <!-- Skill 类型 Tabs -->
-    <div class="tabs reveal">
-        <div class="tab-nav">
-            <button class="tab-btn active" onclick="switchTab(event, 'rca-atomic')">Atomic Skill</button>
-            <button class="tab-btn" onclick="switchTab(event, 'rca-sop')">SOP Skill</button>
-            <button class="tab-btn" onclick="switchTab(event, 'rca-engine')">执行引擎</button>
-            <button class="tab-btn" onclick="switchTab(event, 'rca-router')">路由控制器</button>
-            <button class="tab-btn" onclick="switchTab(event, 'rca-security')">安全校验</button>
-            <button class="tab-btn" onclick="switchTab(event, 'rca-loader')">Skill 加载</button>
-            <button class="tab-btn" onclick="switchTab(event, 'rca-report')">报告生成</button>
-        </div>
-
-        <!-- Atomic Skill -->
-        <div class="tab-panel active" id="rca-atomic">
-            <div class="card">
+            <!-- 目标说明（独立模块） -->
+            <div class="card reveal"
+                 style="margin-bottom:24px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(16,185,129,0.08));border-color:rgba(99,102,241,0.35);">
                 <div class="card-header">
-                    <div class="icon" style="background:rgba(139,92,246,0.15);">⚛️</div>
-                    <h3>Atomic Skill（原子技能）<span class="badge purple">单工具封装</span></h3>
+                    <div class="icon" style="background:linear-gradient(135deg,var(--primary),#34d399);color:#fff;">🎯
+                    </div>
+                    <h3>目标：降低LLM处理耗时 , 增加推理准确性</h3>
                 </div>
-                <p style="margin-bottom:16px;">对<strong style="color:#a78bfa;">单次工具调用</strong>的结构化封装，本身不包含业务逻辑。
-                </p>
-                <div class="code-block-header">
-                    <span>YAML — check_disk_usage.yaml</span>
-                    <span class="badge purple">atomic</span>
-                </div>
-                <div class="code-block">
-                    <span class="keyword">name</span>: check_disk_usage
-                    <span class="keyword">version</span>: <span class="string">"1.0"</span>
-                    <span class="keyword">type</span>: atomic
-                    <span class="keyword">description</span>: <span class="string">"检查磁盘使用率"</span>
-                    <span class="keyword">input_schema</span>:
-                    node_name: string
-                    <span class="keyword">output_schema</span>:
-                    disk_usage: number
-                    mount_point: string
-                    <span class="keyword">execution</span>:
-                    <span class="keyword">steps</span>:
-                    - <span class="keyword">tool</span>: check_disk_usage <span
-                        class="comment"># 绑定 ToolRegistry 中的工具</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- SOP Skill -->
-        <div class="tab-panel" id="rca-sop">
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(245,158,11,0.15);">📋</div>
-                    <h3>SOP Skill（标准操作流程）<span class="badge amber">多步骤编排</span></h3>
-                </div>
-                <p style="margin-bottom:16px;">编排多个 Atomic Skill + 规则引擎 + LLM 总结的<strong
-                        style="color:var(--warning);">完整排障工作流</strong>。</p>
-                <div class="code-block-header">
-                    <span>YAML — disk_full_diagnosis.yaml</span>
-                    <span class="badge amber">sop</span>
-                </div>
-                <div class="code-block">
-                    <span class="keyword">name</span>: disk_full_diagnosis
-                    <span class="keyword">version</span>: <span class="string">"1.0"</span>
-                    <span class="keyword">type</span>: sop
-                    <span class="keyword">description</span>: <span class="string">"磁盘满故障诊断"</span>
-                    <span class="keyword">input_schema</span>:
-                    node_name: string
-                    <span class="keyword">steps</span>:
-                    - <span class="keyword">id</span>: check_disk
-                    <span class="keyword">type</span>: skill
-                    <span class="keyword">skill</span>: check_disk_usage
-                    <span class="keyword">input</span>:
-                    node_name: <span class="string">"{{node_name}}"</span>
-
-                    - <span class="keyword">id</span>: determine_cause
-                    <span class="keyword">type</span>: root_cause_definition
-                    <span class="keyword">logic</span>:
-                    - <span class="keyword">when</span>: { disk_usage: <span class="string">">90"</span> }
-                    <span class="keyword">root_cause</span>: <span class="string">"磁盘使用率超过 90%"</span>
-                    <span class="keyword">solution</span>: <span class="string">"清理日志文件或扩容磁盘"</span>
-
-                    - <span class="keyword">id</span>: summary
-                    <span class="keyword">type</span>: llm
-                    <span class="keyword">prompt</span>: <span class="string">"根据检查结果生成诊断报告..."</span>
-                    <span class="keyword">input_from</span>:
-                    - check_disk.disk_usage
-                    - determine_cause.root_cause
-                </div>
-            </div>
-        </div>
-
-        <!-- 执行引擎 -->
-        <div class="tab-panel" id="rca-engine">
-            <div class="card" style="margin-bottom:20px;">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(245,158,11,0.15);">⚙️</div>
-                    <h3>RCAEngine 执行引擎</h3>
-                </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁
-                    <code>nanobot/rca/engine.py</code></p>
-                <p>按 Skill YAML 中定义的 steps 列表<strong style="color:var(--warning);">顺序执行</strong>排障工作流。
-                </p>
-            </div>
-
-            <h4 style="font-size:1rem;color:var(--text-bright);margin-bottom:12px;">四种步骤类型</h4>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>步骤类型</th>
-                        <th>执行方式</th>
-                        <th>说明</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr>
-                        <td><span class="badge blue">skill</span></td>
-                        <td>查找 Atomic Skill → 解析输入 → 安全校验 → 执行 → 校验输出</td>
-                        <td>通过 Atomic Skill 间接调用工具</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge cyan">tool</span></td>
-                        <td>解析输入 → 安全校验 → ToolRegistry 直接执行</td>
-                        <td>直接调用 ToolRegistry 中的工具</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge purple">llm</span></td>
-                        <td>解析引用 → 渲染 Prompt → 单轮 SLM 调用 → 解析 JSON</td>
-                        <td>独立的 LLM 调用，最小上下文</td>
-                    </tr>
-                    <tr>
-                        <td><span class="badge amber">root_cause_definition</span></td>
-                        <td>收集前置步骤输出 → 遍历规则 → 条件匹配 → 输出根因</td>
-                        <td>确定性规则引擎，不依赖 LLM</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <h4 style="font-size:1rem;color:var(--text-bright);margin:20px 0 12px;">步骤间数据传递 (StepContext)</h4>
-            <div class="grid-2">
-                <div class="card" style="background:rgba(99,102,241,0.05);border-color:rgba(99,102,241,0.2);">
-                    <h4 style="font-size:0.9rem;color:var(--primary-light);margin-bottom:8px;">📝 input 模板映射</h4>
-                    <div class="code-block" style="margin:0;">
-                        <span class="comment"># 支持混合文本</span>
-                        {<span class="string">"key"</span>: <span class="string">"{{stepId.field}}"</span>}
+                <div class="grid-2" style="gap:16px;">
+                    <div style="padding:16px;background:rgba(239,68,68,0.06);border-radius:var(--radius-sm);border:1px solid rgba(239,68,68,0.2);">
+                        <h4 style="font-size:0.9rem;color:#fca5a5;margin-bottom:8px;">传统做法：Agent +
+                            大模型（主链路重推理）</h4>
+                        <ul class="feature-list" style="margin-bottom:0;">
+                            <li><strong>处理路径</strong>：大多数请求都进入大模型意图理解与决策</li>
+                            <li><strong>典型问题</strong>：每次都触发长 Prompt + 长推理链，排队与推理时延叠加</li>
+                            <li><strong>耗时特征</strong>：整体偏<strong>秒级</strong>，高峰时抖动明显，影响交互流畅度</li>
+                        </ul>
+                    </div>
+                    <div style="padding:16px;background:rgba(16,185,129,0.06);border-radius:var(--radius-sm);border:1px solid rgba(16,185,129,0.25);">
+                        <h4 style="font-size:0.9rem;color:#6ee7b7;margin-bottom:8px;">本项目做法：小模型 +
+                            Agent（路由模块前置）</h4>
+                        <ul class="feature-list" style="margin-bottom:0;">
+                            <li><strong>处理路径</strong>：先经分级路由独立模块，规则匹配优先，复杂场景再回退 LLM</li>
+                            <li><strong>核心收益</strong>：把高成本推理从主链路移到兜底链路，仅在必要时触发</li>
+                            <li><strong>耗时特征</strong>：常见请求可达<strong>毫秒级~百毫秒级</strong>，平均处理耗时显著下降
+                            </li>
+                        </ul>
                     </div>
                 </div>
-                <div class="card" style="background:rgba(6,182,212,0.05);border-color:rgba(6,182,212,0.2);">
-                    <h4 style="font-size:0.9rem;color:var(--accent-light);margin-bottom:8px;">🔗 input_from 直接引用</h4>
-                    <div class="code-block" style="margin:0;">
-                        <span class="comment"># 保持原始类型</span>
-                        [<span class="string">"step_id.field_name"</span>]
-                    </div>
-                </div>
-            </div>
-            <p style="margin-top:12px;font-size:0.88rem;color:var(--text-muted);">
-                <strong>变量查找优先级：</strong>
-                <span class="badge red">extra_vars</span> &gt;
-                <span class="badge amber">_inputs（外部输入）</span> &gt;
-                <span class="badge blue">_context（全局上下文）</span>
-            </p>
-        </div>
-
-        <!-- 路由控制器 -->
-        <div class="tab-panel" id="rca-router">
-            <div class="card" style="margin-bottom:20px;">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(6,182,212,0.15);">🗺️</div>
-                    <h3>RCARouter 路由控制器</h3>
-                </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁
-                    <code>nanobot/rca/router.py</code></p>
-                <p>集成意图分类器，实现完整的请求路由。</p>
-            </div>
-
-            <div class="mermaid-container">
-                <div class="mermaid">
-                    flowchart TD
-                    A["FaultInput\n故障输入"] --> B["IntentClassifier\n意图分类"]
-                    B -->|A 类| C["LLM 直接回答\n知识问答"]
-                    B -->|"D 类 + 有 Skill"| D["RCAEngine 执行\n匹配的 Skill"]
-                    B -->|"D 类 + 无 Skill"| E{"RAG 向量检索\nIntentRoutingStore"}
-                    E -->|检索到 Skill| F["Skill 过滤\nfilter_redundant"]
-                    F --> G["距离排序\n选择最优 Skill"]
-                    G --> D
-                    E -->|未检索到| H{"关键词回退匹配"}
-                    H -->|命中| D
-                    H -->|未命中| I["降级报告\n建议人工介入"]
-                    C --> J["📊 RCAReport"]
-                    D --> J
-                    I --> J
-                    style C fill:#1e3a5f,stroke:#818cf8,color:#e2e8f0
-                    style D fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
-                    style I fill:#3a1a1a,stroke:#ef4444,color:#e2e8f0
-                    style J fill:#1e293b,stroke:#f59e0b,color:#e2e8f0
+                <div class="card"
+                     style="margin-top:14px;background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.25);">
+                    <p style="margin:0;font-size:0.86rem;line-height:1.7;">
+                        <strong style="color:#93c5fd;">结论：</strong>
+                        分级路由不只是“分类逻辑”，而是独立的性能治理模块：
+                        通过“规则快速命中 + LLM 兜底回退”的组合，将处理时延从默认秒级路径收敛为可控的低时延路径。
+                    </p>
                 </div>
             </div>
 
-            <div class="card" style="margin-top:16px;background:rgba(6,182,212,0.05);border-color:rgba(6,182,212,0.2);">
-                <p style="font-size:0.88rem;"><strong style="color:var(--accent-light);">🔄 Skill
-                    过滤机制</strong>（<code>skill_filter.py</code>）：当 RAG 检索同时返回 SOP Skill 和其内部引用的 Atomic
-                    Skill 时，自动移除冗余的 Atomic Skill，避免重复执行。</p>
-            </div>
-        </div>
-
-        <!-- 安全校验 -->
-        <div class="tab-panel" id="rca-security">
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(239,68,68,0.15);">🛡️</div>
-                    <h3>SecurityGuard 安全校验层</h3>
-                </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁
-                    <code>nanobot/rca/security.py</code></p>
-                <p style="margin-bottom:16px;">所有工具调用和命令执行都经过<strong
-                        style="color:var(--danger);">双重安全校验</strong>：</p>
-                <div class="grid-2">
-                    <div class="card" style="background:rgba(16,185,129,0.05);border-color:rgba(16,185,129,0.2);">
-                        <h4 style="font-size:0.95rem;color:#34d399;margin-bottom:8px;">✅ 工具白名单</h4>
-                        <p><code>DEFAULT_WHITELIST</code> + 动态扩展，只允许白名单内的工具执行</p>
+            <!-- 分类概览 -->
+            <div class="grid-2 reveal">
+                <div class="card" style="border-left:3px solid #a78bfa;">
+                    <div class="card-header">
+                        <div class="icon" style="background:rgba(139,92,246,0.15);">📖</div>
+                        <h3>A 类 — 知识问答</h3>
                     </div>
-                    <div class="card" style="background:rgba(239,68,68,0.05);border-color:rgba(239,68,68,0.2);">
-                        <h4 style="font-size:0.95rem;color:#fca5a5;margin-bottom:8px;">🚫 命令黑名单</h4>
-                        <p>预编译正则模式匹配，拦截 <code>rm -rf</code>、<code>shutdown</code>、<code>fork bomb</code>
-                            等危险命令</p>
+                    <p>纯知识性问题，交由 LLM 直接回答。通过<strong style="color:#a78bfa;">关键词模式匹配</strong>快速识别。
+                    </p>
+                    <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;">
+                        <span class="badge purple">是什么</span>
+                        <span class="badge purple">什么是</span>
+                        <span class="badge purple">介绍一下</span>
+                        <span class="badge purple">解释一下</span>
+                        <span class="badge purple">有什么区别</span>
+                        <span class="badge purple">原理</span>
+                        <span class="badge purple">what is</span>
+                        <span class="badge purple">explain</span>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Skill 加载 -->
-        <div class="tab-panel" id="rca-loader">
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(99,102,241,0.15);">📦</div>
-                    <h3>RCASkillLoader Skill 加载与热加载</h3>
-                </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁
-                    <code>nanobot/rca/loader.py</code></p>
-                <div class="timeline" style="margin-top:16px;">
-                    <div class="timeline-item">
-                        <h4>1. 启动加载</h4>
-                        <p>递归扫描 Skill 目录，加载所有 <code>.yaml</code> / <code>.yml</code> 文件</p>
+                <div class="card" style="border-left:3px solid var(--warning);">
+                    <div class="card-header">
+                        <div class="icon" style="background:rgba(245,158,11,0.15);">🔧</div>
+                        <h3>D 类 — 操作/排查</h3>
                     </div>
-                    <div class="timeline-item">
-                        <h4>2. 格式校验</h4>
-                        <p>通过 <code>parser.py</code> 进行严格的 YAML 结构校验</p>
-                    </div>
-                    <div class="timeline-item">
-                        <h4>3. 类型区分</h4>
-                        <p>按 <code>type</code> 字段自动区分 Atomic / SOP Skill</p>
-                    </div>
-                    <div class="timeline-item">
-                        <h4>4. RAG 注册</h4>
-                        <p>加载成功后自动注册到 <code>IntentRoutingStore</code> 向量索引</p>
-                    </div>
-                    <div class="timeline-item">
-                        <h4>5. 热加载</h4>
-                        <p>基于 <code>watchdog</code> 库监听文件系统变更，支持运行时新增/修改/删除 Skill</p>
+                    <p>需要执行具体操作的请求，进入 Skill 执行流程。采用<strong
+                            style="color:var(--warning);">两阶段匹配</strong>策略，分为：简单操作、复杂操作。
+                    </p>
+                    <div style="margin-top:12px;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                            <span class="badge green">阶段一</span>
+                            <span style="font-size:0.85rem;color:var(--text-muted);">规则匹配 (RuleMatchEngine) — 毫秒级</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="badge amber">阶段二</span>
+                            <span style="font-size:0.85rem;color:var(--text-muted);">LLM 分类 — 回退策略</span>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- 报告生成 -->
-        <div class="tab-panel" id="rca-report">
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon" style="background:rgba(16,185,129,0.15);">📊</div>
-                    <h3>RCAReport 报告生成</h3>
+            <!-- 分类流程 Mermaid -->
+            <div class="grid-1 reveal" style="margin-top:24px;">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:rgba(16,185,129,0.15);">⚡</div>
+                        <h3>意图识别+分级路由流程</h3>
+                    </div>
+                    <img class="flow-chart" src="images/2026-04-08-01.png" style="width: 30%; height: auto;"/>
+                    <!--                    flowchart TD-->
+                    <!--                        subgraph 第一层分类-->
+                    <!--                            A["用户输入"] &ndash;&gt; B{"意图识别"}-->
+                    <!--                            B &ndash;&gt;|是| C["A 类: 知识问答"]-->
+                    <!--                            B &ndash;&gt;|否| D["D 类: 操作/排障"]-->
+                    <!--                        end-->
+
+                    <!--                        subgraph 第二层匹配-->
+                    <!--                            D &ndash;&gt; E{"阶段一: 规则匹配"}-->
+                    <!--                            E &ndash;&gt;|命中| F["返回匹配的 Skill"]-->
+                    <!--                            E &ndash;&gt;|未命中| G{"阶段二: LLM 分类"}-->
+                    <!--                            G &ndash;&gt;|命中已知 Skill| H["返回 LLM 选择的 Skill"]-->
+                    <!--                            G &ndash;&gt;|unsupported| I["未匹配"]-->
+                    <!--                        end-->
                 </div>
-                <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁
-                    <code>nanobot/rca/report.py</code></p>
-                <p style="margin-bottom:16px;">支持 <span class="badge blue">JSON</span> 和 <span class="badge green">Markdown</span>
-                    两种输出格式：</p>
-                <div class="grid-3" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
-                    <div style="padding:16px;background:rgba(99,102,241,0.05);border-radius:var(--radius-sm);border:1px solid rgba(99,102,241,0.15);">
-                        <div style="font-size:1.2rem;margin-bottom:6px;">📝</div>
-                        <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">故障摘要</h4>
-                        <p style="font-size:0.8rem;color:var(--text-muted);">从 LLM 总结步骤的 summary 字段提取</p>
+            </div>
+            <!-- 规则引擎 -->
+            <div class="grid-2 reveal" style="margin-top:24px;">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:rgba(16,185,129,0.15);">⚡</div>
+                        <h3>阶段一：规则匹配</h3>
                     </div>
-                    <div style="padding:16px;background:rgba(239,68,68,0.05);border-radius:var(--radius-sm);border:1px solid rgba(239,68,68,0.15);">
-                        <div style="font-size:1.2rem;margin-bottom:6px;">🔍</div>
-                        <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">根因判断</h4>
-                        <p style="font-size:0.8rem;color:var(--text-muted);">从 root_cause_definition 或 LLM
-                            步骤提取</p>
+                    <p style="margin-bottom:8px;font-size:0.85rem;color:var(--text-muted);">📁
+                        <code>nanobot/rca/rule_engine.py</code></p>
+                    <ul class="feature-list">
+                        <li><strong>配置化规则</strong>：<code>{skill_name: [regex_pattern, ...]}</code> 格式</li>
+                        <li><strong>毫秒级响应</strong>：预编译正则表达式</li>
+                        <li><strong>动态管理</strong>：运行时 <code>add_rule</code> / <code>remove_rules</code></li>
+                    </ul>
+                    <div class="code-block" style="margin-top:12px;">
+                        <pre>
+                            <code class="language-json">
+# 规则配置示例
+rules_config = {
+    "check_pod_status": ["查看.*pod", "pod.*状态"],
+    "check_disk_usage": ["磁盘.*满", "disk.*full"]
+}
+                            </code>
+                        </pre>
                     </div>
-                    <div style="padding:16px;background:rgba(245,158,11,0.05);border-radius:var(--radius-sm);border:1px solid rgba(245,158,11,0.15);">
-                        <div style="font-size:1.2rem;margin-bottom:6px;">📊</div>
-                        <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">置信度</h4>
-                        <p style="font-size:0.8rem;color:var(--text-muted);">成功步骤数 / 总步骤数</p>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:rgba(245,158,11,0.15);">🤖</div>
+                        <h3>阶段二：LLM 分类</h3>
                     </div>
-                    <div style="padding:16px;background:rgba(6,182,212,0.05);border-radius:var(--radius-sm);border:1px solid rgba(6,182,212,0.15);">
-                        <div style="font-size:1.2rem;margin-bottom:6px;">🛤️</div>
-                        <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">执行轨迹</h4>
-                        <p style="font-size:0.8rem;color:var(--text-muted);">每个步骤的 ID、类型、状态和耗时</p>
+                    <p style="margin-bottom:16px;">当规则匹配未命中时，回退到 LLM 快速分类：</p>
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <h4>构建 Prompt</h4>
+                            <p>将所有已注册的 Skill 名称列表构建为 Prompt</p>
+                        </div>
+                        <div class="timeline-item">
+                            <h4>LLM 选择</h4>
+                            <p>让 LLM 从列表中选择最匹配的 Skill，或返回 <code>"unsupported"</code></p>
+                        </div>
+                        <div class="timeline-item">
+                            <h4>结果校验</h4>
+                            <p>精确匹配 + 忽略大小写匹配校验</p>
+                        </div>
                     </div>
-                    <div style="padding:16px;background:rgba(16,185,129,0.05);border-radius:var(--radius-sm);border:1px solid rgba(16,185,129,0.15);">
-                        <div style="font-size:1.2rem;margin-bottom:6px;">🔧</div>
-                        <h4 style="font-size:0.88rem;color:var(--text-bright);margin-bottom:4px;">修复建议</h4>
-                        <p style="font-size:0.8rem;color:var(--text-muted);">从 solution 和 recommendation 字段汇总</p>
+                    <div class="card"
+                         style="margin-top:16px;background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.2);">
+                        <p style="font-size:0.85rem;"><strong style="color:var(--warning);">⚠️ 关键约束：</strong>LLM
+                            在此阶段<strong>仅用于分类</strong>，不参与执行、不生成步骤、不推理根因。</p>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-</section>
-</div>
 
-<!-- 页面: metrics -->
-<div class="ppt-page" id="page-metrics">
-<section class="section" id="metrics">
-    <div class="section-header reveal">
-        <span class="section-tag green">Monitoring</span>
-        <h2 class="section-title">Prometheus 监控指标</h2>
-        <p class="section-desc">全链路可观测，覆盖检索、重排序、执行、安全四大维度</p>
+        </section>
     </div>
 
-    <div class="grid-4 reveal" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));margin-bottom:24px;">
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(99,102,241,0.15);">📊</div>
-            <div class="metric-info">
-                <div class="metric-name">RAG_QUERY_DURATION</div>
-                <div class="metric-value">向量搜索耗时</div>
-                <span class="badge blue metric-type">Histogram</span>
+    <!-- 页面: lora -->
+    <div class="ppt-page" id="page-rca">
+        <section class="section" id="rca">
+            <div class="section-header reveal">
+                <span class="section-tag amber">LoRA Fine-tuning</span>
             </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(6,182,212,0.15);">🧮</div>
-            <div class="metric-info">
-                <div class="metric-name">RAG_EMBEDDING_DURATION</div>
-                <div class="metric-value">向量化耗时</div>
-                <span class="badge cyan metric-type">Histogram</span>
+            <!-- 微调流程模块 - 独立展示 -->
+            <div class="reveal"
+                 style="margin-top:48px;margin-bottom:48px;padding:32px;background:rgba(30,41,59,0.15);border-radius:var(--radius);border:1px solid var(--border);">
+
+
+                <!-- 流程图 -->
+
+                <h3 style="font-size:1.3rem;color:var(--text-bright);margin-bottom:24px;text-align:center;">
+                    🚀定向 LoRA 微调，将小模型调教为 RocketMQ 专家
+                </h3>
+                <img class="flow-chart" src="images/2026-04-08-03.png" style="width: 30%; height: auto;">
+                <!--                                            flowchart TD-->
+                <!--                                            A1["以往工单"] &ndash;&gt; B["人工 review"]-->
+                <!--                                            A2["固定的 RocketMQ 社区文档"] &ndash;&gt; B-->
+                <!--                                            A3["自动生成训练数据"] &ndash;&gt; B-->
+                <!--                                            B &ndash;&gt; C["训练"]-->
+                <!--                                            C &ndash;&gt; D["导出量化模型"]-->
+                <!--                                            D &ndash;&gt; E["导出 GGUF（供 Ollama 使用）"]-->
+
+                <!--                                            subgraph S1["数据集准备"]-->
+                <!--                                            A1-->
+                <!--                                            A2-->
+                <!--                                            A3-->
+                <!--                                            end-->
+
+                <!--                                            subgraph S2["训练与导出"]-->
+                <!--                                            C-->
+                <!--                                            D-->
+                <!--                                            E-->
+                <!--                                            end-->
+
+                <!--                                            style S1 fill:#1e293b,stroke:#6366f1,color:#e2e8f0-->
+                <!--                                            style B fill:#1e293b,stroke:#f59e0b,color:#e2e8f0-->
+                <!--                                            style S2 fill:#1e293b,stroke:#10b981,color:#e2e8f0-->
+
+
+                <!-- 流程说明 -->
+                <div class="reveal" style="margin-bottom:48px;">
+
+
+                    <div class="timeline" style="margin-top:24px;">
+                        <div class="timeline-item">
+                            <h4 style="font-size:1rem;color:var(--primary-light);margin-bottom:8px;">
+                                步骤一：数据集准备 <span class="badge red"><b>数据演示</b></span></h4>
+                            <p>1. <strong>以往工单</strong>
+                                <br/>收集历史运维工单作为原始训练素材，覆盖实际故障场景。<br/><br/>
+                            </p>
+                            <p>2. <strong>固定文档</strong>
+                                <br/>整合官方文档、最佳实践指南等结构化知识。<br/><br/>
+                            </p>
+                            <p>3. <strong>自动生成训练数据</strong>
+                                <br/>基于模板生成多样化训练样本，扩充数据规模。</p>
+                        </div>
+
+                        <div class="timeline-item">
+                            <h4 style="font-size:1rem;color:var(--warning);margin-bottom:8px;">
+                                步骤二：人工review <span class="badge red"><b>数据演示</b></span></h4>
+                            <p>对数据集进行质量审核、格式标准化和样本筛选，确保训练数据准确性和一致性。</p>
+                        </div>
+
+                        <div class="timeline-item">
+                            <h4 style="font-size:1rem;color:var(--success);margin-bottom:8px;">步骤三：训练<span
+                                    class="badge red"><b>数据演示2种训练方法(llamafactory, python)</b></span></h4>
+                            <p>采用LoRA/QLoRA等参数高效微调技术，在本地【Macbook Pro M4】下定向训练。</p>
+                            <p>1. <strong>本地代码训练演示</strong></p>
+                            <p>2. <strong>Llamafactory训练演示</strong></p>
+                        </div>
+
+                        <div class="timeline-item">
+                            <h4 style="font-size:1rem;color:#ec4899;margin-bottom:8px;">步骤四：导出量化模型 <span
+                                    class="badge red"><b>数据演示</b></span></h4>
+                            <p>训练完成后导出量化模型，优化推理效率和资源占用。</p>
+                        </div>
+
+                        <div class="timeline-item">
+                            <h4 style="font-size:1rem;color:#a78bfa;margin-bottom:8px;">
+                                步骤五：导出GGUF，给Ollama使用 <span class="badge red"><b>数据演示</b></span></h4>
+                            <p>转换为GGUF格式，适配Ollama部署，实现低成本、易部署的小模型推理服务。</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(139,92,246,0.15);">📈</div>
-            <div class="metric-info">
-                <div class="metric-name">RAG_QUERY_RESULTS_COUNT</div>
-                <div class="metric-value">检索结果数量</div>
-                <span class="badge purple metric-type">Histogram</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(16,185,129,0.15);">🔢</div>
-            <div class="metric-info">
-                <div class="metric-name">RAG_QUERY_TOTAL</div>
-                <div class="metric-value">检索总次数</div>
-                <span class="badge green metric-type">Counter</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(245,158,11,0.15);">⚡</div>
-            <div class="metric-info">
-                <div class="metric-name">RERANK_DURATION</div>
-                <div class="metric-value">Rerank 重排序耗时</div>
-                <span class="badge amber metric-type">Histogram</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(239,68,68,0.15);">⏱️</div>
-            <div class="metric-info">
-                <div class="metric-name">RCA_EXECUTION_DURATION</div>
-                <div class="metric-value">RCA 执行总耗时</div>
-                <span class="badge red metric-type">Histogram</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(99,102,241,0.15);">📋</div>
-            <div class="metric-info">
-                <div class="metric-name">RCA_STEP_DURATION</div>
-                <div class="metric-value">单步骤执行耗时</div>
-                <span class="badge blue metric-type">Histogram</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(6,182,212,0.15);">🔄</div>
-            <div class="metric-info">
-                <div class="metric-name">RCA_EXECUTION_TOTAL</div>
-                <div class="metric-value">RCA 执行总次数</div>
-                <span class="badge cyan metric-type">Counter</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(139,92,246,0.15);">🧠</div>
-            <div class="metric-info">
-                <div class="metric-name">RCA_INTENT_CLASSIFY_TOTAL</div>
-                <div class="metric-value">意图分类次数</div>
-                <span class="badge purple metric-type">Counter</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(16,185,129,0.15);">🎯</div>
-            <div class="metric-info">
-                <div class="metric-name">RCA_SKILL_MATCH_TOTAL</div>
-                <div class="metric-value">Skill 匹配次数</div>
-                <span class="badge green metric-type">Counter</span>
-            </div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon" style="background:rgba(239,68,68,0.15);">🛡️</div>
-            <div class="metric-info">
-                <div class="metric-name">RCA_SECURITY_REJECT_TOTAL</div>
-                <div class="metric-value">安全拒绝次数</div>
-                <span class="badge red metric-type">Counter</span>
-            </div>
-        </div>
+        </section>
     </div>
 
-    <!-- 模块依赖关系 -->
-    <div class="reveal" style="margin-top:40px;">
-        <h3 style="font-size:1.2rem;color:var(--text-bright);margin-bottom:20px;text-align:center;">🔗
-            核心模块依赖关系</h3>
-        <div class="mermaid-container">
-            <div class="mermaid">
-                graph LR
-                A["⚙️ RAGConfig"] --> B["💾 ChromaKnowledgeStore"]
-                A --> C["🗺️ IntentRoutingStore"]
-                D["🧮 VectorEmbedder"] --> B
-                D --> C
-                E["✂️ TextChunker"] --> B
-                E --> C
-                F["⚡ CrossEncoder"] --> B
-                G["📏 RuleMatchEngine"] --> H["🧠 IntentClassifier"]
-                H --> I["🗺️ RCARouter"]
-                C --> I
-                J["📦 RCASkillLoader"] --> I
-                J --> C
-                K["⚙️ RCAEngine"] --> I
-                L["🛡️ SecurityGuard"] --> K
-                M["📝 AuditLogger"] --> K
-                N["📊 ReportGenerator"] --> K
-                style B fill:#1e3a5f,stroke:#06b6d4,color:#e2e8f0
-                style K fill:#3a2020,stroke:#ef4444,color:#e2e8f0
-                style H fill:#2a1e3a,stroke:#a78bfa,color:#e2e8f0
-                style F fill:#3a3520,stroke:#f59e0b,color:#e2e8f0
-            </div>
-        </div>
-    </div>
-
-    <!-- 总结 -->
-    <div class="card reveal"
-         style="margin-top:32px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(6,182,212,0.08));border-color:rgba(99,102,241,0.3);">
-        <div class="card-header">
-            <div class="icon" style="background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;">✨
-            </div>
-            <h3>总结</h3>
-        </div>
-        <p style="line-height:1.9;">
-            Aether 通过 <strong style="color:var(--accent-light);">RAG 知识库 + CrossEncoder Rerank</strong>
-            提供高精度的语义检索能力，
-            通过 <strong style="color:#a78bfa;">A/D 两级意图分类</strong> 实现智能请求路由，
-            通过 <strong style="color:var(--warning);">Skill 编排 + 分步执行引擎</strong> 实现自动化根因分析。
-            各模块松耦合、可配置、可监控，适合在资源受限的边缘环境中部署运行。
-        </p>
-    </div>
-</section>
-</div>
 
 </div><!-- /ppt-viewport -->
 
 <!-- 页码指示器 -->
 <div class="page-indicator">
-    <div class="page-dot" onclick="showPage('background')" title="背景"></div>
     <div class="page-dot" onclick="showPage('hero')" title="大纲"></div>
-    <div class="page-dot" onclick="showPage('overview')" title="架构概览"></div>
-    <div class="page-dot" onclick="showPage('rerank')" title="Rerank"></div>
-    <div class="page-dot" onclick="showPage('knowledge')" title="知识库"></div>
-    <div class="page-dot" onclick="showPage('intent')" title="意图分类"></div>
-    <div class="page-dot" onclick="showPage('rca')" title="RCA分析"></div>
-    <div class="page-dot" onclick="showPage('metrics')" title="监控指标"></div>
+    <div class="page-dot" onclick="showPage('background')" title="背景"></div>
+    <div class="page-dot" onclick="showPage('rerank')" title="知识库"></div>
+    <div class="page-dot" onclick="showPage('intent')" title="分级路由"></div>
+    <div class="page-dot" onclick="showPage('knowledge')" title="重新设计Skill"></div>
+    <div class="page-dot" onclick="showPage('rca')" title="LoRA微调：适配RocketMQ"></div>
+    <div class="page-dot" onclick="showPage('overview')" title="总结"></div>
 </div>
-<div class="page-counter" id="pageCounter">1 / 8</div>
+<div class="page-counter" id="pageCounter">1 / 7</div>
+
+<div class="mermaid-preview-modal" id="mermaidPreviewModal" aria-hidden="true">
+    <div class="mermaid-preview-backdrop" id="mermaidPreviewBackdrop"></div>
+    <div class="mermaid-preview-dialog" role="dialog" aria-modal="true" aria-label="Mermaid 图预览">
+        <div class="mermaid-preview-toolbar">
+            <span class="mermaid-preview-title">Mermaid 图预览（滚轮缩放）</span>
+            <div class="mermaid-preview-actions">
+                <button type="button" class="mermaid-preview-btn" id="mermaidZoomOut" aria-label="缩小">−</button>
+                <span class="mermaid-preview-scale" id="mermaidScaleText">100%</span>
+                <button type="button" class="mermaid-preview-btn" id="mermaidZoomIn" aria-label="放大">＋</button>
+                <button type="button" class="mermaid-preview-btn" id="mermaidZoomReset" aria-label="重置">重置</button>
+                <button type="button" class="mermaid-preview-btn" id="mermaidPreviewClose" aria-label="关闭">✕</button>
+            </div>
+        </div>
+        <div class="mermaid-preview-stage" id="mermaidPreviewStage">
+            <div class="mermaid-preview-content" id="mermaidPreviewContent"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.7.0/dist/mermaid.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+
 
 <script>
-    // Mermaid 初始化
-    mermaid.initialize({
-        startOnLoad: true,
-        theme: 'dark',
-        themeVariables: {
-            primaryColor: '#6366f1',
-            primaryTextColor: '#e2e8f0',
-            primaryBorderColor: '#4f46e5',
-            lineColor: '#64748b',
-            secondaryColor: '#1e293b',
-            tertiaryColor: '#0f172a',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif',
-            fontSize: '13px',
-            noteBkgColor: '#1e293b',
-            noteTextColor: '#e2e8f0',
-            actorBkg: '#1e293b',
-            actorBorder: '#6366f1',
-            actorTextColor: '#e2e8f0',
-            signalColor: '#94a3b8',
-            signalTextColor: '#e2e8f0',
-        },
-        flowchart: {curve: 'basis', padding: 16},
-        sequence: {mirrorActors: false, messageMargin: 40}
+    function init() {
+        // Mermaid 初始化
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            logLevel: 'debug',
+            themeVariables: {
+                primaryColor: '#6366f1',
+                primaryTextColor: '#e2e8f0',
+                primaryBorderColor: '#4f46e5',
+                lineColor: '#64748b',
+                secondaryColor: '#1e293b',
+                tertiaryColor: '#0f172a',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif',
+                fontSize: '15px',
+                noteBkgColor: '#1e293b',
+                noteTextColor: '#e2e8f0',
+                actorBkg: '#1e293b',
+                actorBorder: '#6366f1',
+                actorTextColor: '#e2e8f0',
+                signalColor: '#94a3b8',
+                signalTextColor: '#e2e8f0',
+
+            },
+            flowchart: {
+                curve: 'basis',
+                padding: 16,
+                useMaxWidth: true,
+                htmlLabels: true
+            },
+            sequence: {mirrorActors: false, messageMargin: 40}
+        });
+
+        mermaid.run({
+            querySelector: '.mermaid'
+        }).catch(err => {
+            console.error('Mermaid渲染错误:', err);
+        });
+    }
+
+    init();
+
+    document.addEventListener('DOMContentLoaded', function () {
+        init();
+    });
+
+    // Mermaid 双击预览 + 缩放
+    var mermaidPreviewModal = document.getElementById('mermaidPreviewModal');
+    var mermaidPreviewBackdrop = document.getElementById('mermaidPreviewBackdrop');
+    var mermaidPreviewClose = document.getElementById('mermaidPreviewClose');
+    var mermaidPreviewStage = document.getElementById('mermaidPreviewStage');
+    var mermaidPreviewContent = document.getElementById('mermaidPreviewContent');
+    var mermaidScaleText = document.getElementById('mermaidScaleText');
+    var mermaidZoomIn = document.getElementById('mermaidZoomIn');
+    var mermaidZoomOut = document.getElementById('mermaidZoomOut');
+    var mermaidZoomReset = document.getElementById('mermaidZoomReset');
+
+    var mermaidPreviewScale = 1;
+    var mermaidFitScale = 1;
+    var MERMAID_MIN_SCALE = 0.3;
+    var MERMAID_MAX_SCALE = 3;
+
+    var mermaidDragging = false;
+    var mermaidDragStartX = 0;
+    var mermaidDragStartY = 0;
+    var mermaidDragScrollLeft = 0;
+    var mermaidDragScrollTop = 0;
+
+    function updateMermaidPreviewScale() {
+        if (!mermaidPreviewContent) return;
+        mermaidPreviewContent.style.transform = 'scale(' + mermaidPreviewScale.toFixed(2) + ')';
+        if (mermaidScaleText) {
+            mermaidScaleText.textContent = Math.round(mermaidPreviewScale * 100) + '%';
+        }
+    }
+
+    function setMermaidPreviewScale(nextScale) {
+        mermaidPreviewScale = Math.max(MERMAID_MIN_SCALE, Math.min(MERMAID_MAX_SCALE, nextScale));
+        updateMermaidPreviewScale();
+    }
+
+    function getMermaidFitScale() {
+        if (!mermaidPreviewContent) return 1;
+        var svg = mermaidPreviewContent.querySelector('svg');
+        if (!mermaidPreviewStage || !svg) return 1;
+
+        var naturalWidth = svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width
+            ? svg.viewBox.baseVal.width
+            : (svg.getBBox ? svg.getBBox().width : svg.clientWidth);
+        var naturalHeight = svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.height
+            ? svg.viewBox.baseVal.height
+            : (svg.getBBox ? svg.getBBox().height : svg.clientHeight);
+
+        if (!naturalWidth || !naturalHeight) return 1;
+
+        var fitByWidth = mermaidPreviewStage.clientWidth / naturalWidth;
+        var fitByHeight = mermaidPreviewStage.clientHeight / naturalHeight;
+        var fit = Math.min(fitByWidth, fitByHeight);
+        if (!isFinite(fit) || fit <= 0) return 1;
+        return Math.max(MERMAID_MIN_SCALE, Math.min(MERMAID_MAX_SCALE, fit));
+    }
+
+    function openMermaidPreview(svgEl) {
+        if (!mermaidPreviewModal || !mermaidPreviewContent || !svgEl) return;
+        mermaidPreviewContent.innerHTML = '';
+        mermaidPreviewContent.appendChild(svgEl.cloneNode(true));
+        mermaidPreviewModal.classList.add('active');
+        mermaidPreviewModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+
+        if (mermaidPreviewStage) {
+            mermaidPreviewStage.scrollTop = 0;
+            mermaidPreviewStage.scrollLeft = 0;
+        }
+
+        requestAnimationFrame(function () {
+            mermaidFitScale = getMermaidFitScale();
+            setMermaidPreviewScale(mermaidFitScale);
+        });
+    }
+
+    function closeMermaidPreview() {
+        if (!mermaidPreviewModal || !mermaidPreviewContent) return;
+        mermaidPreviewModal.classList.remove('active');
+        mermaidPreviewModal.setAttribute('aria-hidden', 'true');
+        mermaidPreviewContent.innerHTML = '';
+        document.body.style.overflow = '';
+
+        mermaidDragging = false;
+        if (mermaidPreviewStage) {
+            mermaidPreviewStage.classList.remove('dragging');
+        }
+    }
+
+    function bindMermaidInteractions(root) {
+        var scope = root || document;
+        scope.querySelectorAll('.mermaid').forEach(function (node) {
+            if (node.dataset.previewBound === '1') return;
+            node.addEventListener('dblclick', function (e) {
+                var svg = node.querySelector('svg');
+                if (svg) {
+                    e.preventDefault();
+                    openMermaidPreview(svg);
+                }
+            });
+            node.dataset.previewBound = '1';
+        });
+    }
+
+    if (mermaidPreviewBackdrop) {
+        mermaidPreviewBackdrop.addEventListener('click', closeMermaidPreview);
+    }
+    if (mermaidPreviewClose) {
+        mermaidPreviewClose.addEventListener('click', closeMermaidPreview);
+    }
+    if (mermaidZoomIn) {
+        mermaidZoomIn.addEventListener('click', function () {
+            setMermaidPreviewScale(mermaidPreviewScale + 0.15);
+        });
+    }
+    if (mermaidZoomOut) {
+        mermaidZoomOut.addEventListener('click', function () {
+            setMermaidPreviewScale(mermaidPreviewScale - 0.15);
+        });
+    }
+    if (mermaidZoomReset) {
+        mermaidZoomReset.addEventListener('click', function () {
+            setMermaidPreviewScale(mermaidFitScale || 1);
+        });
+    }
+
+    if (mermaidPreviewStage) {
+        mermaidPreviewStage.addEventListener('mousedown', function (e) {
+            if (!mermaidPreviewModal || !mermaidPreviewModal.classList.contains('active')) return;
+            if (e.button !== 0) return;
+            mermaidDragging = true;
+            mermaidDragStartX = e.clientX;
+            mermaidDragStartY = e.clientY;
+            mermaidDragScrollLeft = mermaidPreviewStage.scrollLeft;
+            mermaidDragScrollTop = mermaidPreviewStage.scrollTop;
+            mermaidPreviewStage.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        mermaidPreviewStage.addEventListener('mousemove', function (e) {
+            if (!mermaidDragging) return;
+            var dx = e.clientX - mermaidDragStartX;
+            var dy = e.clientY - mermaidDragStartY;
+            mermaidPreviewStage.scrollLeft = mermaidDragScrollLeft - dx;
+            mermaidPreviewStage.scrollTop = mermaidDragScrollTop - dy;
+            e.preventDefault();
+        });
+
+        mermaidPreviewStage.addEventListener('mouseleave', function () {
+            mermaidDragging = false;
+            mermaidPreviewStage.classList.remove('dragging');
+        });
+    }
+
+    document.addEventListener('mouseup', function () {
+        mermaidDragging = false;
+        if (mermaidPreviewStage) {
+            mermaidPreviewStage.classList.remove('dragging');
+        }
+    });
+
+    if (mermaidPreviewModal) {
+        mermaidPreviewModal.addEventListener('wheel', function (e) {
+            if (!mermaidPreviewModal.classList.contains('active')) return;
+            e.preventDefault();
+            var delta = e.deltaY < 0 ? 0.08 : -0.08;
+            setMermaidPreviewScale(mermaidPreviewScale + delta);
+        }, {passive: false});
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && mermaidPreviewModal && mermaidPreviewModal.classList.contains('active')) {
+            closeMermaidPreview();
+        }
     });
 
     // 粒子效果
@@ -2590,13 +2433,13 @@
     })();
 
     // PPT 页面顺序
-    var PAGE_ORDER = ['background', 'hero', 'overview', 'rerank', 'knowledge', 'intent', 'rca', 'metrics'];
-    var currentPage = 'background';
+    var PAGE_ORDER = ['hero', 'background', 'knowledge', 'intent', 'rerank', 'rca', 'overview'];
+    var currentPage = 'hero';
 
     // 切换页面
     function showPage(pageId) {
         // 隐藏所有页面
-        document.querySelectorAll('.ppt-page').forEach(function(p) {
+        document.querySelectorAll('.ppt-page').forEach(function (p) {
             p.classList.remove('active');
         });
         // 显示目标页面
@@ -2607,7 +2450,7 @@
             currentPage = pageId;
         }
         // 更新导航高亮
-        document.querySelectorAll('.nav-links a').forEach(function(a) {
+        document.querySelectorAll('.nav-links a').forEach(function (a) {
             a.classList.toggle('active', a.getAttribute('data-page') === pageId);
         });
         // 更新页码指示器
@@ -2619,8 +2462,14 @@
         }
         // 触发 Mermaid 重新渲染（针对懒加载页面）
         if (window.mermaid) {
-            setTimeout(function() {
-                try { mermaid.init(undefined, target.querySelectorAll('.mermaid:not([data-processed])')); } catch(e) {}
+            setTimeout(function () {
+                try {
+                    mermaid.init(undefined, target.querySelectorAll('.mermaid:not([data-processed])'));
+                    bindMermaidInteractions(target);
+                    console.log('Mermaid re-rendered');
+                } catch (e) {
+                    console.error('Mermaid re-render error:', e);
+                }
             }, 50);
         }
     }
@@ -2628,7 +2477,7 @@
     // 更新页码指示器
     function updateIndicator() {
         var idx = PAGE_ORDER.indexOf(currentPage);
-        document.querySelectorAll('.page-dot').forEach(function(dot, i) {
+        document.querySelectorAll('.page-dot').forEach(function (dot, i) {
             dot.classList.toggle('active', i === idx);
         });
         var counter = document.getElementById('pageCounter');
@@ -2636,7 +2485,7 @@
     }
 
     // 键盘左右切换
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         var idx = PAGE_ORDER.indexOf(currentPage);
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             if (idx < PAGE_ORDER.length - 1) showPage(PAGE_ORDER[idx + 1]);
@@ -2649,8 +2498,12 @@
     function switchTab(event, tabId) {
         var tabNav = event.target.closest('.tab-nav');
         var tabs = tabNav.parentElement;
-        tabNav.querySelectorAll('.tab-btn').forEach(function(btn) { btn.classList.remove('active'); });
-        tabs.querySelectorAll('.tab-panel').forEach(function(panel) { panel.classList.remove('active'); });
+        tabNav.querySelectorAll('.tab-btn').forEach(function (btn) {
+            btn.classList.remove('active');
+        });
+        tabs.querySelectorAll('.tab-panel').forEach(function (panel) {
+            panel.classList.remove('active');
+        });
         event.target.classList.add('active');
         var panel = document.getElementById(tabId);
         if (panel) panel.classList.add('active');
@@ -2682,6 +2535,7 @@
         var start = 0;
         var duration = 1500;
         var startTime = null;
+
         function step(timestamp) {
             if (!startTime) startTime = timestamp;
             var progress = Math.min((timestamp - startTime) / duration, 1);
@@ -2690,16 +2544,19 @@
             el.textContent = (suffix === '~' ? '~' : '') + current.toLocaleString() + (suffix === '~' ? '' : suffix);
             if (progress < 1) requestAnimationFrame(step);
         }
+
         requestAnimationFrame(step);
     }
 
+    bindMermaidInteractions(document);
+
     // 初始化：显示第一页
-    showPage('background');
+    showPage('hero');
 
     // 大纲页数字动画（切换到 hero 页时触发）
     var statAnimated = false;
     var origShowPage = showPage;
-    showPage = function(pageId) {
+    showPage = function (pageId) {
         origShowPage(pageId);
         if (pageId === 'hero' && !statAnimated) {
             statAnimated = true;
@@ -2709,6 +2566,12 @@
     };
     // 重新初始化（覆盖后再调用一次）
     showPage('background');
+</script>
+<script>
+    hljs.configure({
+        ignoreUnescapedHTML: true  // 防止处理非代码内容
+    });
+    hljs.highlightAll();
 </script>
 </body>
 </html>
