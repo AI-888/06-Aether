@@ -48,7 +48,7 @@ dependencies = [
     "pyyaml>=6.0",
     "watchdog>=3.0",
     "transformers>=4.20.0",
-    "tree-sitter-languages>=1.8.0",
+    "tree-sitter-languages",
     "torch>=2.0.0",
 ]
 
