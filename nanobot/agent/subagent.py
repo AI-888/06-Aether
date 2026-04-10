@@ -10,8 +10,11 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.registry import ToolRegistry
+from nanobot.agent.tools.filesystem import FileKeywordFilterTool
+
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
+
 from nanobot.bus.events import InboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.base import LLMProvider
@@ -107,6 +110,7 @@ class SubagentManager:
                 timeout=self.exec_config.timeout,
                 restrict_to_workspace=self.restrict_to_workspace,
             ))
+            tools.register(FileKeywordFilterTool())
             tools.register(WebSearchTool(api_key=self.brave_api_key))
             tools.register(WebFetchTool())
 

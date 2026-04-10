@@ -19,7 +19,10 @@ from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.registry import ToolRegistry
 
 from nanobot.agent.tools.k8s import KubectlGetPodsTool, KubectlQueryLogTool
+from nanobot.agent.tools.filesystem import FileKeywordFilterTool
+
 from nanobot.agent.tools.shell import ExecTool
+
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.rca_trigger import RCATriggerTool, RCAListSkillsTool
 from nanobot.agent.tools.source_code_search import SourceCodeSearchTool
@@ -132,6 +135,9 @@ class AgentLoop:
         # kubectl 通用工具
         self.tools.register(KubectlGetPodsTool())
         self.tools.register(KubectlQueryLogTool())
+
+        # 本地文件关键字过滤工具
+        self.tools.register(FileKeywordFilterTool())
 
         # 源代码检索工具
         self.tools.register(SourceCodeSearchTool())
