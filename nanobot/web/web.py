@@ -4,16 +4,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 import os
-import yaml as yaml_lib
 
 import asyncio
 import json
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel
 from loguru import logger
+import uuid
 
 from nanobot.agent import AgentLoop
 from nanobot.config import Config
@@ -178,10 +177,15 @@ agent_loop: AgentLoop = None
 config: Config = None
 intent_routing_store: IntentRoutingStore = None
 
+# 上传文件配置
+MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024  # 100MB
+UPLOAD_SUBDIR = ".web_uploads"
+
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics endpoint
 # ---------------------------------------------------------------------------
+
 @web_app.get("/metrics")
 async def prometheus_metrics():
     """暴露 Prometheus 指标端点，供 Prometheus server 抓取。"""
@@ -280,6 +284,60 @@ async def get():
     """Serve the Web UI homepage."""
     html_content = load_html_template("index.html")
     return HTMLResponse(content=html_content)
+
+
+@web_app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """上传文件到工作空间并返回保存路径（最大 100MB）。"""
+    try:
+        if config and config.workspace_path:
+            workspace_path = Path(config.workspace_path).expanduser().resolve()
+        else:
+            workspace_path = Path.home() / ".nanobot" / "workspace"
+            workspace_path.mkdir(parents=True, exist_ok=True)
+
+        upload_dir = (workspace_path / UPLOAD_SUBDIR).resolve()
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        original_name = Path(file.filename or "upload.bin").name
+        safe_suffix = Path(original_name).suffix
+        saved_name = f"{uuid.uuid4().hex}{safe_suffix}"
+        saved_path = (upload_dir / saved_name).resolve()
+
+        total_size = 0
+        with open(saved_path, "wb") as out_f:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_UPLOAD_SIZE_BYTES:
+                    out_f.close()
+                    try:
+                        saved_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    return {
+                        "success": False,
+                        "message": "文件大小超过限制（最大100MB）"
+                    }
+                out_f.write(chunk)
+
+        await file.close()
+
+        return {
+            "success": True,
+            "message": "上传成功",
+            "file_path": str(saved_path),
+            "file_name": original_name,
+            "size": total_size,
+        }
+    except Exception as e:
+        logger.error(f"[WEB] 上传文件失败: {e}")
+        return {
+            "success": False,
+            "message": f"上传失败: {str(e)}"
+        }
 
 
 @web_app.get("/api/knowledge/preview")
@@ -513,9 +571,11 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
+            logger.info(f"[WEB][user_input] 原始输入: {data!r}")
 
             # 控制消息（如终止）优先处理
             control_type = None
+            maybe_json = None
             try:
                 maybe_json = json.loads(data)
                 if isinstance(maybe_json, dict):
@@ -539,15 +599,37 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.debug(f"[WEB] 发送并发请求告警失败: {e}")
                 continue
 
+            user_input = ""
+            uploaded_file_path = ""
+            raw_user_input = ""
+
+            if isinstance(maybe_json, dict):
+                raw_user_input = str(maybe_json.get("message", ""))
+                user_input = raw_user_input.strip()
+                uploaded_file_path = str(maybe_json.get("file_path", "")).strip()
+            else:
+                raw_user_input = str(data)
+                user_input = raw_user_input.strip()
+
+            if not user_input:
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "warn",
+                        "content": "消息不能为空"
+                    }, ensure_ascii=False))
+                except Exception:
+                    pass
+                continue
+
             # 创建消息队列实例（生产-消费模式）
             ws_queue = WebSocketMessageQueue(websocket)
             await ws_queue.start_consumer()
             current_ws_queue = ws_queue
 
-            async def _runner(user_input: str, queue: WebSocketMessageQueue):
+            async def _runner(user_input: str, queue: WebSocketMessageQueue, file_path: str | None):
                 try:
                     # 业务代码通过 ws_queue.send_text() 投递消息到队列
-                    await process_user_message_streaming(user_input, queue)
+                    await process_user_message_streaming(user_input, queue, file_path=file_path)
                 except asyncio.CancelledError:
                     logger.info("[WEB] 流式处理任务被取消")
                     raise
@@ -555,7 +637,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     # 确保消费者协程正常退出
                     await queue.stop()
 
-            current_task = asyncio.create_task(_runner(data, ws_queue))
+            current_task = asyncio.create_task(_runner(user_input, ws_queue, uploaded_file_path or None))
 
     except WebSocketDisconnect:
         await _cancel_current_task()
@@ -657,7 +739,11 @@ async def classify_user_intent(user_input: str, ws_queue: WebSocketMessageQueue)
         return "A"  # 出错时默认回退到 A
 
 
-async def process_user_message_streaming(user_input: str, ws_queue: WebSocketMessageQueue):
+async def process_user_message_streaming(
+    user_input: str,
+    ws_queue: WebSocketMessageQueue,
+    file_path: str | None = None,
+):
     """Process user message with real-time streaming output."""
     import time
 
@@ -684,10 +770,10 @@ async def process_user_message_streaming(user_input: str, ws_queue: WebSocketMes
         sub_type = await classify_d_sub_type(user_input, ws_queue)
         if sub_type == "simple":
             # 简单操作：搜索原子 Skill（查 tools 索引），提取工具后进入 LLM loop
-            await process_ops_intent(user_input, ws_queue, start_time)
+            await process_ops_intent(user_input, ws_queue, start_time, file_path=file_path)
         else:
             # 复杂操作（RCA分析）：搜索 SOP Skill，执行分步诊断
-            await process_troubleshooting_intent(user_input, ws_queue, start_time)
+            await process_troubleshooting_intent(user_input, ws_queue, start_time, file_path=file_path)
     else:
         # 非法值默认 A
         await ws_queue.send_text(f"⚠️ 意图值非法: {user_intent}，默认按 A 问答类处理\n")
@@ -841,7 +927,13 @@ def _rerank_route_candidates(query: str, results: list[dict[str, Any]]) -> list[
         return fallback
 
 
-async def process_ops_intent(user_input: str, ws_queue: WebSocketMessageQueue, start_time: float):
+async def process_ops_intent(
+    user_input: str,
+    ws_queue: WebSocketMessageQueue,
+    start_time: float,
+    file_path: str | None = None,
+):
+
     """处理 D 类简单操作意图：检索 Skill → rerank top1 → 提取工具 → 筛选已注册工具 → LLM 决策。
 
     D 类子分类为 simple 时调用此函数。
@@ -1022,7 +1114,11 @@ async def process_ops_intent(user_input: str, ws_queue: WebSocketMessageQueue, s
 
         try:
             report = await _execute_rca_skill(
-                matched_skill_name, user_input, ws_queue, skill_loader=skill_loader,
+                matched_skill_name,
+                user_input,
+                ws_queue,
+                skill_loader=skill_loader,
+                file_path=file_path,
             )
 
             if report:
@@ -1103,6 +1199,12 @@ async def process_ops_intent(user_input: str, ws_queue: WebSocketMessageQueue, s
                 skill_context_parts.append(
                     "请根据用户问题和以上 Skill 参考，自主判断是否需要调用工具以及调用哪个工具。"
                 )
+    if file_path:
+        skill_context_parts.append(
+            "\n## 用户上传文件\n"
+            f"用户已上传文件，路径: {file_path}\n"
+            "当需要读取用户上传内容时，请优先使用该路径作为输入上下文。"
+        )
     additional_context = "\n".join(skill_context_parts)
 
     # 根据工具数量选择不同的日志文案
@@ -1123,6 +1225,7 @@ async def process_ops_intent(user_input: str, ws_queue: WebSocketMessageQueue, s
         ws_queue,
         additional_context=additional_context,
         tool_names_filter=filtered_tool_names or None,
+        file_path=file_path,
     )
 
 
@@ -1363,7 +1466,9 @@ async def process_troubleshooting_intent(
         user_input: str,
         ws_queue: WebSocketMessageQueue,
         start_time: float,
+        file_path: str | None = None,
 ):
+
     """处理 D 类复杂操作意图：搜索 SOP Skill → rerank top1 → RCA Engine 执行。
 
     D 类子分类为 complex 时调用此函数，执行 SOP Skill 分步诊断流程。
@@ -1519,7 +1624,12 @@ async def process_troubleshooting_intent(
     await ws_queue.send_text(f"🔧 匹配到排障 Skill: **{matched_skill_name}**，开始执行分步诊断...\n\n")
 
     try:
-        report = await _execute_rca_skill(matched_skill_name, user_input, ws_queue)
+        report = await _execute_rca_skill(
+            matched_skill_name,
+            user_input,
+            ws_queue,
+            file_path=file_path,
+        )
 
         if report:
             # 发送 RCA 报告到前端
@@ -1551,7 +1661,9 @@ async def _execute_rca_skill(
     user_input: str,
     ws_queue: WebSocketMessageQueue,
     skill_loader: "RCASkillLoader | None" = None,
+    file_path: str | None = None,
 ) -> "RCAReport | None":
+
     """加载并执行指定的 RCA Skill。
 
     Args:
@@ -1799,6 +1911,10 @@ async def _execute_rca_skill(
         # 使用 tracker 追踪所有异步回调 task，确保 chunk 全部发送完再返回
         callback_tracker = _AsyncCallbackTracker()
 
+        execution_context = {"user_input": user_input}
+        if file_path:
+            execution_context["file_path"] = file_path
+
         report = await engine.execute(
             skill=skill,
             inputs=inputs,
@@ -1806,7 +1922,7 @@ async def _execute_rca_skill(
                 rca_stream_callback, step_id, output
             ),
             session_id="web:ui",
-            context={"user_input": user_input},
+            context=execution_context,
         )
 
         # 等待所有异步回调完成（chunk 全部发送到 WebSocket）
@@ -1850,7 +1966,9 @@ async def _run_agent_loop(
     ws_queue: WebSocketMessageQueue,
     additional_context: str | None = None,
     tool_names_filter: list[str] | None = None,
+    file_path: str | None = None,
 ):
+
     """通用的 agent loop 执行入口（用于 D 类简单操作和复杂操作回退）。"""
     import time
     import json
@@ -1935,11 +2053,20 @@ async def _run_agent_loop(
     # 为agent_loop设置流式回调
     agent_loop.stream_callback = stream_callback
 
+    merged_context = additional_context
+    if file_path:
+        upload_context = (
+            "## 用户上传文件\n"
+            f"用户上传文件路径: {file_path}\n"
+            "若请求与该文件相关，请将其作为主要上下文进行分析。"
+        )
+        merged_context = f"{additional_context}\n\n{upload_context}" if additional_context else upload_context
+
     # Process with streaming output
     response = await agent_loop.process_direct(
         user_input,
         session_key="cli:webui",
-        additional_context=additional_context,
+        additional_context=merged_context,
         disable_auto_kb=True,
         tool_names_filter=tool_names_filter,
     )
@@ -1989,210 +2116,3 @@ async def chat_endpoint(message: dict):
     return {"response": response}
 
 
-# ---------------------------------------------------------------------------
-# Skill Management API
-# ---------------------------------------------------------------------------
-class SkillSaveRequest(BaseModel):
-    """Skill save request model."""
-    path: str
-    content: str
-
-
-class SkillDeleteRequest(BaseModel):
-    """Skill delete request model."""
-    path: str
-
-
-class SkillCreateRequest(BaseModel):
-    """Skill create request model."""
-    dir: str
-    path: str
-    content: str
-
-
-@web_app.get("/skills")
-async def get_skills_page():
-    """Serve the Skill management page."""
-    html_content = load_html_template("skill.html")
-    return HTMLResponse(content=html_content)
-
-
-@web_app.get("/api/skills/list")
-async def list_skills():
-    """List all skills from the configured skill directory."""
-    skill_dir_raw = config.rca.skill_dir if config else str(Path.home() / ".nanobot" / "workspace" / "skills")
-    skill_dir = Path(skill_dir_raw).expanduser().resolve()
-    
-    if not skill_dir.exists():
-        return {"skills": {}, "error": "Directory does not exist"}
-    
-    skills = {}
-    
-    # Walk through directory
-    for root, dirs, files in os.walk(skill_dir):
-        rel_root = Path(root).relative_to(skill_dir)
-        category = str(rel_root) if str(rel_root) != "." else ""
-        
-        # Find SKILL*.yaml and SKILL*.yml files
-        skill_files = [f for f in files if f.startswith("SKILL") and (f.endswith(".yaml") or f.endswith(".yml"))]
-        
-        if skill_files:
-            if category not in skills:
-                skills[category] = []
-            
-            for filename in skill_files:
-                file_path = Path(root) / filename
-                skill_type = "workflow"  # default
-                skill_name = ""  # YAML中的skill name字段
-                
-                # Try to read skill type, name and output_schema from YAML skill section
-                output_schema = {}
-                try:
-                    import yaml
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        doc = yaml.safe_load(f)
-                    if isinstance(doc, dict) and 'skill' in doc:
-                        skill_section = doc['skill']
-                        if isinstance(skill_section, dict):
-                            skill_type = skill_section.get('type', 'workflow')
-                            skill_name = skill_section.get('name', '')
-                            # 获取 output_schema（主要用于 atomic skill）
-                            raw_os = skill_section.get('output_schema', {})
-                            if isinstance(raw_os, dict):
-                                output_schema = raw_os
-                except Exception:
-                    pass
-                
-                skills[category].append({
-                    "name": filename,
-                    "skill_name": skill_name,  # YAML内部定义的skill名称
-                    "path": str(Path(category) / filename) if category else filename,
-                    "type": skill_type,
-                    "output_schema": output_schema  # 原子skill的输出参数定义
-                })
-    
-    # Sort skills in each category
-    for cat in skills:
-        skills[cat].sort(key=lambda x: x["name"])
-    
-    return {"skills": skills}
-
-
-@web_app.get("/api/skills/read")
-async def read_skill(path: str):
-    """Read skill file content."""
-    # Get skill directory from config or use default
-    skill_dir = config.rca.skill_dir if config else Path.home() / ".nanobot" / "workspace" / "skills"
-    skill_dir = Path(skill_dir).expanduser().resolve()
-    
-    file_path = (skill_dir / path).resolve()
-    
-    # Security check: ensure file is within skill directory
-    try:
-        file_path.relative_to(skill_dir)
-    except ValueError:
-        return {"error": "Access denied: path outside skill directory"}
-    
-    if not file_path.exists():
-        return {"error": "File not found"}
-    
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        return {"content": content}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@web_app.post("/api/skills/save")
-async def save_skill(request: SkillSaveRequest):
-    """Save skill file content."""
-    # Get skill directory from config or use default
-    skill_dir = config.rca.skill_dir if config else Path.home() / ".nanobot" / "workspace" / "skills"
-    skill_dir = Path(skill_dir).expanduser().resolve()
-    
-    file_path = (skill_dir / request.path).resolve()
-    
-    # Security check: ensure file is within skill directory
-    try:
-        file_path.relative_to(skill_dir)
-    except ValueError:
-        return {"error": "Access denied: path outside skill directory"}
-    
-    try:
-        # Validate YAML content
-        yaml_lib.safe_load(request.content)
-        
-        # Write file
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(request.content)
-        
-        logger.info(f"[WEB] Saved skill file: {file_path}")
-        return {"success": True, "message": "Saved successfully"}
-    except yaml_lib.YAMLError as e:
-        return {"error": f"Invalid YAML: {str(e)}"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@web_app.post("/api/skills/create")
-async def create_skill(request: SkillCreateRequest):
-    """Create a new skill file."""
-    skill_dir = Path(request.dir).expanduser().resolve()
-    
-    if not skill_dir.exists():
-        skill_dir.mkdir(parents=True, exist_ok=True)
-    
-    file_path = (skill_dir / request.path).resolve()
-    
-    # Security check
-    try:
-        file_path.relative_to(skill_dir)
-    except ValueError:
-        return {"error": "Access denied: path outside skill directory"}
-    
-    if file_path.exists():
-        return {"error": "File already exists"}
-    
-    try:
-        # Validate YAML content
-        yaml_lib.safe_load(request.content)
-        
-        # Create file
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(request.content)
-        
-        logger.info(f"[WEB] Created skill file: {file_path}")
-        return {"success": True, "message": "Created successfully", "path": str(file_path)}
-    except yaml_lib.YAMLError as e:
-        return {"error": f"Invalid YAML: {str(e)}"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@web_app.post("/api/skills/delete")
-async def delete_skill(request: SkillDeleteRequest):
-    """Delete a skill file."""
-    # Get skill directory from config or use default
-    skill_dir = config.rca.skill_dir if config else Path.home() / ".nanobot" / "workspace" / "skills"
-    skill_dir = Path(skill_dir).expanduser().resolve()
-    
-    file_path = (skill_dir / request.path).resolve()
-    
-    # Security check
-    try:
-        file_path.relative_to(skill_dir)
-    except ValueError:
-        return {"error": "Access denied: path outside skill directory"}
-    
-    if not file_path.exists():
-        return {"error": "File not found"}
-    
-    try:
-        file_path.unlink()
-        logger.info(f"[WEB] Deleted skill file: {file_path}")
-        return {"success": True, "message": "Deleted successfully"}
-    except Exception as e:
-        return {"error": str(e)}

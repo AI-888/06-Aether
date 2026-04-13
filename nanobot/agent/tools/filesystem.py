@@ -2,6 +2,8 @@ from __future__ import annotations
 """File system tools: read, write, edit."""
 
 import json
+import shlex
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -214,7 +216,10 @@ class ListDirTool(Tool):
 
 
 class FileKeywordFilterTool(Tool):
-    """支持多组 [文件路径, 关键字列表] 的文件关键字过滤工具。"""
+    """基于 grep 的多文件统一关键字过滤工具。"""
+
+    def __init__(self, allowed_dir: Path | None = None):
+        self._allowed_dir = allowed_dir
 
     @property
     def name(self) -> str:
@@ -223,8 +228,9 @@ class FileKeywordFilterTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "按输入的多组[文件路径,关键字列表]过滤文件内容，返回 key=value 结构："
-            "key 为文件路径，value 为该文件下各关键字的匹配结果（含行号与内容）。"
+            "使用 grep 对多个文件执行关键字过滤。"
+            "所有文件共享同一组 keywords，且采用 AND 规则：同一文件需同时命中全部关键字才视为匹配成功。"
+            "输出参数说明：commands 为本次执行的 grep 命令列表；data 为结构化匹配结果。"
         )
 
     @property
@@ -232,100 +238,174 @@ class FileKeywordFilterTool(Tool):
         return {
             "type": "object",
             "properties": {
-                "groups": {
+                "file_paths": {
                     "type": "array",
-                    "description": "多组过滤条件，每组包含 file_path 与 keywords",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "file_path": {
-                                "type": "string",
-                                "description": "待过滤的本地文件路径",
-                            },
-                            "keywords": {
-                                "type": "array",
-                                "description": "关键字列表，至少 1 个",
-                                "items": {"type": "string"},
-                                "minItems": 1,
-                            },
-                        },
-                        "required": ["file_path", "keywords"],
-                    },
+                    "description": "待过滤的本地文件路径。支持 string（单文件）或 array[string]（多文件）。",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+                "keywords": {
+                    "type": "array",
+                    "description": "关键字列表（必填，至少 1 个）。所有文件都使用该列表进行过滤。",
+                    "items": {"type": "string"},
                     "minItems": 1,
                 },
                 "case_sensitive": {
                     "type": "boolean",
-                    "description": "是否区分大小写，默认 false",
+                    "description": "是否区分大小写（可选，默认 false）。",
                     "default": False,
                 },
-                "max_matches_per_keyword": {
+                "max_latest_lines": {
                     "type": "integer",
-                    "description": "每个关键字最多返回匹配条数，默认 50",
+                    "description": "全部关键字返回最多的匹配行数（可选，默认 50，范围 1~1000）。",
                     "default": 50,
                     "minimum": 1,
                     "maximum": 1000,
                 },
+                "after_context_lines": {
+                    "type": "integer",
+                    "description": "grep -A 后面的输出行数（可选，默认 0，范围 0~200）。",
+                    "default": 6,
+                    "minimum": 0,
+                    "maximum": 200,
+                },
             },
-            "required": ["groups"],
+            "required": ["keywords"],
         }
 
     async def execute(
         self,
-        groups: list[dict[str, Any]],
+        keywords: list[str],
+        file_paths: list[str] | None = None,
         case_sensitive: bool = False,
-        max_matches_per_keyword: int = 50,
+        max_latest_lines: int = 50,
+        after_context_lines: int = 6,
         **kwargs: Any,
     ) -> dict[str, Any]:
         result_map: dict[str, Any] = {}
+        commands: list[str] = []
 
-        for group in groups:
-            file_path = str(group.get("file_path", "")).strip()
-            keywords_raw = group.get("keywords", [])
-            keywords = [str(k).strip() for k in keywords_raw if str(k).strip()]
+        normalized_keywords = [str(k).strip() for k in (keywords or []) if str(k).strip()]
+        if not normalized_keywords:
+            return {
+                "result": "keywords 不能为空",
+                "commands": [],
+                "data": {"error": "keywords 不能为空"},
+            }
 
-            if not file_path:
-                continue
+        all_file_paths: list[str] = []
+        if isinstance(file_paths, list):
+            all_file_paths.extend(str(p).strip() for p in file_paths if str(p).strip())
 
-            path_obj = _resolve_path(file_path)
-            key = str(path_obj)
+        all_file_paths = list(dict.fromkeys(all_file_paths))
 
-            if not path_obj.exists():
-                result_map[key] = {"error": f"文件不存在: {file_path}"}
-                continue
+        if not all_file_paths:
+            return {
+                "result": "至少需要提供一个文件路径",
+                "commands": [],
+                "data": {"error": "至少需要提供一个文件路径"},
+            }
 
-            if not path_obj.is_file():
-                result_map[key] = {"error": f"不是文件: {file_path}"}
-                continue
+        after_context_lines = max(0, int(after_context_lines))
+
+        grep_base_cmd = ["grep", "-n", "-F", "-m", str(max_latest_lines), "-A", str(after_context_lines)]
+        if not case_sensitive:
+            grep_base_cmd.append("-i")
+
+        keyword_cmd_prefixes = [
+            (keyword, [*grep_base_cmd, keyword])
+            for keyword in normalized_keywords
+        ]
+
+        for raw_path in all_file_paths:
 
             try:
-                content = path_obj.read_text(encoding="utf-8", errors="replace")
+                path_obj = _resolve_path(raw_path, self._allowed_dir)
             except Exception as e:
-                result_map[key] = {"error": f"读取文件失败: {str(e)}"}
+                result_map[raw_path] = {"error": f"路径解析失败: {str(e)}"}
                 continue
 
-            lines = content.splitlines()
+            key = str(path_obj)
+            if not path_obj.exists():
+                result_map[key] = {"error": f"文件不存在: {raw_path}"}
+                continue
+            if not path_obj.is_file():
+                result_map[key] = {"error": f"不是文件: {raw_path}"}
+                continue
+
             file_result: dict[str, Any] = {}
+            missing_keywords: list[str] = []
+            has_runtime_error = False
 
-            for keyword in keywords:
+            for keyword, cmd_prefix in keyword_cmd_prefixes:
+                cmd = [*cmd_prefix, key]
+                commands.append(shlex.join(cmd))
+
+                try:
+                    proc = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                except Exception as e:
+                    file_result[keyword] = [{"error": f"grep 执行失败: {str(e)}"}]
+                    has_runtime_error = True
+                    continue
+
+                if proc.returncode not in (0, 1):
+                    err_msg = (proc.stderr or "").strip() or f"grep 异常退出码: {proc.returncode}"
+                    file_result[keyword] = [{"error": err_msg}]
+                    has_runtime_error = True
+                    continue
+
                 matched: list[dict[str, Any]] = []
-                target = keyword if case_sensitive else keyword.lower()
+                for line in (proc.stdout or "").splitlines():
+                    if not line or line == "--":
+                        continue
 
-                for idx, line in enumerate(lines, start=1):
-                    source = line if case_sensitive else line.lower()
-                    if target in source:
-                        matched.append({
-                            "line_number": idx,
-                            "line": line,
-                        })
-                        if len(matched) >= max_matches_per_keyword:
-                            break
+                    # grep -n 输出匹配行为: 行号:内容；grep -A 上下文行为: 行号-内容
+                    sep = ":" if ":" in line else "-"
+                    parts = line.split(sep, 1)
+                    if len(parts) != 2:
+                        continue
 
+                    line_no_raw, line_text = parts
+                    try:
+                        line_no = int(line_no_raw)
+                    except ValueError:
+                        continue
+
+                    matched.append({
+                        "line_number": line_no,
+                        "line": line_text,
+                        "is_match": sep == ":",
+                    })
+
+                if not matched:
+                    missing_keywords.append(keyword)
                 file_result[keyword] = matched
 
-            result_map[key] = file_result
+            if has_runtime_error:
+                result_map[key] = {
+                    "matched_all_keywords": False,
+                    "error": "部分关键字执行失败，请查看各关键字结果",
+                    "matches_by_keyword": file_result,
+                }
+            elif missing_keywords:
+                result_map[key] = {
+                    "matched_all_keywords": False,
+                    "missing_keywords": missing_keywords,
+                    "matches_by_keyword": file_result,
+                }
+            else:
+                result_map[key] = {
+                    "matched_all_keywords": True,
+                    "matches_by_keyword": file_result,
+                }
 
         return {
-            "result": json.dumps(result_map, ensure_ascii=False),
-            "commands": [],
+            "raw_data_str": json.dumps(result_map),
+            "commands": commands,
             "data": result_map,
         }

@@ -84,54 +84,169 @@
         .messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
-            background: #f8fafc;
+            padding: 20px 24px 12px;
+            background: #f6f7fb;
         }
 
         .input-container {
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #e2e8f0;
+            padding: 12px 18px 16px;
+            background: transparent;
+            border-top: none;
+        }
+
+        .input-shell {
+            background: #ffffff;
+            border: 1px solid #e9edf3;
+            border-radius: 20px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+            padding: 12px 14px 10px;
         }
 
         .input-wrapper {
             display: flex;
-            gap: 10px;
-            align-items: center;
+            flex-direction: column;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        .chat-input-top {
+            width: 100%;
         }
 
         #messageInput {
-            flex: 1;
-            padding: 15px 20px;
-            border: 2px solid #e2e8f0;
-            border-radius: 25px;
-            font-size: 1rem;
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-size: 15px;
+            line-height: 1.35;
+            color: #1f2937;
+            font-weight: 500;
             outline: none;
-            transition: border-color 0.3s;
         }
 
-        #messageInput:focus {
-            border-color: #4299e1;
+        #messageInput::placeholder {
+            color: #aeb8c6;
+            font-weight: 500;
+        }
+
+        .chat-input-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-actions-left,
+        .chat-actions-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        #uploadButton,
+        .action-btn {
+            border: none;
+            background: transparent;
+            color: #4b5563;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        #uploadButton:hover,
+        .action-btn:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+
+        .mode-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 34px;
+            padding: 0 10px;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            color: #4b5563;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .mode-chip .chip-icon {
+            font-size: 14px;
+            color: #6b7280;
         }
 
         #sendButton {
-            padding: 15px 25px;
-            background: #4299e1;
-            color: white;
+            width: 40px;
+            height: 40px;
             border: none;
-            border-radius: 25px;
+            border-radius: 50%;
             cursor: pointer;
-            font-size: 1rem;
-            transition: background 0.3s;
+            background: #111111;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease, opacity 0.2s ease;
         }
 
         #sendButton:hover {
-            background: #3182ce;
+            transform: translateY(-1px);
         }
 
         #sendButton:disabled {
-            background: #a0aec0;
+            opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
+        }
+
+        .upload-status-row {
+            margin-top: 8px;
+            margin-left: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 18px;
+        }
+
+        #uploadStatus {
+            font-size: 12px;
+            color: #6b7280;
+            line-height: 1.3;
+            max-width: 70%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #removeUploadButton {
+            border: none;
+            background: transparent;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 2px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        #removeUploadButton:hover {
+            color: #374151;
+            background: #f3f4f6;
         }
 
         .message {
@@ -866,6 +981,46 @@
         .message.ai .message-wrapper {
             justify-content: flex-start;
         }
+
+        @media (max-width: 1200px) {
+            .sidebar {
+                display: none;
+            }
+
+            .input-container {
+                padding: 10px 10px 12px;
+            }
+
+            .input-shell {
+                border-radius: 16px;
+                padding: 10px 10px 8px;
+            }
+
+            #messageInput {
+                font-size: 14px;
+                line-height: 1.35;
+            }
+
+            .mode-chip {
+                font-size: 12px;
+                padding: 0 8px;
+                min-height: 30px;
+            }
+
+            #uploadButton,
+            .action-btn {
+                width: 30px;
+                height: 30px;
+                font-size: 18px;
+            }
+
+            #sendButton {
+                width: 36px;
+                height: 36px;
+                font-size: 14px;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -878,8 +1033,9 @@
         </div>
         <div class="sidebar-content">
             <div>
-                <p style="font-size: 0.8rem; margin-top: 10px;">1. 当前是小模型，无记忆，无上下文联系</p>
-                <p style="font-size: 0.8rem; margin-top: 10px;">2. 目前用于RocketMQ相关问题处理</p>
+                <p style="font-size: 0.8rem; margin-top: 10px;">1. 咨询rocketmq相关知识</p>
+                <p style="font-size: 0.8rem; margin-top: 10px;">2. 排查rocketmq相关问题</p>
+                <p style="font-size: 0.8rem; margin-top: 10px;">3. 限制：不支持记忆，无上下文联系</p>
             </div>
         </div>
     </div>
@@ -907,11 +1063,30 @@
         <button class="scroll-to-bottom-btn" id="scrollToBottomBtn" onclick="forceScrollToBottom()" title="回到最新消息">⬇</button>
 
         <div class="input-container">
-            <div class="input-wrapper">
-                <input autocomplete="off" id="messageInput" placeholder="Ask me about rocketmq..." type="text">
-                <button id="sendButton" onclick="sendMessage()">发送</button>
+            <div class="input-shell">
+                <div class="input-wrapper">
+                    <div class="chat-input-top">
+                        <input autocomplete="off" id="messageInput" placeholder="How can I help you today?" type="text">
+                    </div>
+
+                    <div class="chat-input-actions">
+                        <div class="chat-actions-left">
+                            <input id="fileInput" type="file">
+                            <button id="uploadButton" title="上传文件" aria-label="上传文件">+</button>
+                        </div>
+
+                        <div class="chat-actions-right">
+                            <button id="sendButton" onclick="sendMessage()" title="发送" aria-label="发送">⟶</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="upload-status-row">
+                    <span id="uploadStatus"></span>
+                    <button id="removeUploadButton" title="移除已上传文件" aria-label="移除已上传文件">✕</button>
+                </div>
             </div>
         </div>
+
     </div>
 </div>
 
@@ -922,12 +1097,52 @@
     const messagesDiv = document.getElementById("messages");
     const messageInput = document.getElementById("messageInput");
     const sendButton = document.getElementById("sendButton");
+    const fileInput = document.getElementById("fileInput");
+    const uploadButton = document.getElementById("uploadButton");
+    const uploadStatus = document.getElementById("uploadStatus");
+    const removeUploadButton = document.getElementById("removeUploadButton");
+    let uploadedFilePath = '';
+    let uploadedFileName = '';
     let isTyping = false;
+
     let isProcessing = false; // 标记是否正在处理请求
     let userScrolledUp = false; // 标记用户是否手动上滑
     let shouldAbortCurrentRequest = false; // 标记是否应该终止当前请求
     let abortAckTimeoutId = null; // 终止确认超时兜底定时器
     const SCROLL_THRESHOLD = 60; // 距底部多少px以内视为"在底部"
+
+    function refreshUploadStatus() {
+        const hasUploadedFile = Boolean(uploadedFilePath && uploadedFileName);
+        uploadStatus.textContent = hasUploadedFile ? uploadedFileName : '';
+        removeUploadButton.style.display = hasUploadedFile ? 'inline-flex' : 'none';
+    }
+
+    function clearUploadedFile() {
+        uploadedFilePath = '';
+        uploadedFileName = '';
+        fileInput.value = '';
+        refreshUploadStatus();
+    }
+
+    // 点击+号先弹出文件选择框
+    uploadButton.addEventListener('click', () => {
+        if (uploadButton.disabled) {
+            return;
+        }
+        fileInput.click();
+    });
+
+    // 选择文件后自动上传
+    fileInput.addEventListener('change', async () => {
+        if (fileInput.files && fileInput.files.length > 0) {
+            await uploadSelectedFile();
+        }
+    });
+
+    // 删除已上传文件
+    removeUploadButton.addEventListener('click', () => {
+        clearUploadedFile();
+    });
 
     // 检测用户是否已滚动到底部附近
     function isNearBottom() {
@@ -2380,6 +2595,47 @@
         `;
         return section;
     }
+
+    async function uploadSelectedFile() {
+        const selectedFile = fileInput.files && fileInput.files[0];
+        if (!selectedFile) {
+            clearUploadedFile();
+            return;
+        }
+
+        if (selectedFile.size > 100 * 1024 * 1024) {
+            clearUploadedFile();
+            return;
+        }
+
+        uploadButton.disabled = true;
+        uploadButton.textContent = '…';
+
+        try {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const resp = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await resp.json();
+
+            if (data && data.success && data.file_path) {
+                uploadedFilePath = data.file_path;
+                uploadedFileName = data.file_name || selectedFile.name;
+                refreshUploadStatus();
+            } else {
+                clearUploadedFile();
+            }
+        } catch (error) {
+            clearUploadedFile();
+        } finally {
+            uploadButton.disabled = false;
+            uploadButton.textContent = '+';
+        }
+    }
+
     function sendMessage() {
         if (isProcessing) {
             return; // 正在处理中，不允许发送新消息
@@ -2390,27 +2646,38 @@
             isProcessing = true; // 标记为正在处理
             shouldAbortCurrentRequest = false; // 重置终止标记
             sendButton.disabled = false; // 启用按钮（用于终止）
-            sendButton.textContent = '终止'; // 按钮文本改为终止
+            sendButton.textContent = '■'; // 按钮文本改为终止图标
             sendButton.onclick = abortCurrentRequest; // 切换点击事件
+
             messageInput.disabled = true; // 禁用输入框
 
             // 发送新消息时重置滚动状态，确保用户能看到回复
             userScrolledUp = false;
             hideScrollToBottomBtn();
 
-            addUserMessage(message);
+            const payload = {
+                message: message,
+                file_path: uploadedFilePath || ''
+            };
+
+            const displayMessage = uploadedFilePath
+                ? `${message}\n\n[已附带文件] ${uploadedFileName || uploadedFilePath}`
+                : message;
+
+            addUserMessage(displayMessage);
             showTypingIndicator();
-            ws.send(message);
+            ws.send(JSON.stringify(payload));
             messageInput.value = '';
         }
     }
+
 
     // 终止当前请求
     function abortCurrentRequest() {
         if (isProcessing) {
             shouldAbortCurrentRequest = true;
             sendButton.disabled = true;
-            sendButton.textContent = '终止中...';
+            sendButton.textContent = '…';
 
             // 发送终止消息到后端，等待后端确认后再恢复UI
             if (ws.readyState === WebSocket.OPEN) {
@@ -2439,8 +2706,9 @@
         isStreaming = false;
         shouldAbortCurrentRequest = false;
         sendButton.disabled = false;
-        sendButton.textContent = '发送';
+        sendButton.textContent = '⟶';
         sendButton.onclick = sendMessage;
+
         messageInput.disabled = false;
         messageInput.focus();
         hideTypingIndicator();
