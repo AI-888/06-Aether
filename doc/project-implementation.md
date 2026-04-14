@@ -1,115 +1,123 @@
-# Aether (nanobot) 项目实现文档
+# Aether：基于小模型的智能运维 Agent 实践
 
-> Aether 是一个面向**资源受限边缘 AI 环境**的超轻量级个人 AI 助手，核心代码仅约 3,500 行。本文档重点介绍项目中 **Rerank 重排序**、**知识库系统**、**意图分类**和 **RCA 根因分析**四大核心模块的设计与实现。
-
----
-
-## 目录
-
-- [1. 整体架构概览](#1-整体架构概览)
-- [2. Rerank 重排序系统](#2-rerank-重排序系统)
-- [3. 知识库系统 (RAG Knowledge Base)](#3-知识库系统-rag-knowledge-base)
-- [4. 意图分类系统](#4-意图分类系统)
-- [5. RCA 根因分析引擎](#5-rca-根因分析引擎)
-- [6. 模块协作关系](#6-模块协作关系)
+> 在边缘环境、No-GPU、私有化场景下，就数据安全、资源受限的情况下，如何用 ≤9B 参数的小模型构建一个真正可用的 Agent？本文介绍
+> Aether 项目的核心设计与工程实践——从模型选型、知识库检索、意图路由、Skill 编排到 LoRA 微调的全链路方案。
 
 ---
 
-## 1. 整体架构概览
+## 一、背景：为什么构建小模型 Agent？
+
+### 1.1 业务痛点
+
+在私有化运维场景中，我们面临四大核心痛点：
+
+| 痛点            | 描述                                                                                     |
+|---------------|----------------------------------------------------------------------------------------|
+| 💻 **数据安全**   | 数据安全。比如金融公司、银行、保险等企业有明确规定，数据不能上公网                                                      |
+| 💻 **No-GPU** | 不是所有客户都有显卡。<br />但我们需要服务所有客户。在有限算力下实现智能排障，是产品普及的关键                                     |
+| 🚨 **直播式排障**  | 私有化场景下。<br />故障排查依赖专家远程指导，包含手机拍报错日志照片排查、手机打视频排查等"直播式"排障。<br />耗时都是小时计，响应慢、效率低、知识难以沉淀复用 |
+| 📚 **文档迷宫**   | 文档越多，越难以派上用场。<br />驻场人员、二线面临几十款云产品、每个云产品至少4个版本的文档，真正遇上问题时无从查起                          |
+| 🔍 **信息黑盒**   | 部署架构黑盒。<br />组件多、日志在哪儿、什么关键字、如何排查、Pod 如何组成，对于驻场、二线等其他人都是黑盒。 遇到问题难以排查                   |
+
+### 1.2 技术选型动机
+
+基于上述痛点，Aether 选择构建 **小模型 Agent** 方案：
+
+- ✅ **超低成本**：基于 ≤9B 级小模型 + RAG 知识增强，在 CPU / 低显存环境下即可运行，无需 GPU 集群
+    - 32vcpu 64g
+- ✅ **知识可控**：通过向量知识库管理领域知识，支持增量更新，模型推理结果可追溯、可解释
+    - 100g ssd
+- ✅ **Skill 编排**：将排障经验固化为结构化 Skill，Agent 自动编排执行，实现排障闭环
+    - 专业领域专家
+- ✅ **数据私有化**：全链路本地部署，敏感数据不出域，满足企业级安全合规要求
+
+---
+
+## 三、Agent技术栈
+
+### 3.1 主模型选择：`qwen2.5:1.5b`
+
+| 模型             | 优点                                                |
+|----------------|---------------------------------------------------|
+| `qwen2.5:1.5b` | 中文支持好，国产。参数规模小、部署门槛低，适合边缘与私有化环境；推理速度快，能显著降低单轮响应耗时 |
+| `gemma3:4b`    | 多语言支持好，参数规模小、推理强的综合模型                             |
+
+### 3.2 Embedding 模型：`BAAI/bge-large-zh-v1.5`
+
+> 中文向量表示能力强、检索一致性高；在知识库问答中可提升召回准确率与稳定性, Embedding 和 Rerank 模型均为本地加载，无需外部
+> API 调用
+
+### 3.3 向量化数据库: `ChromaDB`
+
+> 开源、文档数量几百
+
+### 3.3 Rerank 模型：`bge-reranker-v2-m3`
+
+> 中文语义相关性判断效果稳定，能够提升召回结果排序质量，减少无关上下文，降低主模型处理负担, Embedding 和 Rerank
+> 模型均为本地加载，无需外部 API 调用
+
+### 3.4 Agent 开发选型
+
+| 方案 | 说明                                                                   |
+|----|----------------------------------------------------------------------|
+| 自研 | AI 自研，完全可控——**失败：和传统agent做法差异较大，需要思考清楚再进行**                          |
+| 二开 | 基于 [Nanobot（港大开源）](https://github.com/HKUDS/nanobot) 二次开发；**够小、够简单** |
+
+---
+
+## 四、知识库：ChromaDB + RAG + Rerank
+
+### 4.1 设计目标
+
+在 RAG 检索场景中，向量相似度搜索（Embedding + L2 距离）虽然能快速召回候选文档，但 **召回精度有限**。Rerank 系统通过引入 *
+*CrossEncoder 交叉编码器** 对初步检索结果进行二次精排，显著提升最终返回结果的相关性。
+
+### 4.2 检索流程
 
 ```mermaid
-graph TB
-    subgraph 用户输入
-        A[用户查询/故障描述]
-    end
+sequenceDiagram
+    participant User as 用户
+    participant Store as ChromaKnowledgeStore
+    participant Embedder as VectorEmbedder
+    participant Chroma as ChromaDB
+    participant Reranker as CrossEncoder
 
-    subgraph 意图分类层
-        B[IntentClassifier<br/>A/D 两级分类]
-        B1[规则引擎<br/>RuleMatchEngine]
-        B2[LLM 快速分类]
+    User->>Store: search_knowledge(query, domain, top_k)
+    Store->>Embedder: embed_text(query)
+    Embedder-->>Store: query_vector
+    loop 遍历所有相关 Collection
+        Store->>Chroma: collection.query(query_vector, n_results)
+        Chroma-->>Store: ids, documents, metadatas, distances
     end
-
-    subgraph 知识库层
-        C[ChromaKnowledgeStore<br/>向量知识库]
-        C1[VectorEmbedder<br/>文本向量化]
-        C2[TextChunker<br/>文本分块]
-        C3[CrossEncoder<br/>Rerank 重排序]
-        C4[IntentRoutingStore<br/>意图路由索引]
-    end
-
-    subgraph RCA 执行层
-        D[RCARouter<br/>路由控制器]
-        D1[RCAEngine<br/>分步执行引擎]
-        D2[RCASkillLoader<br/>Skill 加载器]
-        D3[SecurityGuard<br/>安全校验]
-        D4[AuditLogger<br/>审计日志]
-    end
-
-    subgraph 输出
-        E[RCAReport<br/>结构化报告]
-    end
-
-    A --> B
-    B --> B1
-    B1 -->|未命中| B2
-    B -->|A 类: 知识问答| C
-    B -->|D 类: 操作/排查| D
-    D --> D1
-    D -->|RAG 检索 Skill| C4
-    D1 --> D2
-    D1 --> D3
-    D1 --> D4
-    C --> C1
-    C --> C2
-    C --> C3
-    D1 --> E
+    Store->>Store: L2距离 → 相似度
+    Store->>Store: Top-K 相似度
+    Store->>Reranker: _rerank_results(query, candidates)
+    Reranker-->>Store: 重排序 + Sigmoid归一化
+    Store->>Store: 去重
+    Store-->>User: List of KnowledgeItem
 ```
 
-项目采用**分层架构**，各模块职责清晰：
+**流程说明：**
 
-| 层级 | 核心模块 | 职责 |
-|------|---------|------|
-| **意图分类层** | `IntentClassifier`, `RuleMatchEngine` | 判断用户意图类型，路由到对应处理流程 |
-| **知识库层** | `ChromaKnowledgeStore`, `VectorEmbedder`, `CrossEncoder` | 知识存储、语义检索、结果重排序 |
-| **RCA 执行层** | `RCAEngine`, `RCARouter`, `RCASkillLoader` | Skill 编排执行、根因分析、报告生成 |
+1. 接收用户 Query，构建标准化检索输入
+2. 对 Query 执行 Embedding 向量化
+3. 在 ChromaDB 中执行向量检索（L2 距离转换为相似度）
+4. 返回 Top-K 候选文档
+5. 使用 **CrossEncoder 对候选进行重排序** 打分
+6. 对重排序分数做 **Sigmoid 归一化**
+7. 按阈值过滤并按分数排序后返回结果
 
----
+### 4.3 Rerank 核心价值
 
-## 2. Rerank 重排序系统
+> **传统 Agent 流程**：向量检索 → Top-K → LLM → 输出结果
 
-### 2.1 设计目标
+- **核心作用**：大幅度降低上下文长度，降低 SLM 耗时，解决"先看哪条证据"的问题
+- **为什么需要**：提升答案质量并降低 SLM 幻觉风险
+- **反直觉的工程权衡**：重排会增加少量时延，但在 SLM 场景下效果恰恰相反——总耗时反而降低
 
-在 RAG 检索场景中，向量相似度搜索（Embedding + L2 距离）虽然能快速召回候选文档，但**召回精度有限**。Rerank 系统通过引入 **CrossEncoder 交叉编码器**对初步检索结果进行二次精排，显著提升最终返回结果的相关性。
-
-### 2.2 技术方案
-
-```mermaid
-flowchart LR
-    A[用户 Query] --> B[Embedding 向量化]
-    B --> C[Chroma 向量检索<br/>L2 距离 → 相似度分数]
-    C --> D[Top-K 候选结果]
-    D --> E[CrossEncoder 重排序<br/>Query-Document 交叉编码]
-    E --> F[Sigmoid 归一化<br/>→ 百分制分数]
-    F --> G[阈值过滤<br/>≥ rerank_threshold]
-    G --> H[最终排序结果]
-
-    style E fill:#f9f,stroke:#333,stroke-width:2px
-```
-
-### 2.3 核心实现
-
-Rerank 功能实现在 `nanobot/knowledge/store.py` 的 `ChromaKnowledgeStore` 类中：
-
-**模型初始化** (`_init_cross_encoder`)：
-- 使用 `sentence_transformers.CrossEncoder` 加载本地重排序模型
-- 模型路径通过 `RAGConfig.rerank_model_path` 配置
-- 自动检测 CUDA 可用性，优先使用 GPU 加速
-- 模型初始化失败会**终止服务启动**，确保不会在无 Rerank 能力时提供降级服务
-
-**重排序流程** (`_rerank_results`)：
+### 4.4 Rerank 流程伪代码
 
 ```python
-# 核心流程伪代码
 def _rerank_results(query, results):
     # 1. 构建 Query-Document 对
     pairs = [(query, result['document']) for result in results]
@@ -127,578 +135,417 @@ def _rerank_results(query, results):
     return sorted(filtered, key=lambda x: x['rerank_score'], reverse=True)
 ```
 
-### 2.4 配置参数
+### 4.5 Rerank 模型选型
 
-| 参数 | 配置项 | 默认值 | 说明 |
-|------|--------|--------|------|
-| 模型路径 | `rerank_model_path` | `""` | CrossEncoder 本地模型路径 |
-| 重排序阈值 | `rerank_threshold` | `0.8` (配置) / `60.0` (运行时百分制) | 低于阈值的结果将被过滤 |
-| 最大输入长度 | `max_length` | `512` | CrossEncoder 输入文本最大 token 数 |
+在 SLM 条件下，几乎没得选！需要同时满足：**开源**、**离线**、**中文**，最终选择 `bge-reranker-v2-m3`。
 
-### 2.5 监控指标
+### 4.6 配置解释
 
-系统通过 Prometheus 指标 `RERANK_DURATION` 记录每次重排序的耗时和状态（`success` / `error`），便于性能监控和告警。
+> - `embedding_model`：本地 Embedding 模型路径，首次运行会自动下载到该目录，后续完全离线使用
+> - `chunk_size` / `chunk_overlap`：控制文档分块策略，500 字符分块 + 100 字符重叠是推荐基线
+> - `top_k`：向量检索返回的候选文档数量，Rerank 会在此基础上进一步精排
+> - `batch_size`：批量向量化时的批大小，边缘设备建议降低到 16 以节省内存
+> - `rerank_model_path`：Rerank 模型路径，留空则跳过重排序步骤
+> - `rerank_threshold`：Rerank 分数阈值（0~1），低于此分数的结果将被过滤
 
----
+### 4.7 知识 Chunk 拆分调优
 
-## 3. 知识库系统 (RAG Knowledge Base)
+| 调优项                   | 推荐范围          | 调优经验                          | 风险提示                       |
+|-----------------------|---------------|-------------------------------|----------------------------|
+| chunk 大小              | 300~800 token | 先用 512 token 作为基线，再按召回质量微调    | 过小易语义缺失，过大易主题混杂            |
+| 重叠大小                  | 10%~20%       | 从 64 token 起步，关注跨段问答命中率变化     | 过低会断上下文，过高会引入冗余与重复召回       |
+| 人工 chunk border（新增支持） | 标题/步骤/代码块边界   | 先规则切分再模型切分，确保结构化知识完整落入单 chunk | 规则过多会导致 chunk 分布不均，影响批处理效率 |
 
-### 3.1 系统架构
+> **优化说明**：更小的 chunk、更少的 top_k、更高的阈值，以牺牲少量召回率换取更快的响应速度和更低的内存占用。
 
-```mermaid
-graph TB
-    subgraph 知识入库流程
-        A1[原始文档] --> A2[TextChunker<br/>文本分块]
-        A2 --> A3[VectorEmbedder<br/>向量化]
-        A3 --> A4[ChromaDB<br/>持久化存储]
-    end
+## 五、分级路由：意图分类 + 智能路由
 
-    subgraph 知识检索流程
-        B1[用户 Query] --> B2[VectorEmbedder<br/>查询向量化]
-        B2 --> B3[ChromaDB<br/>向量相似度搜索]
-        B3 --> B4[相似度阈值过滤]
-        B4 --> B5[CrossEncoder<br/>Rerank 重排序]
-        B5 --> B6[去重 & 构建结果]
-    end
+### 5.1 设计目标
 
-    subgraph 存储结构
-        C1[Collection: knowledge_rocketmq]
-        C2[Collection: knowledge_kubernetes]
-        C3[Collection: knowledge_...]
-    end
+**降低 LLM 处理耗时，增加推理准确性。**
 
-    A4 --> C1
-    A4 --> C2
-    B3 --> C1
-    B3 --> C2
-```
+| 对比维度     | 传统做法：Agent + 大模型               | 本项目做法：小模型 + Agent              |
+|----------|--------------------------------|--------------------------------|
+| **处理路径** | 大多数请求都进入大模型意图理解与决策             | 先经分级路由独立模块，规则匹配优先，复杂场景再回退SLM   |
+| **典型问题** | 每次都触发长 Prompt + 长推理链，排队与推理时延叠加 | 把高成本推理从主链路移到Agent控制，仅在必要时访问SLM |
+| **耗时特征** | 整体偏 **秒级**，高峰时抖动明显             | 常见请求可达 **毫秒级~百毫秒级**，平均处理耗时显著下降 |
 
-### 3.2 核心组件
+> **结论**：分级路由不只是"分类逻辑"，而是独立的性能治理模块——通过"规则快速命中 + SLM 兜底回退"
+> 的组合，将处理时延从默认秒级路径收敛为可控的低时延路径。
 
-#### 3.2.1 ChromaKnowledgeStore（知识库存储核心）
+### 5.2 A/D 两级分类
 
-**文件位置**：`nanobot/knowledge/store.py`
+#### A 类 — 知识问答
 
-这是整个知识库系统的核心类，基于 **ChromaDB** 向量数据库实现，提供完整的知识 CRUD 和语义检索能力。
+纯知识性问题，交由 LLM 直接回答。通过 **关键词模式匹配** 快速识别。
 
-**核心能力**：
+常见触发词：`是什么`、`什么是`、`介绍一下`、`解释一下`、`有什么区别`、`原理`、`what is`、`explain`
 
-| 能力 | 方法 | 说明 |
-|------|------|------|
-| 知识入库 | `add_knowledge()` | 文本分块 → 向量化 → 批量存储到 Chroma |
-| 语义检索 | `search_knowledge(query=...)` | 向量相似度搜索 + Rerank 重排序 |
-| 元数据过滤 | `search_knowledge(domain=..., category=...)` | 基于领域/分类/标签的精确过滤 |
-| 知识更新 | `update_knowledge()` | 删除旧向量 → 重新分块向量化 → 存储 |
-| 知识删除 | `delete_knowledge()` | 删除所有关联的向量分块 |
-| 知识导出 | `export_knowledge()` | 按 item_id 分组合并分块，导出 JSON |
+#### D 类 — 操作/排查
 
-**数据模型** (`KnowledgeItem`)：
+需要执行具体操作的请求，进入 Skill 执行流程。采用 **两阶段匹配** 策略：
 
-```python
-@dataclass
-class KnowledgeItem:
-    id: str              # 唯一标识 (格式: {domain}_{timestamp})
-    domain: str          # 领域 (如 "rocketmq", "kubernetes")
-    category: str        # 分类 (如 "troubleshooting", "configuration")
-    title: str           # 标题
-    content: str         # 内容
-    tags: List[str]      # 标签列表
-    source: str          # 来源 ("user" / "system")
-    priority: int        # 优先级 (1-5)
-    source_url: str      # 原文档链接
-    file_path: str       # 本地文件路径
-    preview_available: bool  # 是否可预览
-```
+- **阶段一**：规则匹配（RuleMatchEngine）— 毫秒级
+- **阶段二**：LLM 分类 — 回退策略
 
-#### 3.2.2 VectorEmbedder（文本向量化器）
+### 5.3 阶段一：规则匹配
 
-**文件位置**：`nanobot/knowledge/vector_embedder.py`
+> 📁 `nanobot/rca/rule_engine.py`
 
-基于 `sentence-transformers` 库实现本地文本向量化，**无需外部 API 调用**：
+- **配置化规则**：`{skill_name: [regex_pattern, ...]}` 格式
+- **毫秒级响应**：预编译正则表达式
+- **动态管理**：运行时 `add_rule` / `remove_rules`
 
-- 使用 `SentenceTransformer` 加载本地 Embedding 模型（如 `BAAI/bge-large-zh-v1.5`）
-- 支持单文本 (`embed_text`) 和批量 (`embed_batch`) 向量化
-- 空文本自动返回零向量，保证系统健壮性
-- 模型加载失败抛出 `EmbeddingModelError`，提供详细的排查指引
-
-#### 3.2.3 TextChunker（文本分块器）
-
-**文件位置**：`nanobot/knowledge/text_chunker.py`
-
-基于 `langchain_text_splitters.RecursiveCharacterTextSplitter` 实现智能文本分块：
-
-**分隔符优先级**（从高到低）：
-
-```
-CHUNK_BOUNDARY（手动标记）> 代码块 > 段落(\n\n) > 中文句号/问号/感叹号
-> 英文句号/问号 > 中文逗号 > 英文逗号 > 空格 > 字符级分割
-```
-
-**关键特性**：
-- 支持 `CHUNK_BOUNDARY` 手动分块标记，允许精确控制分块边界
-- 中文友好的分隔符配置，优先在语义完整的边界处分块
-- 自动过滤内容过少（< 10 字符）的碎片分块
-- 短文本（≤ chunk_size）不分块，直接返回
-
-#### 3.2.4 IntentRoutingStore（意图路由向量索引）
-
-**文件位置**：`nanobot/knowledge/intent_routing_store.py`
-
-独立于知识库的向量索引系统，专门用于 **工具和 Skill 的意图路由检索**：
-
-| 索引类型 | Collection 名称 | 数据来源 | 用途 |
-|---------|----------------|---------|------|
-| 工具索引 | `ops_tools` | ToolRegistry + MCP Server | 根据用户意图匹配最相关的工具 |
-| Skill 索引 | `skills` | RCASkillLoader 加载的 YAML Skill | 根据故障描述匹配最相关的排障 Skill |
-
-**MCP 工具发现**：支持通过 SSE 协议动态从 MCP Server 拉取工具列表，自动向量化入库。
-
-### 3.3 检索流程详解
-
-语义检索的完整流程（`search_knowledge` 方法）：
-
-```mermaid
-sequenceDiagram
-    participant User as 用户
-    participant Store as ChromaKnowledgeStore
-    participant Embedder as VectorEmbedder
-    participant Chroma as ChromaDB
-    participant Reranker as CrossEncoder
-
-    User->>Store: search_knowledge(query, domain, top_k)
-    Store->>Embedder: embed_text(query)
-    Embedder-->>Store: query_vector (768维)
-
-    loop 遍历所有相关 Collection
-        Store->>Chroma: collection.query(query_vector, n_results=top_k)
-        Chroma-->>Store: {ids, documents, metadatas, distances}
-    end
-
-    Store->>Store: L2距离 → 相似度分数转换<br/>similarity = 1/(1+distance)
-    Store->>Store: 相似度阈值过滤
-    Store->>Store: 按相似度降序排序，取 Top-K
-
-    Store->>Reranker: _rerank_results(query, candidates)
-    Reranker-->>Store: 重排序 + 阈值过滤后的结果
-
-    Store->>Store: 按 item_id 去重
-    Store->>Store: 构建 KnowledgeItem 列表
-    Store-->>User: List[KnowledgeItem]
-```
-
-### 3.4 配置体系
-
-所有 RAG 相关配置集中在 `RAGConfig` 数据类中（`nanobot/knowledge/rag_config.py`），支持环境变量和配置文件两种方式：
-
-| 配置项 | 环境变量 | 默认值 | 说明 |
-|--------|---------|--------|------|
-| `embedding_model` | `NANOBOT_EMBEDDING_MODEL` | `""` | Embedding 模型名称/路径 |
-| `chunk_size` | `NANOBOT_CHUNK_SIZE` | `500` | 分块大小（字符数） |
-| `chunk_overlap` | `NANOBOT_CHUNK_OVERLAP` | `100` | 分块重叠大小 |
-| `top_k` | `NANOBOT_TOP_K` | `5` | 检索返回结果数 |
-| `similarity_threshold` | `NANOBOT_SIMILARITY_THRESHOLD` | `0.0` | 最低相似度阈值 |
-| `rerank_model_path` | `NANOBOT_RERANK_MODEL_PATH` | `""` | Rerank 模型路径 |
-| `rerank_threshold` | `NANOBOT_RERANK_THRESHOLD` | `0.8` | Rerank 过滤阈值 |
-
----
-
-## 4. 意图分类系统
-
-### 4.1 设计理念
-
-意图分类系统采用 **A/D 两级分类** + **两阶段匹配**的设计：
-
-- **A 类（知识问答）**：纯知识性问题，交由 LLM 直接回答
-- **D 类（操作/排查请求）**：需要执行具体操作的请求，进入 Skill 执行流程
-
-```mermaid
-flowchart TD
-    A[用户输入] --> B{A 类关键词匹配?}
-    B -->|是| C[A 类: 知识问答<br/>→ LLM 直接回答]
-    B -->|否| D[D 类: 操作/排查]
-
-    D --> E{阶段一: 规则匹配<br/>RuleMatchEngine}
-    E -->|命中| F[返回匹配的 Skill<br/>confidence=1.0]
-    E -->|未命中| G{阶段二: LLM 分类}
-    G -->|命中已知 Skill| H[返回 LLM 选择的 Skill<br/>confidence=0.7]
-    G -->|unsupported| I[未匹配<br/>confidence=0.0]
-
-    style C fill:#e1f5fe
-    style F fill:#c8e6c9
-    style H fill:#fff9c4
-    style I fill:#ffcdd2
-```
-
-### 4.2 A 类意图识别
-
-通过**关键词模式匹配**快速识别知识问答类请求：
-
-```python
-_A_CLASS_PATTERNS = [
-    "是什么", "什么是", "介绍一下", "解释一下",
-    "有什么区别", "原理", "概念", "怎么理解",
-    "what is", "explain", "describe", "definition",
-    "difference between",
-]
-```
-
-匹配逻辑简单高效：遍历关键词列表，任一关键词出现在用户查询中即判定为 A 类。
-
-### 4.3 D 类意图 — 阶段一：规则匹配
-
-**文件位置**：`nanobot/rca/rule_engine.py`
-
-`RuleMatchEngine` 是一个轻量级的正则匹配引擎：
-
-- **配置化规则**：规则以 `{skill_name: [regex_pattern, ...]}` 格式配置，无需修改代码
-- **毫秒级响应**：预编译正则表达式，匹配速度极快
-- **动态管理**：支持运行时 `add_rule` / `remove_rules`
-
-```python
-# 规则配置示例
-rules_config = {
-    "check_pod_status": ["查看.*pod", "pod.*状态", "pod.*running"],
-    "check_disk_usage": ["磁盘.*满", "disk.*full", "空间不足"],
+```json
+{
+  "check_pod_status": [
+    "查看.*pod",
+    "pod.*状态"
+  ],
+  "check_disk_usage": [
+    "磁盘.*满",
+    "disk.*full"
+  ]
 }
 ```
 
-### 4.4 D 类意图 — 阶段二：LLM 分类
+### 5.4 阶段二：SLM 分类
 
 当规则匹配未命中时，回退到 LLM 快速分类：
 
-1. 将所有已注册的 Skill 名称列表构建为 Prompt
-2. 让 LLM 从列表中选择最匹配的 Skill，或返回 `"unsupported"`
-3. 对 LLM 返回结果进行精确匹配和忽略大小写匹配校验
+1. **构建 Prompt**：将所有已注册的 Skill 名称列表构建为 Prompt
+2. **LLM 选择**：让 LLM 从列表中选择最匹配的 Skill，或返回 `"unsupported"`
+3. **结果校验**：精确匹配 + 忽略大小写匹配校验
 
-**关键约束**：LLM 在此阶段**仅用于分类**，不参与执行、不生成步骤、不推理根因。
+> ⚠️ **关键约束**：LLM 在此阶段 **仅用于分类**，不参与执行、不生成步骤、不推理根因。
 
-### 4.5 分类结果数据结构
+### 5.5 路由效果验证
 
-```python
-@dataclass
-class IntentResult:
-    intent_type: str        # "A"（知识问答）或 "D"（操作/排查）
-    skill_name: str | None  # 匹配到的 Skill 名称（仅 D 类有值）
-    match_method: str | None  # "rule" / "llm" / None
-    confidence: float       # 置信度 (0.0 ~ 1.0)
-```
-
-### 4.6 监控指标
-
-通过 `RCA_INTENT_CLASSIFY_TOTAL` Prometheus 指标按 `method` 标签（`rule` / `llm`）统计分类次数，便于分析规则覆盖率和 LLM 回退频率。
+> **命令解释**：
+> - 第一条消息包含触发词"是什么"，会被规则引擎快速识别为 A 类（知识问答），直接走 RAG + LLM 回答路径
+> - 第二条消息匹配规则 `"查看.*pod"`，被规则引擎命中为 D 类（操作/排查），进入 `check_pod_status` Skill 执行流程
+> - `--logs` 参数会输出运行时日志，可以看到路由决策的完整过程：规则匹配 → LLM 分类 → Skill 选择
 
 ---
 
-## 5. RCA 根因分析引擎
+## 六、重新设计 Skill：从 Tool 到 SOP
 
-### 5.1 整体设计
+### 6.1 设计理念
 
-RCA（Root Cause Analysis）引擎是 Aether 的核心排障能力，采用 **Skill 编排 + 分步执行** 的架构：
+**Tool → Atomic Skill → SOP Skill**
 
-```mermaid
-graph TB
-    subgraph Skill 定义层
-        S1[Atomic Skill<br/>原子技能 - 单工具封装]
-        S2[SOP Skill<br/>标准操作流程 - 多步骤编排]
-    end
+| 对比维度     | 传统做法：大模型 plan + exec plan | 本项目做法：Embedding Skill + 分步骤执行     |
+|----------|---------------------------|-----------------------------------|
+| **处理路径** | 注入到模型提示词                  | SOP Skill = 多个 Atomic Skill       |
+| **典型问题** | 控制可见性/允许列表；加载与过滤；安装越多越慢   | SLM 执行 Skill 变成可能                 |
+| **耗时特征** | 安装越多越慢                    | 取决于单步骤耗时，每个步骤 = Atomic Skill，耗时可控 |
 
-    subgraph 加载与路由
-        L1[RCASkillLoader<br/>YAML 加载 + 热加载]
-        L2[RCARouter<br/>意图分类 → Skill 路由]
-    end
+> **结论**：分步骤执行将 SLM 执行 Skill 变成可能。但需要注意：
+> 1. 开源的 Skill 格式无法通用，需要转格式，升级、维护需要自动化工具支持
+> 2. 执行整体耗时偏大，分步骤后整体执行耗时变大，待优化
 
-    subgraph 执行引擎
-        E1[RCAEngine<br/>分步执行]
-        E2[StepContext<br/>上下文管理]
-        E3[SecurityGuard<br/>安全校验]
-    end
+### 6.2 Atomic Skill（原子技能）
 
-    subgraph 步骤类型
-        T1[skill 步骤<br/>调用 Atomic Skill]
-        T2[llm 步骤<br/>LLM 总结/分析]
-        T3[tool 步骤<br/>直接工具调用]
-        T4[root_cause_definition<br/>确定性规则引擎]
-    end
-
-    subgraph 输出
-        O1[RCAReport<br/>JSON / Markdown]
-    end
-
-    S1 --> L1
-    S2 --> L1
-    L1 --> L2
-    L2 --> E1
-    E1 --> E2
-    E1 --> E3
-    E1 --> T1
-    E1 --> T2
-    E1 --> T3
-    E1 --> T4
-    E1 --> O1
-```
-
-### 5.2 Skill 类型体系
-
-#### Atomic Skill（原子技能）
-
-对**单次工具调用**的结构化封装，本身不包含业务逻辑：
+单工具封装，是最小的执行单元：
 
 ```yaml
-# 示例：check_disk_usage.yaml
-name: check_disk_usage
-version: "1.0"
-type: atomic
-description: "检查磁盘使用率"
-input_schema:
-  node_name: string
-output_schema:
-  disk_usage: number
-  mount_point: string
-execution:
-  steps:
-    - tool: check_disk_usage  # 绑定 ToolRegistry 中的工具
+skill:
+  name: get_rocketmq_pods
+  version: "1.0"
+  type: atomic
+  description: |
+    [内部原子技能] 直接调用 kubectl_get_pods 工具获取 Pod 列表。
+  input_schema:
+    namespace: string
+    component_keyword: string
+    exclude_keywords: string
+  output_schema:
+    pods: list
+    total: int
+  execution:
+    steps:
+      - id: fetch
+        type: tool
+        tool: kubectl_get_pods
+        input:
+          namespace: "{{namespace}}"
+          component_keyword: "{{component_keyword}}"
+          exclude_keywords: "{{exclude_keywords}}"
 ```
 
-#### SOP Skill（标准操作流程）
+### 6.3 SOP Skill（标准操作流程）
 
-编排多个 Atomic Skill + 规则引擎 + LLM 总结的**完整排障工作流**：
+多步骤编排，将多个 Atomic Skill 和 LLM 调用串联为完整的排障流程：
 
 ```yaml
-# 示例：disk_full_diagnosis.yaml
-name: disk_full_diagnosis
-version: "1.0"
-type: sop
-description: "磁盘满故障诊断"
-input_schema:
-  node_name: string
-steps:
-  - id: check_disk
-    type: skill
-    skill: check_disk_usage
-    input:
-      node_name: "{{node_name}}"
+skill:
+  name: resolve_and_get_rocketmq_pods
+  version: "1.0"
+  type: sop
+  description: |
+    查询 RocketMQ 组件的 Pod 列表、进程状态、服务运行信息。
+    自动将用户输入的组件简称映射为 Kubernetes 中的实际关键字。
+  input_schema:
+    param1: string         # 用户输入的原始文本
+  output_schema:
+    pods: list
+    total: int
+  execution:
+    steps:
+      - id: resolve_component
+        type: llm
+        input:
+          param1: "{{user_input}}"
+        prompt: |
+          你是一个信息抽取器，只做字段提取，不做解释。
+          【任务】从用户输入中提取3个字段，并输出JSON：
+          - namespace
+          - component_keyword
+          - exclude_keywords
 
-  - id: determine_cause
-    type: root_cause_definition
-    logic:
-      - when: { disk_usage: ">90" }
-        root_cause: "磁盘使用率超过 90%"
-        solution: "清理日志文件或扩容磁盘"
+          【组件枚举（只能选一个）】
+          broker -> ocloud-tdmq-rocketmq5-broker
+          namesrv -> ocloud-tdmq-rocketmq5-namesrv
+          proxy -> ocloud-tdmq-rocketmq5-proxy
+          manager -> ocloud-tdmq-rocketmq-manager
 
-  - id: summary
-    type: llm
-    prompt: "根据检查结果生成诊断报告..."
-    input_from:
-      - check_disk.disk_usage
-      - determine_cause.root_cause
+          【规则】
+          1. component_keyword 必须从上面枚举中选择一个
+          2. namespace 如果没有，填 ""
+          3. exclude 如果没有，填 ""
+          4. 只输出 JSON，不要任何解释
+
+          【输出格式】
+          {"namespace":"","component_keyword":"","exclude_keywords":""}
+        output_schema:
+          component_keyword: string
+          exclude_keywords: string
+          namespace: string
+
+      - id: get_rocketmq_pods
+        type: skill
+        skill: get_rocketmq_pods
+        input:
+          namespace: "{{resolve_component.namespace}}"
+          component_keyword: "{{resolve_component.component_keyword}}"
+          exclude_keywords: "{{resolve_component.exclude_keywords}}"
+        output_schema:
+          pods: list
+          total: int
 ```
 
-### 5.3 执行引擎 (RCAEngine)
+### 6.4 步骤执行引擎
 
-**文件位置**：`nanobot/rca/engine.py`
+每个步骤通过入参、出参相互关联。前一步骤的输出作为后一步骤的输入，形成链式调用。
 
-RCAEngine 按 Skill YAML 中定义的 steps 列表**顺序执行**排障工作流：
+| 步骤类型                      | 执行方式                                      | 说明                     |
+|---------------------------|-------------------------------------------|------------------------|
+| **skill**                 | 查找 Atomic Skill → 解析输入 → 安全校验 → 执行 → 校验输出 | 通过 Atomic Skill 间接调用工具 |
+| **tool**                  | 解析输入 → 安全校验 → ToolRegistry 直接执行           | 直接调用 ToolRegistry 中的工具 |
+| **llm**                   | 解析引用 → 渲染 Prompt → 单轮 SLM 调用 → 解析 JSON    | 独立的 LLM 调用，最小上下文       |
+| **root_cause_definition** | 收集前置步骤输出 → 遍历规则 → 条件匹配 → 输出根因             | 确定性规则引擎，不依赖 LLM        |
 
-#### 四种步骤类型的执行逻辑
+### 6.5 报告生成
 
-| 步骤类型 | 执行方式 | 说明 |
-|---------|---------|------|
-| `skill` | 查找 Atomic Skill → 解析输入 → 安全校验 → ToolRegistry 执行 → 校验输出 | 通过 Atomic Skill 间接调用工具 |
-| `tool` | 解析输入 → 安全校验 → ToolRegistry 直接执行 | 直接调用 ToolRegistry 中的工具 |
-| `llm` | 解析引用 → 渲染 Prompt → 单轮 SLM 调用 → 解析 JSON 输出 | 独立的 LLM 调用，最小上下文 |
-| `root_cause_definition` | 收集前置步骤输出 → 遍历规则 → 条件匹配 → 输出根因和建议 | 确定性规则引擎，不依赖 LLM |
+Skill 执行完成后，自动生成结构化排障报告，包含以下模块：
 
-#### 步骤间数据传递
+| 模块           | 数据来源                                 |
+|--------------|--------------------------------------|
+| 📝 **故障摘要**  | 从 LLM 总结步骤的 `summary` 字段提取           |
+| 🔍 **根因判断**  | 从 `root_cause_definition` 或 LLM 步骤提取 |
+| 📊 **置信度**   | 成功步骤数 / 总步骤数                         |
+| 🛤️ **执行轨迹** | 每个步骤的 ID、类型、状态和耗时                    |
+| 🔧 **修复建议**  | 从 `solution` 和 `recommendation` 字段汇总 |
 
-通过 `StepContext` 管理步骤间的数据流：
+---
 
-```mermaid
-flowchart LR
-    subgraph StepContext
-        I[外部输入<br/>_inputs]
-        G[全局上下文<br/>_context]
-        O1[step1 输出]
-        O2[step2 输出]
-        O3[step3 输出]
-    end
+## 七、LoRA 微调：将小模型调教为 RocketMQ 专家
 
-    S1["step2.input:<br/>{pod_list: '{{step1.pods}}'}"] --> |模板解析| O1
-    S2["step3.input_from:<br/>['step2.root_cause']"] --> |引用解析| O2
-```
+### 7.1 微调流程
 
-**两种引用方式**：
-- `input` 模板映射：`{"key": "{{stepId.field}}"}`，支持混合文本
-- `input_from` 直接引用：`["step_id.field_name"]`，保持原始类型
-
-**变量查找优先级**：`extra_vars` > `_inputs`（外部输入）> `_context`（全局上下文）
-
-### 5.4 路由控制器 (RCARouter)
-
-**文件位置**：`nanobot/rca/router.py`
-
-RCARouter 集成意图分类器，实现完整的请求路由：
+通过定向 LoRA 微调，将通用小模型适配为 RocketMQ 领域专家。
 
 ```mermaid
 flowchart TD
-    A[FaultInput<br/>故障输入] --> B[IntentClassifier<br/>意图分类]
+    A1["以往工单"] --> B["人工 Review"]
+    A2["固定的 RocketMQ 社区文档"] --> B
+    A3["自动生成训练数据"] --> B
+    B --> C["训练"]
+    C --> D["导出量化模型"]
+    D --> E["导出 GGUF（供 Ollama 使用）"]
 
-    B -->|A 类| C[LLM 直接回答<br/>知识问答]
-    B -->|D 类 + 有 Skill| D[RCAEngine 执行<br/>匹配的 Skill]
-    B -->|D 类 + 无 Skill| E{RAG 向量检索<br/>IntentRoutingStore}
+    subgraph S1["数据集准备"]
+        A1
+        A2
+        A3
+    end
 
-    E -->|检索到 Skill| F[Skill 过滤<br/>filter_redundant_atomic_skills]
-    F --> G[距离排序<br/>选择最优 Skill]
-    G --> D
-
-    E -->|未检索到| H{关键词回退匹配}
-    H -->|命中| D
-    H -->|未命中| I[降级报告<br/>建议人工介入]
-
-    C --> J[RCAReport]
-    D --> J
-    I --> J
-```
-
-**Skill 过滤机制**（`skill_filter.py`）：当 RAG 检索同时返回 SOP Skill 和其内部引用的 Atomic Skill 时，自动移除冗余的 Atomic Skill，避免重复执行。
-
-### 5.5 安全校验层 (SecurityGuard)
-
-**文件位置**：`nanobot/rca/security.py`
-
-所有工具调用和命令执行都经过双重安全校验：
-
-| 校验类型 | 机制 | 说明 |
-|---------|------|------|
-| **工具白名单** | `DEFAULT_WHITELIST` + 动态扩展 | 只允许白名单内的工具执行 |
-| **命令黑名单** | 预编译正则模式匹配 | 拦截 `rm -rf`、`shutdown`、`fork bomb` 等危险命令 |
-
-### 5.6 Skill 加载与热加载
-
-**文件位置**：`nanobot/rca/loader.py`
-
-`RCASkillLoader` 负责 Skill 的全生命周期管理：
-
-1. **启动加载**：递归扫描 Skill 目录，加载所有 `.yaml` / `.yml` 文件
-2. **格式校验**：通过 `parser.py` 进行严格的 YAML 结构校验
-3. **类型区分**：按 `type` 字段自动区分 Atomic / SOP Skill
-4. **RAG 注册**：加载成功后自动注册到 `IntentRoutingStore` 向量索引
-5. **热加载**：基于 `watchdog` 库监听文件系统变更，支持运行时新增/修改/删除 Skill
-
-### 5.7 报告生成
-
-**文件位置**：`nanobot/rca/report.py`
-
-`RCAReport` 支持 **JSON** 和 **Markdown** 两种输出格式：
-
-- **故障摘要**：从 LLM 总结步骤的 `summary` 字段提取
-- **根因判断**：从 `root_cause_definition` 步骤或 LLM 步骤提取
-- **置信度**：基于执行步骤的成功率计算（`成功步骤数 / 总步骤数`）
-- **执行轨迹**：记录每个步骤的 ID、类型、状态和耗时
-- **修复建议**：从 `solution` 和 `recommendation` 字段汇总
-
----
-
-## 6. 模块协作关系
-
-### 6.1 完整请求处理流程
-
-```mermaid
-sequenceDiagram
-    participant User as 用户
-    participant Router as RCARouter
-    participant Classifier as IntentClassifier
-    participant RuleEngine as RuleMatchEngine
-    participant RAG as IntentRoutingStore
-    participant Engine as RCAEngine
-    participant Loader as RCASkillLoader
-    participant Security as SecurityGuard
-    participant Tool as ToolRegistry
-    participant LLM as LLMProvider
-    participant Report as ReportGenerator
-
-    User->>Router: route(FaultInput)
-    Router->>Classifier: classify(query)
-
-    alt A 类意图
-        Classifier-->>Router: IntentResult(type="A")
-        Router->>LLM: chat(知识问答 Prompt)
-        LLM-->>Router: 回答文本
-        Router-->>User: RCAReport(知识问答)
-    else D 类意图 - 规则命中
-        Classifier->>RuleEngine: match(query)
-        RuleEngine-->>Classifier: skill_name
-        Classifier-->>Router: IntentResult(type="D", skill="xxx")
-        Router->>Loader: get_skill(skill_name)
-        Loader-->>Router: SOPSkill
-        Router->>Engine: execute(skill, inputs)
-
-        loop 遍历 steps
-            Engine->>Security: validate_tool_call()
-            Engine->>Tool: execute(tool_name, params)
-            Tool-->>Engine: result
-        end
-
-        Engine->>Report: generate(context)
-        Report-->>Engine: RCAReport
-        Engine-->>User: RCAReport
-    else D 类意图 - RAG 检索
-        Classifier-->>Router: IntentResult(type="D", skill=None)
-        Router->>RAG: search_skills(query)
-        RAG-->>Router: 匹配结果
-        Router->>Engine: execute(matched_skill, inputs)
-        Engine-->>User: RCAReport
+    subgraph S2["训练与导出"]
+        C
+        D
+        E
     end
 ```
 
-### 6.2 核心模块依赖关系
+### 7.2 详细步骤
 
-```mermaid
-graph LR
-    A[RAGConfig] --> B[ChromaKnowledgeStore]
-    A --> C[IntentRoutingStore]
+#### 步骤一：数据集准备
 
-    D[VectorEmbedder] --> B
-    D --> C
-    E[TextChunker] --> B
-    E --> C
+1. **以往工单**：收集历史运维工单作为原始训练素材，覆盖实际故障场景
+2. **固定文档**：整合官方文档、最佳实践指南等结构化知识
+3. **自动生成训练数据**：基于模板生成多样化训练样本，扩充数据规模
 
-    F[CrossEncoder] --> B
+训练数据需要整理为标准的 JSONL 格式（每行一个 JSON 对象）：
 
-    G[RuleMatchEngine] --> H[IntentClassifier]
-    H --> I[RCARouter]
-    C --> I
-
-    J[RCASkillLoader] --> I
-    J --> C
-
-    K[RCAEngine] --> I
-    L[SecurityGuard] --> K
-    M[AuditLogger] --> K
-
-    N[ReportGenerator] --> K
-
-    style B fill:#e3f2fd,stroke:#1565c0
-    style K fill:#fce4ec,stroke:#c62828
-    style H fill:#f3e5f5,stroke:#7b1fa2
-    style F fill:#fff3e0,stroke:#e65100
+```jsonl
+{"instruction": "RocketMQ broker 启动失败怎么排查？", "input": "", "output": "1. 检查日志 store/logs/broker.log...\n2. 确认端口未被占用...\n3. 检查磁盘空间..."}
+{"instruction": "如何查看消费者组的消费进度？", "input": "", "output": "使用 mqadmin consumerProgress 命令..."}
 ```
 
-### 6.3 Prometheus 监控指标汇总
+#### 步骤二：人工 Review
 
-| 指标名称 | 类型 | 标签 | 说明 |
-|---------|------|------|------|
-| `RAG_QUERY_DURATION` | Histogram | operation, domain, status | 向量搜索耗时 |
-| `RAG_EMBEDDING_DURATION` | Histogram | operation | 向量化耗时 |
-| `RAG_QUERY_RESULTS_COUNT` | Histogram | operation, domain | 检索结果数量 |
-| `RAG_QUERY_TOTAL` | Counter | operation, domain, status | 检索总次数 |
-| `RERANK_DURATION` | Histogram | status | Rerank 重排序耗时 |
-| `RCA_EXECUTION_DURATION` | Histogram | skill_name, status | RCA 执行总耗时 |
-| `RCA_STEP_DURATION` | Histogram | step_type, status | 单步骤执行耗时 |
-| `RCA_EXECUTION_TOTAL` | Counter | skill_name, status | RCA 执行总次数 |
-| `RCA_INTENT_CLASSIFY_TOTAL` | Counter | method | 意图分类次数 |
-| `RCA_SKILL_MATCH_TOTAL` | Counter | matched | Skill 匹配次数 |
-| `RCA_SECURITY_REJECT_TOTAL` | Counter | tool_name | 安全拒绝次数 |
+对数据集进行质量审核、格式标准化和样本筛选，确保训练数据准确性和一致性。
+
+#### 步骤三：训练
+
+采用 LoRA / QLoRA 等参数高效微调技术，支持在本地设备（如 MacBook Pro M4）下定向训练。
+
+**方式一：使用 LlamaFactory 训练（推荐）**
+
+```bash
+# 安装 LlamaFactory
+git clone https://github.com/hiyouga/LLaMA-Factory.git
+cd LLaMA-Factory
+pip install -e ".[torch,metrics]"
+
+# 启动 Web UI 进行可视化训练配置
+llamafactory-cli webui
+
+```
+
+> **命令解释**：
+> - `llamafactory-cli webui`：启动 LlamaFactory 的 Web 训练界面，可以可视化配置训练参数（模型、数据集、LoRA rank、学习率等），适合快速实验
+> - `llamafactory-cli train`：使用 YAML 配置文件启动训练，适合批量化、可复现的训练流程
+> - LoRA 微调只更新少量参数（通常 < 1% 的模型参数），显存需求远低于全量微调
+
+**方式二：本地代码训练**
+
+```bash
+# 使用 transformers + peft 进行 LoRA 微调
+pip install transformers peft datasets accelerate bitsandbytes
+
+# 运行训练脚本
+python train_lora.py \
+  --model_name_or_path Qwen/Qwen2.5-1.5B-Instruct \
+  --dataset_path ./data/rocketmq_train.jsonl \
+  --output_dir ./output/qwen2.5-1.5b-rocketmq-lora \
+  --lora_rank 8 \
+  --lora_alpha 16 \
+  --num_train_epochs 3 \
+  --per_device_train_batch_size 4 \
+  --learning_rate 2e-4
+```
+
+> **命令解释**：
+> - `--lora_rank 8`：LoRA 的秩（rank），控制可训练参数量，8 是小模型的推荐值
+> - `--lora_alpha 16`：LoRA 的缩放因子，通常设为 rank 的 2 倍
+> - `--per_device_train_batch_size 4`：每个设备的训练批大小，内存不足时可降低到 1-2
+> - `--learning_rate 2e-4`：学习率，LoRA 微调推荐 1e-4 ~ 5e-4
+
+#### 步骤四：导出量化模型
+
+训练完成后导出量化模型，优化推理效率和资源占用。
+
+```bash
+# 合并 LoRA 权重到基础模型
+python -c "
+from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+base_model = AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct')
+lora_model = PeftModel.from_pretrained(base_model, './output/qwen2.5-1.5b-rocketmq-lora')
+merged_model = lora_model.merge_and_unload()
+merged_model.save_pretrained('./output/qwen2.5-1.5b-rocketmq-merged')
+"
+
+# 或使用 LlamaFactory 导出
+llamafactory-cli export examples/merge_lora/qwen2.5_lora_sft.yaml
+```
+
+> **命令解释**：
+> - `merge_and_unload()`：将 LoRA 适配器权重合并回基础模型，生成一个完整的独立模型，后续部署无需再加载 LoRA 适配器
+> - `llamafactory-cli export`：LlamaFactory 提供的一键导出命令，自动完成合并和保存
+
+#### 步骤五：导出 GGUF
+
+转换为 GGUF 格式，适配 Ollama 部署，实现低成本、易部署的小模型推理服务。
+
+```bash
+# 克隆 llama.cpp（包含 GGUF 转换工具）
+git clone https://github.com/ggerganov/llama.cpp.git
+cd llama.cpp
+
+# 安装 Python 依赖
+pip install -r requirements.txt
+
+# 将 HuggingFace 模型转换为 GGUF 格式
+python convert_hf_to_gguf.py \
+  ../output/qwen2.5-1.5b-rocketmq-merged \
+  --outfile ../output/qwen2.5-1.5b-rocketmq.gguf \
+  --outtype q4_k_m
+
+# 创建 Ollama Modelfile
+cat > ../output/Modelfile << 'EOF'
+FROM ./qwen2.5-1.5b-rocketmq.gguf
+
+PARAMETER temperature 0.5
+PARAMETER top_p 0.9
+PARAMETER num_ctx 4096
+
+SYSTEM """你是 Aether，一个专业的 RocketMQ 运维助手。你擅长排查 RocketMQ 相关的故障、解答配置问题、提供最佳实践建议。"""
+EOF
+
+# 使用 Ollama 创建自定义模型
+ollama create qwen2.5-rocketmq -f ../output/Modelfile
+
+# 验证微调模型
+ollama run qwen2.5-rocketmq "RocketMQ broker 启动失败怎么排查？"
+```
+
+> **命令解释**：
+> - `convert_hf_to_gguf.py`：llama.cpp 提供的转换脚本，将 HuggingFace 格式模型转换为 GGUF 格式
+> - `--outtype q4_k_m`：指定量化类型，`q4_k_m` 是 4-bit 量化的推荐选项，在精度和体积之间取得良好平衡
+> - `ollama create`：基于 Modelfile 创建自定义 Ollama 模型，Modelfile 中可以指定系统提示词、温度等参数
+> - `ollama run`：运行模型进行交互式对话，验证微调效果
 
 ---
 
-> **总结**：Aether 通过 **RAG 知识库 + CrossEncoder Rerank** 提供高精度的语义检索能力，通过 **A/D 两级意图分类** 实现智能请求路由，通过 **Skill 编排 + 分步执行引擎** 实现自动化根因分析。各模块松耦合、可配置、可监控，适合在资源受限的边缘环境中部署运行。
+## 九、总结
+
+### 9.1 核心优势
+
+| 优势                 | 说明                                                                    |
+|--------------------|-----------------------------------------------------------------------|
+| 💰 **1/5 成本运行/训练** | 基于 1~9B 级小模型设计，在 CPU / 低显存环境下即可运行，大幅降低部署门槛。知识增强策略替代大参数量，实现低成本运行、训练、迭代 |
+| 🎯 **更专业的领域能力**    | 通过领域知识增强和 RCA 技能编排，具备专业运维排障能力。结构化 Skill 体系确保推理结果可追溯、可解释、可复用           |
+
+### 9.2 经验总结
+
+| 经验               | 要点                                        |
+|------------------|-------------------------------------------|
+| **核心：领域数据质量**    | 真实有效的数据，直接决定 Agent 的准确性                   |
+| **小模型提示词优化**     | 完形填空式优化                                   |
+| **去掉业务无关的系统提示词** | 移除 `AGENTS.md`、`SOUL.md`、`USER.md` 等无关提示词 |
+
+### 9.3 后续方向
+
+| 方向                   | 说明                                                                         |
+|----------------------|----------------------------------------------------------------------------|
+| 🔗 **与其他主 Agent 打通** | 与企业现有 AI Agent、监控告警平台、运维中台等系统对接，形成智能运维闭环（如 TCS-Agent、TCE Cloud Mate）       |
+| 🧠 **源代码 RAG**       | 结合有版本的源代码，将源代码排查融入 SOP Skill                                               |
+| 💬 **多轮对话**          | 复杂排查场景需要多轮交互澄清问题。目前常规 Agent 利用大模型长上下文的能力保持对话连贯性的模式在小模型上完全跑不通——耗时超乎想象，幻觉是常态 |
+| 🧠 **记忆管理**          | 长期记忆与短期记忆的平衡，历史会话状态的存储与检索。当前策略：抛弃记忆，或将记忆上移到主 Agent                         |
+
+---
+
+*Aether — 用小模型做大事，让智能运维触手可及。*

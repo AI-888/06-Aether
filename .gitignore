@@ -19,3 +19,4 @@ models
 .*
 logs
 .agent
+llamaboard_cache
