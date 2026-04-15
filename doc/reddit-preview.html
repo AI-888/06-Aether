@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reddit Post Preview — SLM Agent on CPU</title>
+<style>
+  :root {
+    --reddit-orange: #ff4500;
+    --reddit-blue: #0079d3;
+    --reddit-dark: #1a1a1b;
+    --reddit-light-bg: #dae0e6;
+    --reddit-card-bg: #ffffff;
+    --reddit-border: #ccc;
+    --reddit-text: #222;
+    --reddit-meta: #787c7e;
+    --reddit-hover: #f6f7f8;
+    --gradient-1: linear-gradient(135deg, #ff4500 0%, #ff6b35 100%);
+    --gradient-2: linear-gradient(135deg, #0079d3 0%, #00a3ff 100%);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--reddit-light-bg);
+    color: var(--reddit-text);
+    line-height: 1.6;
+  }
+
+  /* Top Nav */
+  .top-nav {
+    background: var(--reddit-card-bg);
+    border-bottom: 1px solid var(--reddit-border);
+    padding: 0 20px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .top-nav .logo {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 700; font-size: 18px; color: var(--reddit-orange); text-decoration: none;
+  }
+  .top-nav .logo svg { width: 32px; height: 32px; }
+  .top-nav .search-bar { flex: 1; max-width: 600px; margin: 0 auto; position: relative; }
+  .top-nav .search-bar input {
+    width: 100%; padding: 8px 16px 8px 40px;
+    border: 1px solid var(--reddit-border); border-radius: 20px;
+    background: var(--reddit-hover); font-size: 14px; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .top-nav .search-bar input:focus { border-color: var(--reddit-blue); box-shadow: 0 0 0 2px rgba(0,121,211,0.15); }
+  .top-nav .search-bar .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--reddit-meta); }
+
+  /* Layout */
+  .main-container {
+    max-width: 1200px; margin: 20px auto;
+    display: grid; grid-template-columns: 1fr 312px; gap: 24px; padding: 0 24px;
+  }
+
+  /* Post Card */
+  .post-card {
+    background: var(--reddit-card-bg);
+    border: 1px solid var(--reddit-border); border-radius: 4px;
+    overflow: hidden; animation: fadeInUp 0.5s ease-out;
+  }
+  .post-inner { display: flex; }
+
+  /* Vote */
+  .vote-sidebar {
+    width: 40px; background: var(--reddit-hover);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 12px 4px; gap: 4px; flex-shrink: 0;
+  }
+  .vote-btn {
+    background: none; border: none; cursor: pointer; padding: 4px;
+    border-radius: 4px; color: var(--reddit-meta); transition: all 0.15s; font-size: 18px;
+  }
+  .vote-btn:hover { background: rgba(0,0,0,0.05); }
+  .vote-btn.up:hover, .vote-btn.up.active { color: var(--reddit-orange); }
+  .vote-btn.down:hover, .vote-btn.down.active { color: #7193ff; }
+  .vote-count { font-weight: 700; font-size: 13px; color: var(--reddit-dark); }
+
+  .post-content { flex: 1; padding: 8px 16px 8px 8px; min-width: 0; }
+
+  /* Meta */
+  .post-meta {
+    font-size: 12px; color: var(--reddit-meta); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  }
+  .subreddit-link { font-weight: 700; color: var(--reddit-dark); text-decoration: none; }
+  .subreddit-link:hover { text-decoration: underline; }
+  .post-author { color: var(--reddit-blue); text-decoration: none; }
+  .flair {
+    display: inline-block; padding: 1px 8px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; margin-left: 4px;
+  }
+  .flair-project { background: #e8f5e9; color: #2e7d32; }
+  .flair-oc { background: #e3f2fd; color: #1565c0; }
+
+  .awards-bar { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .award {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 12px; font-size: 11px;
+    background: #f0f0f0; color: var(--reddit-meta);
+  }
+
+  .post-title {
+    font-size: 20px; font-weight: 600; line-height: 1.3;
+    margin-bottom: 12px; color: var(--reddit-dark);
+  }
+
+  .tldr-box {
+    background: linear-gradient(135deg, #fff3e0 0%, #fff8e1 100%);
+    border-left: 4px solid #ff9800; padding: 12px 16px;
+    border-radius: 0 8px 8px 0; margin-bottom: 16px; font-size: 14px;
+  }
+  .tldr-box strong { color: #e65100; }
+
+  /* Section headers */
+  .post-body h2 {
+    font-size: 18px; font-weight: 700; color: var(--reddit-dark);
+    margin: 28px 0 12px 0; padding-bottom: 6px;
+    border-bottom: 2px solid var(--reddit-light-bg);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-icon {
+    width: 24px; height: 24px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #fff; flex-shrink: 0;
+  }
+  .post-body p { font-size: 14px; margin-bottom: 10px; color: #333; }
+  .post-body ul, .post-body ol { margin: 8px 0 12px 24px; font-size: 14px; }
+  .post-body li { margin-bottom: 4px; }
+  .post-body blockquote {
+    border-left: 3px solid var(--reddit-blue); padding: 8px 16px;
+    margin: 12px 0; background: #f0f7ff; border-radius: 0 6px 6px 0;
+    font-size: 13px; color: #444; font-style: italic;
+  }
+  .post-body hr {
+    border: none; height: 2px;
+    background: linear-gradient(90deg, transparent, #ddd, transparent);
+    margin: 24px 0;
+  }
+  .post-body code:not(.code-block code) {
+    background: #f0f0f0; padding: 1px 6px; border-radius: 3px;
+    font-size: 12.5px; font-family: 'SF Mono', 'Fira Code', Consolas, monospace; color: #c7254e;
+  }
+
+  /* Tables */
+  .table-wrapper { overflow-x: auto; margin: 12px 0; border-radius: 8px; border: 1px solid #e0e0e0; }
+  .post-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .post-body thead th {
+    background: linear-gradient(135deg, #f5f5f5, #eee); padding: 10px 14px;
+    text-align: left; font-weight: 700; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.3px; color: #555;
+    border-bottom: 2px solid #ddd; white-space: nowrap;
+  }
+  .post-body td { padding: 8px 14px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  .post-body tbody tr:hover { background: #fafafa; }
+  .post-body tbody tr:last-child td { border-bottom: none; }
+
+  /* Code blocks */
+  .code-block {
+    background: #1e1e1e; color: #d4d4d4; border-radius: 8px;
+    margin: 12px 0; overflow: hidden; font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  .code-header {
+    background: #2d2d2d; padding: 6px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #3e3e3e;
+  }
+  .code-lang { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .code-copy-btn {
+    background: none; border: 1px solid #555; color: #aaa;
+    padding: 2px 10px; border-radius: 4px; font-size: 11px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .code-copy-btn:hover { background: #444; color: #fff; border-color: #777; }
+  .code-block pre {
+    padding: 14px; overflow-x: auto; line-height: 1.5;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  }
+
+  /* ASCII diagram */
+  .ascii-diagram {
+    background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px;
+    padding: 16px; margin: 12px 0; overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 12px; line-height: 1.4; color: #333; white-space: pre;
+  }
+
+  /* Highlight box */
+  .highlight-box {
+    background: linear-gradient(135deg, #e8f5e9, #f1f8e9);
+    border: 1px solid #c8e6c9; border-radius: 8px;
+    padding: 14px 18px; margin: 14px 0; font-size: 14px;
+  }
+  .highlight-box.blue { background: linear-gradient(135deg, #e3f2fd, #e8eaf6); border-color: #bbdefb; }
+
+  /* Pain points */
+  .pain-point { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-size: 14px; }
+  .pain-point .emoji { font-size: 16px; flex-shrink: 0; }
+
+  /* Post actions */
+  .post-actions { display: flex; gap: 4px; padding: 4px 0 8px 0; flex-wrap: wrap; }
+  .action-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px 10px; border-radius: 4px; font-size: 12px; font-weight: 700;
+    color: var(--reddit-meta); background: none; border: none; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .action-btn:hover { background: rgba(0,0,0,0.04); }
+
+  /* Sidebar */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+  .sidebar-card {
+    background: var(--reddit-card-bg); border: 1px solid var(--reddit-border);
+    border-radius: 4px; overflow: hidden; animation: fadeInUp 0.5s ease-out;
+  }
+  .sidebar-card:nth-child(2) { animation-delay: 0.1s; }
+  .sidebar-card:nth-child(3) { animation-delay: 0.2s; }
+  .sidebar-card-header { padding: 12px 16px; font-weight: 700; font-size: 14px; color: #fff; }
+  .sidebar-card-body { padding: 12px 16px; }
+
+  .community-header { background: var(--gradient-2); text-align: center; padding: 20px 16px 12px; }
+  .community-icon {
+    width: 54px; height: 54px; border-radius: 50%;
+    background: var(--reddit-card-bg); display: flex; align-items: center;
+    justify-content: center; margin: 0 auto 8px; font-size: 28px; border: 3px solid #fff;
+  }
+  .community-name { font-size: 16px; font-weight: 700; }
+  .community-desc { font-size: 13px; color: var(--reddit-meta); margin: 8px 0; line-height: 1.4; }
+  .community-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; text-align: center; }
+  .stat-num { font-weight: 700; font-size: 16px; color: var(--reddit-dark); }
+  .stat-label { font-size: 11px; color: var(--reddit-meta); }
+  .join-btn {
+    width: 100%; padding: 8px; background: var(--reddit-blue); color: #fff;
+    border: none; border-radius: 20px; font-weight: 700; font-size: 14px;
+    cursor: pointer; transition: background 0.2s;
+  }
+  .join-btn:hover { background: #006cbd; }
+
+  /* TOC */
+  .toc-header { background: linear-gradient(135deg, #7b61ff, #9c7cff); }
+  .toc-list { list-style: none; padding: 0; margin: 0; }
+  .toc-list li { padding: 6px 0; border-bottom: 1px solid #f5f5f5; }
+  .toc-list li:last-child { border-bottom: none; }
+  .toc-list a {
+    font-size: 12.5px; color: var(--reddit-text); text-decoration: none;
+    display: flex; align-items: center; gap: 6px; transition: color 0.15s;
+  }
+  .toc-list a:hover { color: var(--reddit-blue); }
+  .toc-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Related */
+  .related-header { background: var(--gradient-1); }
+  .related-post { padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+  .related-post:last-child { border-bottom: none; }
+  .related-post a { font-size: 13px; color: var(--reddit-dark); text-decoration: none; font-weight: 500; line-height: 1.3; display: block; }
+  .related-post a:hover { color: var(--reddit-blue); }
+  .related-post .related-meta { font-size: 11px; color: var(--reddit-meta); margin-top: 2px; }
+
+  /* Reading progress */
+  .reading-progress {
+    position: fixed; top: 48px; left: 0; height: 3px;
+    background: var(--gradient-1); z-index: 101;
+    transition: width 0.1s; border-radius: 0 2px 2px 0;
+  }
+
+  /* Scroll top */
+  .scroll-top {
+    position: fixed; bottom: 30px; right: 30px;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--reddit-blue); color: #fff; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    opacity: 0; transform: translateY(20px); transition: all 0.3s;
+    z-index: 99; font-size: 20px;
+  }
+  .scroll-top.visible { opacity: 1; transform: translateY(0); }
+  .scroll-top:hover { background: #006cbd; transform: translateY(-2px); }
+
+  /* Syntax */
+  .kw { color: #c586c0; } .fn { color: #dcdcaa; } .str { color: #ce9178; }
+  .cmt { color: #6a9955; } .num { color: #b5cea8; } .type { color: #4ec9b0; }
+  .param { color: #9cdcfe; }
+
+  html { scroll-behavior: smooth; }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @media (max-width: 960px) { .main-container { grid-template-columns: 1fr; padding: 0 12px; } .sidebar { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="reading-progress" id="readingProgress"></div>
+
+<!-- Top Nav -->
+<nav class="top-nav">
+  <a class="logo" href="#">
+    <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="10" r="10"/><circle cx="6.5" cy="9" r="1.5" fill="#fff"/><circle cx="13.5" cy="9" r="1.5" fill="#fff"/><path d="M6.5 13c0 0 1.5 2 3.5 2s3.5-2 3.5-2" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round"/><ellipse cx="10" cy="3" rx="1.5" ry="2" fill="#fff"/></svg>
+    reddit
+  </a>
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input type="text" placeholder="Search Reddit" />
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main-container">
+  <div class="post-card">
+    <div class="post-inner">
+      <!-- Vote -->
+      <div class="vote-sidebar">
+        <button class="vote-btn up active" onclick="vote(this,'up')">▲</button>
+        <span class="vote-count" id="voteCount">2.4k</span>
+        <button class="vote-btn down" onclick="vote(this,'down')">▼</button>
+      </div>
+
+      <div class="post-content">
+        <!-- Meta -->
+        <div class="post-meta">
+          <a class="subreddit-link" href="#">r/LocalLLaMA</a> <span>•</span>
+          <span>Posted by</span> <a class="post-author" href="#">u/aether_ops</a>
+          <span>•</span> <span>12 hours ago</span>
+          <span class="flair flair-project">Project</span>
+          <span class="flair flair-oc">OC</span>
+        </div>
+
+        <div class="awards-bar">
+          <span class="award"><span>🏆</span> Helpful (3)</span>
+          <span class="award"><span>🚀</span> Rocket Like (5)</span>
+          <span class="award"><span>💡</span> Insightful (2)</span>
+        </div>
+
+        <h1 class="post-title" id="top">[Project] I built an AI Agent that runs entirely on CPU with a 1.5B parameter model — here's what I learned</h1>
+
+        <div class="tldr-box">
+          <strong>TL;DR:</strong> Built an intelligent ops agent using a 1.5B model (Qwen2.5:1.5b) that runs on CPU-only machines. Uses RAG + Rerank + structured Skills for usable accuracy without any GPU. Here's the architecture breakdown.
+        </div>
+
+        <div class="post-body">
+
+          <!-- The Problem -->
+          <h2 id="problem"><span class="section-icon" style="background:var(--gradient-1)">🔥</span> The Problem</h2>
+          <p>I work in private cloud operations. Our customers deploy on-premises — <strong>no public internet, no GPU, no cloud API access</strong>. But they still need intelligent troubleshooting.</p>
+          <div style="margin: 8px 0 14px 8px;">
+            <div class="pain-point"><span class="emoji">🚨</span><span><strong>"Livestream debugging"</strong> — Experts remotely guide field engineers step by step. Slow, expensive, knowledge never captured</span></div>
+            <div class="pain-point"><span class="emoji">📚</span><span><strong>Documentation maze</strong> — Hundreds of docs, nobody finds the right page when things break</span></div>
+            <div class="pain-point"><span class="emoji">💻</span><span><strong>Zero GPU budget</strong> — Not every customer has GPUs, but every customer needs support</span></div>
+          </div>
+          <blockquote><strong>How do you build an accurate, low-latency AI agent on CPU-only hardware?</strong></blockquote>
+
+          <hr>
+
+          <!-- Why SLMs -->
+          <h2 id="why-slm"><span class="section-icon" style="background:var(--gradient-2)">🧠</span> Why Small Language Models</h2>
+          <p>This isn't about using a "worse" GPT-4. SLMs are a different paradigm:</p>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Dimension</th><th>LLM Approach</th><th>SLM + System Design</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Philosophy</strong></td><td>One model does everything</td><td>Model handles language; system handles knowledge + execution</td></tr>
+                <tr><td><strong>Knowledge</strong></td><td>Baked into parameters</td><td>Retrieved from vector DB (RAG)</td></tr>
+                <tr><td><strong>Cost</strong></td><td>$$$$ per query</td><td>Runs on a $200 mini PC</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="highlight-box">💡 The key insight: <strong>don't make the model smarter — make the system smarter.</strong></div>
+
+          <hr>
+
+          <!-- Model Stack -->
+          <h2 id="model-stack"><span class="section-icon" style="background:linear-gradient(135deg,#43a047,#66bb6a)">⚙️</span> The Model Stack</h2>
+          <p>Everything runs locally. Zero external API calls.</p>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Component</th><th>Model</th><th>Role</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Main LLM</strong></td><td><code>Qwen2.5:1.5b</code></td><td>Intent understanding, response generation</td></tr>
+                <tr><td><strong>Embedding</strong></td><td><code>bge-large-zh-v1.5</code></td><td>Text → vector for semantic search</td></tr>
+                <tr><td><strong>Reranker</strong></td><td><code>bge-reranker-v2-m3</code></td><td>CrossEncoder re-ranking</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Runs in 4GB RAM, ~1-2s per response on CPU.</p>
+
+          <hr>
+
+          <!-- Rerank -->
+          <h2 id="rerank"><span class="section-icon" style="background:linear-gradient(135deg,#e65100,#ff9800)">🔄</span> #1: Rerank Makes SLMs Faster</h2>
+          <p>Adding Rerank <strong>actually made the system faster</strong>, not slower. Traditional RAG feeds Top-K docs to LLM. With Rerank, we filter to Top-2 high-quality docs first.</p>
+          <ul>
+            <li><strong>Less context = dramatically faster inference</strong> (scales super-linearly with context length)</li>
+            <li><strong>Better context = fewer hallucinations</strong> (SLMs are very sensitive to noise)</li>
+            <li><strong>Net result: 40-60% faster end-to-end</strong></li>
+          </ul>
+          <div class="highlight-box"><strong>Rerank latency:</strong> ~100ms. <strong>Inference time saved:</strong> 500-2000ms. <strong>No-brainer.</strong></div>
+
+          <hr>
+
+          <!-- Tiered Routing -->
+          <h2 id="routing"><span class="section-icon" style="background:linear-gradient(135deg,#1565c0,#42a5f5)">🔀</span> #2: Tiered Intent Routing</h2>
+          <p>Not every request needs the LLM. A two-phase routing system handles requests at the cheapest level:</p>
+          <div class="ascii-diagram">User Request
+    │
+    ▼
+Phase 1: Rule Engine (~1ms)
+  Pre-compiled regex: "check pod" → check_pod_status skill
+    │ No match
+    ▼
+Phase 2: LLM Classifier (~500ms)
+  Classification ONLY — no generation, no reasoning
+    │
+    ▼
+Route: Type A (Knowledge QA) → RAG pipeline
+       Type D (Operations)   → Skill execution</div>
+          <p>The LLM classifier receives only the skill name list and outputs a single skill name. <strong>80%+ of requests</strong> resolved by rules in <strong>&lt; 5ms</strong>.</p>
+
+          <hr>
+
+          <!-- Skills -->
+          <h2 id="skills"><span class="section-icon" style="background:linear-gradient(135deg,#2e7d32,#4caf50)">🛠️</span> #3: From Tools to Structured Skills (SOP)</h2>
+          <p>Traditional agents let the LLM plan tool execution. This falls apart with a 1.5B model. Our approach: <strong>pre-defined playbooks</strong> where the SLM only handles language understanding.</p>
+          <div class="highlight-box blue">💡 <strong>Atomic Skill</strong> = single tool wrapper, no LLM. <strong>SOP Skill</strong> = chain of Atomic Skills + scoped LLM calls.</div>
+          <div class="code-block">
+            <div class="code-header"><span class="code-lang">YAML — SOP Skill</span><button class="code-copy-btn" onclick="copyCode(this)">Copy</button></div>
+            <pre><code><span class="type">skill</span>:
+  <span class="param">name</span>: <span class="str">resolve_and_get_rocketmq_pods</span>
+  <span class="param">type</span>: <span class="str">sop</span>
+  <span class="param">steps</span>:
+  - <span class="param">id</span>: <span class="str">resolve_component</span>
+    <span class="param">type</span>: <span class="str">llm</span>              <span class="cmt"># LLM does ONE thing: extract params</span>
+    <span class="param">prompt</span>: |
+      Extract fields from user input. Output JSON ONLY:
+      {<span class="str">"namespace"</span>:<span class="str">""</span>,<span class="str">"component_keyword"</span>:<span class="str">""</span>,<span class="str">"exclude_keywords"</span>:<span class="str">""</span>}
+
+  - <span class="param">id</span>: <span class="str">get_pods</span>
+    <span class="param">type</span>: <span class="str">skill</span>            <span class="cmt"># Atomic Skill, no LLM</span>
+    <span class="param">skill</span>: <span class="str">get_rocketmq_pods</span>
+    <span class="param">input</span>:
+      <span class="param">namespace</span>: <span class="str">"{{resolve_component.namespace}}"</span></code></pre>
+          </div>
+          <p>Each LLM step receives <strong>ONLY the context it needs</strong> — not the entire history. This is what makes SLM execution possible.</p>
+
+          <hr>
+
+          <!-- LoRA -->
+          <h2 id="lora"><span class="section-icon" style="background:linear-gradient(135deg,#c62828,#ef5350)">🎯</span> #4: LoRA Fine-Tuning on Consumer Hardware</h2>
+          <p>We turned a generic Qwen2.5:1.5b into a <strong>RocketMQ operations expert</strong> using LoRA. Entire pipeline runs on a MacBook Pro — no cloud GPU.</p>
+          <div class="ascii-diagram">Data Prep (70% of effort) → LoRA Training (&lt;1% params) → Merge → GGUF q4_k_m → Ollama</div>
+          <p>Key: <code>rank=8, alpha=16, lr=2e-4, epochs=3</code>. Final model: <strong>~1GB</strong>, runs on CPU.</p>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Query</th><th>Base Model</th><th>Fine-tuned</th></tr></thead>
+              <tbody>
+                <tr><td><strong>"Broker won't start"</strong></td><td>Generic: check logs</td><td>Specific: check <code>broker.log</code>, port 10911, disk &gt; 90%</td></tr>
+                <tr><td><strong>"Consumer lag"</strong></td><td>Vague: "check consumer"</td><td>Specific: <code>mqadmin consumerProgress</code>, check Diff field</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <hr>
+
+          <!-- Performance -->
+          <h2 id="performance"><span class="section-icon" style="background:linear-gradient(135deg,#00695c,#26a69a)">📊</span> Real-World Performance</h2>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+              <tbody>
+                <tr><td><strong>End-to-end response</strong></td><td>1-3s (CPU only)</td></tr>
+                <tr><td><strong>Full RAG pipeline</strong></td><td>~200ms</td></tr>
+                <tr><td><strong>Model memory</strong></td><td>~2GB (quantized)</td></tr>
+                <tr><td><strong>Throughput</strong></td><td>~5 queries/sec</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Runs <strong>offline, on-premises, zero API cost.</strong></p>
+
+          <hr>
+
+          <!-- Takeaway -->
+          <h2 id="takeaway"><span class="section-icon" style="background:var(--gradient-1)">🎯</span> The Takeaway</h2>
+          <ol>
+            <li><strong>A 1.5B model on CPU is enough</strong> — if you design the system right</li>
+            <li><strong>RAG + Rerank &gt; bigger model</strong> — retrieve and filter, don't memorize</li>
+            <li><strong>Structured Skills &gt; free-form tool use</strong> — don't let the SLM improvise</li>
+            <li><strong>Tiered routing saves 80% of compute</strong> — most requests don't need the LLM</li>
+            <li><strong>LoRA on consumer hardware</strong> — domain expertise in hours, not weeks</li>
+          </ol>
+          <blockquote>The future of agentic AI isn't bigger models — it's <strong>smarter systems with smaller models.</strong></blockquote>
+
+          <hr>
+          <p><em>Happy to answer questions about the architecture, training pipeline, or deployment!</em></p>
+        </div>
+
+        <!-- Actions -->
+        <div class="post-actions">
+          <button class="action-btn">💬 347 Comments</button>
+          <button class="action-btn">🔗 Share</button>
+          <button class="action-btn">⭐ Save</button>
+          <button class="action-btn">🏅 Award</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <!-- TOC -->
+    <div class="sidebar-card">
+      <div class="sidebar-card-header toc-header">📑 Table of Contents</div>
+      <div class="sidebar-card-body">
+        <ul class="toc-list">
+          <li><a href="#problem"><span class="toc-dot" style="background:#ff4500"></span>The Problem</a></li>
+          <li><a href="#why-slm"><span class="toc-dot" style="background:#0079d3"></span>Why SLMs</a></li>
+          <li><a href="#model-stack"><span class="toc-dot" style="background:#43a047"></span>Model Stack</a></li>
+          <li><a href="#rerank"><span class="toc-dot" style="background:#e65100"></span>#1: Rerank</a></li>
+          <li><a href="#routing"><span class="toc-dot" style="background:#1565c0"></span>#2: Tiered Routing</a></li>
+          <li><a href="#skills"><span class="toc-dot" style="background:#2e7d32"></span>#3: Structured Skills</a></li>
+          <li><a href="#lora"><span class="toc-dot" style="background:#c62828"></span>#4: LoRA Fine-Tuning</a></li>
+          <li><a href="#performance"><span class="toc-dot" style="background:#00695c"></span>Performance</a></li>
+          <li><a href="#takeaway"><span class="toc-dot" style="background:#ff4500"></span>The Takeaway</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Community -->
+    <div class="sidebar-card">
+      <div class="community-header">
+        <div class="community-icon">🤖</div>
+        <div class="community-name">r/LocalLLaMA</div>
+      </div>
+      <div class="sidebar-card-body">
+        <p class="community-desc">Subreddit to discuss about Llama and local LLM inference.</p>
+        <div class="community-stats">
+          <div><div class="stat-num">892k</div><div class="stat-label">Members</div></div>
+          <div><div class="stat-num">3.2k</div><div class="stat-label">Online</div></div>
+        </div>
+        <button class="join-btn">Joined ✓</button>
+      </div>
+    </div>
+
+    <!-- Related -->
+    <div class="sidebar-card">
+      <div class="sidebar-card-header related-header">🔗 Related Posts</div>
+      <div class="sidebar-card-body">
+        <div class="related-post">
+          <a href="#">Nvidia: "Small Language Models are the Future of Agentic AI"</a>
+          <div class="related-meta">r/MachineLearning • 1.8k ↑ • 2d</div>
+        </div>
+        <div class="related-post">
+          <a href="#">Running Qwen2.5 on Raspberry Pi 5 — benchmarks</a>
+          <div class="related-meta">r/LocalLLaMA • 956 ↑ • 5d</div>
+        </div>
+        <div class="related-post">
+          <a href="#">LoRA fine-tuning guide for beginners (2024)</a>
+          <div class="related-meta">r/LocalLLaMA • 2.1k ↑ • 1w</div>
+        </div>
+        <div class="related-post">
+          <a href="#">Building RAG systems that work in production</a>
+          <div class="related-meta">r/LocalLLaMA • 1.4k ↑ • 4d</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0})">↑</button>
+
+<script>
+window.addEventListener('scroll', () => {
+  const s = document.documentElement.scrollTop;
+  const h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+  document.getElementById('readingProgress').style.width = (s / h * 100) + '%';
+  document.getElementById('scrollTop').classList.toggle('visible', s > 400);
+
+  let cur = '';
+  document.querySelectorAll('h2[id]').forEach(el => { if (s >= el.offsetTop - 100) cur = el.id; });
+  document.querySelectorAll('.toc-list a').forEach(a => {
+    const active = a.getAttribute('href') === '#' + cur;
+    a.style.color = active ? 'var(--reddit-blue)' : '';
+    a.style.fontWeight = active ? '700' : '';
+  });
+});
+
+function vote(btn, dir) {
+  const c = document.getElementById('voteCount');
+  const u = btn.parentElement.querySelector('.up'), d = btn.parentElement.querySelector('.down');
+  if (dir === 'up') { u.classList.toggle('active'); d.classList.remove('active'); c.textContent = u.classList.contains('active') ? '2.4k' : '2.3k'; }
+  else { d.classList.toggle('active'); u.classList.remove('active'); c.textContent = d.classList.contains('active') ? '2.3k' : '2.4k'; }
+}
+
+function copyCode(btn) {
+  navigator.clipboard.writeText(btn.closest('.code-block').querySelector('code').textContent).then(() => {
+    btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 2000);
+  });
+}
+</script>
+</body>
+</html>
