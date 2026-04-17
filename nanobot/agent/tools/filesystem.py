@@ -229,8 +229,8 @@ class FileKeywordFilterTool(Tool):
     def description(self) -> str:
         return (
             "使用 grep 对多个文件执行关键字过滤。"
-            "所有文件共享同一组 keywords，且采用 AND 规则：同一文件需同时命中全部关键字才视为匹配成功。"
-            "输出参数说明：commands 为本次执行的 grep 命令列表；data 为结构化匹配结果。"
+            "支持 keywords 的 and/or 关系：and 表示每个关键字都需命中；or 表示多个关键字用单次 grep 的多 -e 做或匹配。"
+            "关键词支持包含空格的短语。输出参数说明：commands 为本次执行的 grep 命令列表；data 为结构化匹配结果。"
         )
 
     @property
@@ -246,11 +246,18 @@ class FileKeywordFilterTool(Tool):
                 },
                 "keywords": {
                     "type": "array",
-                    "description": "关键字列表（必填，至少 1 个）。所有文件都使用该列表进行过滤。",
+                    "description": "关键字列表（必填，至少 1 个）。关键字可为包含空格的短语。",
                     "items": {"type": "string"},
                     "minItems": 1,
                 },
+                "keyword_relation": {
+                    "type": "string",
+                    "description": "关键字关系：and 或 or。默认 and。",
+                    "enum": ["and", "or"],
+                    "default": "and",
+                },
                 "case_sensitive": {
+
                     "type": "boolean",
                     "description": "是否区分大小写（可选，默认 false）。",
                     "default": False,
@@ -277,11 +284,43 @@ class FileKeywordFilterTool(Tool):
         self,
         keywords: list[str],
         file_paths: list[str] | None = None,
+        keyword_relation: str = "and",
         case_sensitive: bool = False,
         max_latest_lines: int = 50,
         after_context_lines: int = 6,
         **kwargs: Any,
     ) -> dict[str, Any]:
+
+        def _parse_grep_output(stdout: str) -> list[dict[str, Any]]:
+            matched: list[dict[str, Any]] = []
+            for line in (stdout or "").splitlines():
+                if not line or line == "--":
+                    continue
+
+                # grep -n 输出匹配行为: 行号:内容；grep -A 上下文行为: 行号-内容
+                sep = ":" if ":" in line else "-"
+                parts = line.split(sep, 1)
+                if len(parts) != 2:
+                    continue
+
+                line_no_raw, line_text = parts
+                try:
+                    line_no = int(line_no_raw)
+                except ValueError:
+                    continue
+
+                matched.append({
+                    "line_number": line_no,
+                    "line": line_text,
+                    "is_match": sep == ":",
+                })
+            return matched
+
+        def _line_contains_keyword(line_text: str, keyword: str) -> bool:
+            if case_sensitive:
+                return keyword in line_text
+            return keyword.lower() in line_text.lower()
+
         result_map: dict[str, Any] = {}
         commands: list[str] = []
 
@@ -291,6 +330,14 @@ class FileKeywordFilterTool(Tool):
                 "result": "keywords 不能为空",
                 "commands": [],
                 "data": {"error": "keywords 不能为空"},
+            }
+
+        relation = (keyword_relation or "and").strip().lower()
+        if relation not in ("and", "or"):
+            return {
+                "result": "keyword_relation 仅支持 and 或 or",
+                "commands": [],
+                "data": {"error": "keyword_relation 仅支持 and 或 or"},
             }
 
         all_file_paths: list[str] = []
@@ -312,13 +359,7 @@ class FileKeywordFilterTool(Tool):
         if not case_sensitive:
             grep_base_cmd.append("-i")
 
-        keyword_cmd_prefixes = [
-            (keyword, [*grep_base_cmd, keyword])
-            for keyword in normalized_keywords
-        ]
-
         for raw_path in all_file_paths:
-
             try:
                 path_obj = _resolve_path(raw_path, self._allowed_dir)
             except Exception as e:
@@ -333,12 +374,28 @@ class FileKeywordFilterTool(Tool):
                 result_map[key] = {"error": f"不是文件: {raw_path}"}
                 continue
 
-            file_result: dict[str, Any] = {}
-            missing_keywords: list[str] = []
-            has_runtime_error = False
+            # 仅命令生成阶段区分关系：
+            # and => 每个关键字一条 grep 命令
+            # or  => 一条 grep 命令，使用多个 -e
+            command_specs: list[tuple[str, list[str]]] = []
+            if relation == "and":
+                command_specs = [
+                    (keyword, [*grep_base_cmd, keyword, key])
+                    for keyword in normalized_keywords
+                ]
+            else:
+                or_cmd = [*grep_base_cmd]
+                for keyword in normalized_keywords:
+                    or_cmd.extend(["-e", keyword])
+                or_cmd.append(key)
+                command_specs = [("__or_combined__", or_cmd)]
 
-            for keyword, cmd_prefix in keyword_cmd_prefixes:
-                cmd = [*cmd_prefix, key]
+            file_result: dict[str, list[dict[str, Any]]] = {kw: [] for kw in normalized_keywords}
+            all_matches: list[dict[str, Any]] = []
+            has_runtime_error = False
+            error_message = ""
+
+            for command_key, cmd in command_specs:
                 commands.append(shlex.join(cmd))
 
                 try:
@@ -349,60 +406,60 @@ class FileKeywordFilterTool(Tool):
                         check=False,
                     )
                 except Exception as e:
-                    file_result[keyword] = [{"error": f"grep 执行失败: {str(e)}"}]
                     has_runtime_error = True
-                    continue
+                    error_message = f"grep 执行失败: {str(e)}"
+                    break
 
                 if proc.returncode not in (0, 1):
-                    err_msg = (proc.stderr or "").strip() or f"grep 异常退出码: {proc.returncode}"
-                    file_result[keyword] = [{"error": err_msg}]
                     has_runtime_error = True
-                    continue
+                    error_message = (proc.stderr or "").strip() or f"grep 异常退出码: {proc.returncode}"
+                    break
 
-                matched: list[dict[str, Any]] = []
-                for line in (proc.stdout or "").splitlines():
-                    if not line or line == "--":
-                        continue
+                parsed_matches = _parse_grep_output(proc.stdout or "")
 
-                    # grep -n 输出匹配行为: 行号:内容；grep -A 上下文行为: 行号-内容
-                    sep = ":" if ":" in line else "-"
-                    parts = line.split(sep, 1)
-                    if len(parts) != 2:
-                        continue
-
-                    line_no_raw, line_text = parts
-                    try:
-                        line_no = int(line_no_raw)
-                    except ValueError:
-                        continue
-
-                    matched.append({
-                        "line_number": line_no,
-                        "line": line_text,
-                        "is_match": sep == ":",
-                    })
-
-                if not matched:
-                    missing_keywords.append(keyword)
-                file_result[keyword] = matched
+                if relation == "and":
+                    file_result[command_key] = parsed_matches
+                else:
+                    all_matches = parsed_matches
 
             if has_runtime_error:
                 result_map[key] = {
+                    "matched": False,
                     "matched_all_keywords": False,
-                    "error": "部分关键字执行失败，请查看各关键字结果",
+                    "keyword_relation": relation,
+                    "error": error_message or "部分关键字执行失败，请查看各关键字结果",
                     "matches_by_keyword": file_result,
                 }
-            elif missing_keywords:
-                result_map[key] = {
-                    "matched_all_keywords": False,
-                    "missing_keywords": missing_keywords,
-                    "matches_by_keyword": file_result,
-                }
-            else:
-                result_map[key] = {
-                    "matched_all_keywords": True,
-                    "matches_by_keyword": file_result,
-                }
+                continue
+
+            if relation == "or":
+                for keyword in normalized_keywords:
+                    file_result[keyword] = [
+                        item for item in all_matches
+                        if _line_contains_keyword(item.get("line", ""), keyword)
+                    ]
+
+            matched_keywords = [
+                keyword
+                for keyword, items in file_result.items()
+                if any(item.get("is_match") for item in items)
+            ]
+            missing_keywords = [kw for kw in normalized_keywords if kw not in matched_keywords]
+
+            matched = all(kw in matched_keywords for kw in normalized_keywords) if relation == "and" else len(matched_keywords) > 0
+
+            result_item: dict[str, Any] = {
+                "matched": matched,
+                "matched_all_keywords": matched if relation == "and" else False,
+                "keyword_relation": relation,
+                "matched_keywords": matched_keywords,
+                "missing_keywords": missing_keywords,
+                "matches_by_keyword": file_result,
+            }
+            if relation == "or":
+                result_item["matches"] = all_matches
+
+            result_map[key] = result_item
 
         return {
             "raw_data_str": json.dumps(result_map),

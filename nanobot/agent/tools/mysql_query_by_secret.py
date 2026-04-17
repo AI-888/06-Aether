@@ -10,18 +10,18 @@ from typing import Any
 from nanobot.agent.tools.base import Tool
 
 
-class MySQLQueryTool(Tool):
+class MySQLQueryToolBySecret(Tool):
     """通过 `kubectl get secret` 获取 DB 连接信息后执行 MySQL 查询。"""
 
     @property
     def name(self) -> str:
-        return "mysql_query"
+        return "mysql_query_by_secret"
 
     @property
     def description(self) -> str:
         return (
             "执行 MySQL 查询工具。"
-            "先读取 tce 命名空间下 tdmq-rocketmq-db-binding secret，"
+            "默认先读取 default 命名空间下 XXXX secret，"
             "解码连接信息后执行查询，返回 query_result 与 query_error。"
         )
 
@@ -44,8 +44,8 @@ class MySQLQueryTool(Tool):
                 },
                 "namespace": {
                     "type": "string",
-                    "description": "k8s secret 所在命名空间，默认 tce",
-                    "default": "tce",
+                    "description": "k8s secret 所在命名空间，默认 default",
+                    "default": "default",
                 },
                 "secret_name": {
                     "type": "string",
@@ -59,6 +59,13 @@ class MySQLQueryTool(Tool):
                     "minimum": 1,
                     "maximum": 300,
                 },
+                "max_output_rows": {
+                    "type": "integer",
+                    "description": "最大输出条数，默认 10，范围 1-1000",
+                    "default": 10,
+                    "minimum": 1,
+                    "maximum": 1000,
+                },
             },
             "required": ["database", "table", "sql"],
         }
@@ -68,9 +75,10 @@ class MySQLQueryTool(Tool):
         database: str,
         table: str,
         sql: str,
-        namespace: str = "tce",
+        namespace: str = "default",
         secret_name: str = "tdmq-rocketmq-db-binding",
         timeout: int = 60,
+        max_output_rows: int = 10,
         **kwargs: Any,
     ) -> dict[str, Any]:
         commands: list[str] = []
@@ -78,28 +86,29 @@ class MySQLQueryTool(Tool):
         database = database.strip()
         table = table.strip()
         sql = sql.strip()
-        namespace = namespace.strip() or "tce"
+        namespace = namespace.strip() or "default"
         secret_name = secret_name.strip() or "tdmq-rocketmq-db-binding"
+        max_output_rows = max(1, min(int(max_output_rows), 1000))
 
         if not database:
             return {
                 "result": "database 不能为空",
                 "commands": [],
-                "query_result": "",
+                "query_result": [],
                 "query_error": "database 不能为空",
             }
         if not table:
             return {
                 "result": "table 不能为空",
                 "commands": [],
-                "query_result": "",
+                "query_result": [],
                 "query_error": "table 不能为空",
             }
         if not sql:
             return {
                 "result": "sql 不能为空",
                 "commands": [],
-                "query_result": "",
+                "query_result": [],
                 "query_error": "sql 不能为空",
             }
 
@@ -108,7 +117,7 @@ class MySQLQueryTool(Tool):
             return {
                 "result": err,
                 "commands": [],
-                "query_result": "",
+                "query_result": [],
                 "query_error": err,
             }
 
@@ -121,7 +130,7 @@ class MySQLQueryTool(Tool):
             return {
                 "result": f"获取 secret 失败: {secret_exec_err}",
                 "commands": commands,
-                "query_result": "",
+                "query_result": [],
                 "query_error": secret_exec_err,
             }
         if secret_rc != 0:
@@ -129,7 +138,7 @@ class MySQLQueryTool(Tool):
             return {
                 "result": f"获取 secret 失败: {err_text}",
                 "commands": commands,
-                "query_result": "",
+                "query_result": [],
                 "query_error": err_text,
             }
 
@@ -138,52 +147,28 @@ class MySQLQueryTool(Tool):
             return {
                 "result": f"解析 secret 失败: {parse_err}",
                 "commands": commands,
-                "query_result": "",
+                "query_result": [],
                 "query_error": parse_err,
             }
 
-        # 步骤2：执行 mysql 查询
-        mysql_cmd = self._build_mysql_command(
-            host=conn["host"],
-            port=conn["port"],
-            user=conn["user"],
-            password=conn["password"],
-            database=database,
-            sql=sql,
-            timeout=timeout,
-        )
-        commands.append(self._build_mysql_masked_command(
-            host=conn["host"],
-            port=conn["port"],
-            user=conn["user"],
-            database=database,
-            sql=sql,
-            timeout=timeout,
-        ))
-
-        query_stdout, query_stderr, query_rc, query_exec_err = await self._run_shell(mysql_cmd, timeout)
-
-        if query_exec_err:
-            return {
-                "result": f"mysql 查询执行异常: {query_exec_err}",
-                "commands": commands,
-                "query_result": "",
-                "query_error": query_exec_err,
-                "db_connection": {
-                    "host": conn["host"],
-                    "port": conn["port"],
-                    "user": conn["user"],
-                    "database": database,
-                    "table": table,
-                },
-            }
-
-        if query_rc != 0:
-            err_text = (query_stderr or query_stdout or "mysql 查询失败").strip()
+        # 步骤2：使用 Python MySQL 客户端执行查询
+        try:
+            rows, total_rows = await self._query_with_mysql_client(
+                host=conn["host"],
+                port=conn["port"],
+                user=conn["user"],
+                password=conn["password"],
+                database=database,
+                sql=sql,
+                timeout=timeout,
+                max_output_rows=max_output_rows,
+            )
+        except Exception as e:
+            err_text = str(e)
             return {
                 "result": f"mysql 查询失败: {err_text}",
                 "commands": commands,
-                "query_result": query_stdout.strip(),
+                "query_result": [],
                 "query_error": err_text,
                 "db_connection": {
                     "host": conn["host"],
@@ -194,20 +179,23 @@ class MySQLQueryTool(Tool):
                 },
             }
 
-        query_result = query_stdout.strip() if query_stdout.strip() else "(无输出)"
         warn = ""
         if table.lower() not in sql.lower():
             warn = "注意：传入 table 名未在 SQL 中出现。"
 
         result_text = "mysql 查询成功"
+        if total_rows > max_output_rows:
+            result_text = f"{result_text}；结果共 {total_rows} 条，已截断为前 {max_output_rows} 条"
         if warn:
-            result_text = f"{result_text}；{warn}"
+            result_text = f"{result_text}；{warn}" if result_text else warn
 
         return {
             "result": result_text,
             "commands": commands,
-            "query_result": query_result,
-            "query_error": query_stderr.strip(),
+            "query_result": rows,
+            "query_error": "",
+            "total_rows": total_rows,
+            "max_output_rows": max_output_rows,
             "db_connection": {
                 "host": conn["host"],
                 "port": conn["port"],
@@ -291,8 +279,8 @@ class MySQLQueryTool(Tool):
             "password": password,
         }, None
 
-    @staticmethod
-    def _build_mysql_command(
+    async def _query_with_mysql_client(
+        self,
         host: str,
         port: str,
         user: str,
@@ -300,37 +288,41 @@ class MySQLQueryTool(Tool):
         database: str,
         sql: str,
         timeout: int,
-    ) -> str:
-        return (
-            f"MYSQL_PWD={shlex.quote(password)} "
-            f"mysql --connect-timeout={int(timeout)} "
-            f"-h {shlex.quote(host)} "
-            f"-P {shlex.quote(str(port))} "
-            f"-u {shlex.quote(user)} "
-            f"-D {shlex.quote(database)} "
-            f"--default-character-set=utf8mb4 "
-            f"-e {shlex.quote(sql)}"
-        )
+        max_output_rows: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        def _run_query() -> tuple[list[dict[str, Any]], int]:
+            try:
+                import importlib
+                pymysql_mod = importlib.import_module("pymysql")
+                dict_cursor = getattr(getattr(pymysql_mod, "cursors"), "DictCursor")
+            except Exception as e:
+                raise RuntimeError(
+                    f"缺少 Python MySQL 客户端依赖 pymysql: {e}。请先安装: pip install pymysql"
+                )
 
-    @staticmethod
-    def _build_mysql_masked_command(
-        host: str,
-        port: str,
-        user: str,
-        database: str,
-        sql: str,
-        timeout: int,
-    ) -> str:
-        return (
-            "MYSQL_PWD=****** "
-            f"mysql --connect-timeout={int(timeout)} "
-            f"-h {shlex.quote(host)} "
-            f"-P {shlex.quote(str(port))} "
-            f"-u {shlex.quote(user)} "
-            f"-D {shlex.quote(database)} "
-            "--default-character-set=utf8mb4 "
-            f"-e {shlex.quote(sql)}"
-        )
+            conn = pymysql_mod.connect(
+                host=host,
+                port=int(port),
+                user=user,
+                password=password,
+                database=database,
+                charset="utf8mb4",
+                cursorclass=dict_cursor,
+                connect_timeout=int(timeout),
+                read_timeout=int(timeout),
+                write_timeout=int(timeout),
+                autocommit=True,
+            )
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(sql)
+                    all_rows = cursor.fetchall() or []
+                    rows = [dict(item) for item in all_rows[:max_output_rows]]
+                    return rows, len(all_rows)
+            finally:
+                conn.close()
+
+        return await asyncio.to_thread(_run_query)
 
     @staticmethod
     async def _run_shell(command: str, timeout: int) -> tuple[str, str, int, str | None]:

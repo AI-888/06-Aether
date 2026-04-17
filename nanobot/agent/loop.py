@@ -22,7 +22,7 @@ from nanobot.agent.tools.k8s import KubectlGetPodsTool, KubectlQueryLogTool
 from nanobot.agent.tools.filesystem import FileKeywordFilterTool
 
 from nanobot.agent.tools.shell import ExecTool
-from nanobot.agent.tools.mysql_query import MySQLQueryTool
+from nanobot.agent.tools.mysql_query_by_secret import MySQLQueryToolBySecret
 
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.rca_trigger import RCATriggerTool, RCAListSkillsTool
@@ -101,7 +101,7 @@ class AgentLoop:
         ))
 
         # MySQL 查询工具（通过 k8s secret 动态获取连接信息）
-        self.tools.register(MySQLQueryTool())
+        self.tools.register(MySQLQueryToolBySecret())
 
         # File tools (restrict to workspace if configured)
         # allowed_dir = self.workspace if self.restrict_to_workspace else None
