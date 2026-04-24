@@ -600,8 +600,11 @@
             animation: rerank-spin 0.8s linear infinite;
             vertical-align: middle;
         }
+
         @keyframes rerank-spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .section-header {
@@ -642,17 +645,34 @@
             animation: typing 1.4s infinite;
         }
 
-        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         @keyframes typing {
-            0%, 60%, 100% { transform: scale(1); opacity: 1; }
-            30% { transform: scale(1.2); opacity: 0.7; }
+            0%, 60%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            30% {
+                transform: scale(1.2);
+                opacity: 0.7;
+            }
         }
 
         .streaming {
@@ -660,9 +680,15 @@
         }
 
         @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.8; }
-            100% { opacity: 1; }
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.8;
+            }
+            100% {
+                opacity: 1;
+            }
         }
 
         /* ========== 新的独立消息卡片样式 ========== */
@@ -683,7 +709,7 @@
             justify-content: center;
             font-size: 1.1rem;
             flex-shrink: 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         }
 
         .msg-card .msg-body {
@@ -692,14 +718,14 @@
             background: white;
             border-radius: 12px;
             padding: 12px 16px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
             border: 1px solid #e8ecf1;
             transition: box-shadow 0.2s;
             max-width: 85%;
         }
 
         .msg-card .msg-body:hover {
-            box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
         }
 
         .msg-card .msg-meta {
@@ -740,53 +766,153 @@
 
         /* --- 不同类型消息的颜色方案 --- */
         /* 系统/状态消息 */
-        .msg-card.msg-status .msg-icon { background: #eef2ff; color: #6366f1; }
-        .msg-card.msg-status .msg-body { border-left: 3px solid #818cf8; background: #fafbff; }
-        .msg-card.msg-status .msg-label { background: #eef2ff; color: #6366f1; }
+        .msg-card.msg-status .msg-icon {
+            background: #eef2ff;
+            color: #6366f1;
+        }
+
+        .msg-card.msg-status .msg-body {
+            border-left: 3px solid #818cf8;
+            background: #fafbff;
+        }
+
+        .msg-card.msg-status .msg-label {
+            background: #eef2ff;
+            color: #6366f1;
+        }
 
         /* 意图识别 */
-        .msg-card.msg-intent .msg-icon { background: #fef3c7; color: #d97706; }
-        .msg-card.msg-intent .msg-body { border-left: 3px solid #f59e0b; background: #fffdf5; }
-        .msg-card.msg-intent .msg-label { background: #fef3c7; color: #d97706; }
+        .msg-card.msg-intent .msg-icon {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .msg-card.msg-intent .msg-body {
+            border-left: 3px solid #f59e0b;
+            background: #fffdf5;
+        }
+
+        .msg-card.msg-intent .msg-label {
+            background: #fef3c7;
+            color: #d97706;
+        }
 
         /* 知识库查询 */
-        .msg-card.msg-knowledge .msg-icon { background: #f3e8ff; color: #9333ea; }
-        .msg-card.msg-knowledge .msg-body { border-left: 3px solid #a855f7; background: #fdfaff; }
-        .msg-card.msg-knowledge .msg-label { background: #f3e8ff; color: #9333ea; }
+        .msg-card.msg-knowledge .msg-icon {
+            background: #f3e8ff;
+            color: #9333ea;
+        }
+
+        .msg-card.msg-knowledge .msg-body {
+            border-left: 3px solid #a855f7;
+            background: #fdfaff;
+        }
+
+        .msg-card.msg-knowledge .msg-label {
+            background: #f3e8ff;
+            color: #9333ea;
+        }
 
         /* 工具执行 */
-        .msg-card.msg-tool .msg-icon { background: #dcfce7; color: #16a34a; }
-        .msg-card.msg-tool .msg-body { border-left: 3px solid #22c55e; background: #f8fef9; }
-        .msg-card.msg-tool .msg-label { background: #dcfce7; color: #16a34a; }
+        .msg-card.msg-tool .msg-icon {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .msg-card.msg-tool .msg-body {
+            border-left: 3px solid #22c55e;
+            background: #f8fef9;
+        }
+
+        .msg-card.msg-tool .msg-label {
+            background: #dcfce7;
+            color: #16a34a;
+        }
 
         /* 思考/推理 */
-        .msg-card.msg-reasoning .msg-icon { background: #e0f2fe; color: #0284c7; }
-        .msg-card.msg-reasoning .msg-body { border-left: 3px solid #38bdf8; background: #f5fbff; }
-        .msg-card.msg-reasoning .msg-label { background: #e0f2fe; color: #0284c7; }
+        .msg-card.msg-reasoning .msg-icon {
+            background: #e0f2fe;
+            color: #0284c7;
+        }
+
+        .msg-card.msg-reasoning .msg-body {
+            border-left: 3px solid #38bdf8;
+            background: #f5fbff;
+        }
+
+        .msg-card.msg-reasoning .msg-label {
+            background: #e0f2fe;
+            color: #0284c7;
+        }
 
         /* 迭代 */
-        .msg-card.msg-iteration .msg-icon { background: #fce7f3; color: #db2777; }
-        .msg-card.msg-iteration .msg-body { border-left: 3px solid #ec4899; background: #fef7fb; }
-        .msg-card.msg-iteration .msg-label { background: #fce7f3; color: #db2777; }
+        .msg-card.msg-iteration .msg-icon {
+            background: #fce7f3;
+            color: #db2777;
+        }
+
+        .msg-card.msg-iteration .msg-body {
+            border-left: 3px solid #ec4899;
+            background: #fef7fb;
+        }
+
+        .msg-card.msg-iteration .msg-label {
+            background: #fce7f3;
+            color: #db2777;
+        }
 
         /* 最终答案 */
-        .msg-card.msg-answer .msg-icon { background: #d1fae5; color: #059669; }
-        .msg-card.msg-answer .msg-body { border-left: 3px solid #10b981; background: #f0fdf7; }
-        .msg-card.msg-answer .msg-label { background: #d1fae5; color: #059669; }
-        .msg-card.msg-answer .msg-text { font-size: 1rem; }
+        .msg-card.msg-answer .msg-icon {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .msg-card.msg-answer .msg-body {
+            border-left: 3px solid #10b981;
+            background: #f0fdf7;
+        }
+
+        .msg-card.msg-answer .msg-label {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .msg-card.msg-answer .msg-text {
+            font-size: 1rem;
+        }
 
         /* 错误 */
-        .msg-card.msg-error .msg-icon { background: #fee2e2; color: #dc2626; }
-        .msg-card.msg-error .msg-body { border-left: 3px solid #ef4444; background: #fef5f5; }
-        .msg-card.msg-error .msg-label { background: #fee2e2; color: #dc2626; }
+        .msg-card.msg-error .msg-icon {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .msg-card.msg-error .msg-body {
+            border-left: 3px solid #ef4444;
+            background: #fef5f5;
+        }
+
+        .msg-card.msg-error .msg-label {
+            background: #fee2e2;
+            color: #dc2626;
+        }
 
         /* 完成 */
-        .msg-card.msg-completion .msg-icon { background: #d1fae5; color: #059669; }
+        .msg-card.msg-completion .msg-icon {
+            background: #d1fae5;
+            color: #059669;
+        }
+
         .msg-card.msg-completion .msg-body {
             border-left: 3px solid #10b981;
             background: linear-gradient(135deg, #f0fdf7 0%, #ecfdf5 100%);
         }
-        .msg-card.msg-completion .msg-label { background: #d1fae5; color: #059669; }
+
+        .msg-card.msg-completion .msg-label {
+            background: #d1fae5;
+            color: #059669;
+        }
+
         .msg-card.msg-completion .msg-text {
             font-weight: 600;
             color: #059669;
@@ -846,18 +972,22 @@
             font-weight: 700;
             letter-spacing: 0.3px;
         }
+
         .rca-step-badge.badge-start {
             background: linear-gradient(135deg, #dbeafe, #bfdbfe);
             color: #1e40af;
         }
+
         .rca-step-badge.badge-completed {
             background: linear-gradient(135deg, #d1fae5, #a7f3d0);
             color: #065f46;
         }
+
         .rca-step-badge.badge-error {
             background: linear-gradient(135deg, #fee2e2, #fecaca);
             color: #991b1b;
         }
+
         .rca-step-type-tag {
             display: inline-block;
             padding: 1px 8px;
@@ -867,10 +997,26 @@
             margin-left: 6px;
             text-transform: uppercase;
         }
-        .rca-step-type-tag.tag-llm { background: #fef3c7; color: #92400e; }
-        .rca-step-type-tag.tag-tool { background: #e0e7ff; color: #3730a3; }
-        .rca-step-type-tag.tag-skill { background: #ede9fe; color: #5b21b6; }
-        .rca-step-type-tag.tag-root_cause_definition { background: #fce7f3; color: #9d174d; }
+
+        .rca-step-type-tag.tag-llm {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .rca-step-type-tag.tag-tool {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .rca-step-type-tag.tag-skill {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .rca-step-type-tag.tag-root_cause_definition {
+            background: #fce7f3;
+            color: #9d174d;
+        }
 
         .rca-step-progress {
             display: flex;
@@ -879,6 +1025,7 @@
             margin-top: 8px;
             margin-bottom: 6px;
         }
+
         .rca-step-progress .progress-bar {
             flex: 1;
             height: 4px;
@@ -886,14 +1033,25 @@
             border-radius: 2px;
             overflow: hidden;
         }
+
         .rca-step-progress .progress-fill {
             height: 100%;
             border-radius: 2px;
             transition: width 0.4s ease;
         }
-        .rca-step-progress .progress-fill.fill-start { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
-        .rca-step-progress .progress-fill.fill-completed { background: linear-gradient(90deg, #10b981, #34d399); }
-        .rca-step-progress .progress-fill.fill-error { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+        .rca-step-progress .progress-fill.fill-start {
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+        }
+
+        .rca-step-progress .progress-fill.fill-completed {
+            background: linear-gradient(90deg, #10b981, #34d399);
+        }
+
+        .rca-step-progress .progress-fill.fill-error {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+
         .rca-step-progress .progress-text {
             font-size: 0.72rem;
             color: #94a3b8;
@@ -913,6 +1071,7 @@
             white-space: pre-wrap;
             word-break: break-all;
         }
+
         .rca-step-command::before {
             content: '$ ';
             color: #22d3ee;
@@ -939,7 +1098,12 @@
             margin-left: 6px;
             vertical-align: middle;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         /* 知识库预览链接区域 */
         .msg-card .knowledge-preview-area {
@@ -951,8 +1115,14 @@
 
         /* 消息淡入动画增强 */
         @keyframes msgSlideIn {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .msg-card {
@@ -972,8 +1142,12 @@
         }
 
         @keyframes cursorBlink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0;
+            }
         }
 
         /* 打字中的卡片左边框呼吸灯效果 */
@@ -1045,8 +1219,14 @@
         }
 
         @keyframes scrollBtnFadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* AI消息wrapper样式简化 - 保留用户消息兼容 */
@@ -1142,7 +1322,9 @@
         </div>
 
         <!-- 回到底部浮动按钮 -->
-        <button class="scroll-to-bottom-btn" id="scrollToBottomBtn" onclick="forceScrollToBottom()" title="回到最新消息">⬇</button>
+        <button class="scroll-to-bottom-btn" id="scrollToBottomBtn" onclick="forceScrollToBottom()"
+                title="回到最新消息">⬇
+        </button>
 
         <div class="input-container">
             <div class="input-shell">
@@ -1159,7 +1341,9 @@
                         </div>
 
                         <div class="chat-actions-right send-action-wrap">
-<button id="sendButton" onclick="sendMessage()" title="发送（⌘/Ctrl + Enter）" aria-label="发送（⌘/Ctrl + Enter）">submit</button>
+                            <button id="sendButton" onclick="sendMessage()" title="发送（⌘/Ctrl + Enter）"
+                                    aria-label="发送（⌘/Ctrl + Enter）">submit
+                            </button>
                             <span class="send-shortcut-hint">⌘/Ctrl + Enter</span>
                         </div>
                     </div>
@@ -1338,7 +1522,7 @@
     }
 
     // 监听滚动事件，检测用户手动上滑
-    messagesDiv.addEventListener('scroll', function() {
+    messagesDiv.addEventListener('scroll', function () {
         if (isNearBottom()) {
             userScrolledUp = false;
             hideScrollToBottomBtn();
@@ -1364,9 +1548,11 @@
 
     // "回到底部"按钮的显示/隐藏
     const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
+
     function showScrollToBottomBtn() {
         if (scrollToBottomBtn) scrollToBottomBtn.classList.add('visible');
     }
+
     function hideScrollToBottomBtn() {
         if (scrollToBottomBtn) scrollToBottomBtn.classList.remove('visible');
     }
@@ -1471,16 +1657,18 @@
 
     // --- 安全转义HTML ---
     function escHtml(s) {
-        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function _tryParseJsonArrayString(raw) {
+    function _tryParseJsonString(raw) {
+        if (!raw) {
+            return raw;
+        }
         if (typeof raw !== 'string') return null;
         const text = raw.trim();
-        if (!text || (text[0] !== '[' && text[0] !== '{')) return null;
+        if (!text && ((text[0] !== '[') || (text[0] !== '{'))) return null;
         try {
-            const parsed = JSON.parse(text);
-            return parsed;
+            return JSON.parse(text);
         } catch (e) {
             return null;
         }
@@ -1488,12 +1676,19 @@
 
     function _renderCommandBlock(commandValue) {
         if (!commandValue) return '';
+        if (commandValue === '[]') return '';
+
+        if (typeof commandValue === 'string') {
+            const parsed = _tryParseJsonString(commandValue);
+            console.log("commandValue", parsed, commandValue)
+            if (parsed != null && Array.isArray(parsed)) {
+                const prettyJson = JSON.stringify(parsed, null, 2);
+                return `<div style="margin-top:6px;padding:8px;background:#f1f5f9;border-radius:6px;font-family:monospace;font-size:0.85rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${escHtml(prettyJson)}</div>`;
+            }
+        }
 
         let lines = [];
-        const parsed = _tryParseJsonArrayString(commandValue);
-        if (Array.isArray(parsed)) {
-            lines = parsed.map(x => String(x || '')).filter(Boolean);
-        } else if (typeof commandValue === 'string') {
+        if (typeof commandValue === 'string') {
             lines = commandValue.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
         } else {
             lines = [String(commandValue)];
@@ -1522,7 +1717,7 @@
     }
 
     function _renderStructuredLogCards(data) {
-        const parsed = _tryParseJsonArrayString(data.tool_result || '');
+        const parsed = _tryParseJsonString(data.tool_result || '');
         if (!Array.isArray(parsed)) return false;
 
         const logItems = parsed.filter(item => item && typeof item === 'object' && item.log_file_path && Array.isArray(item.matches));
@@ -1546,7 +1741,7 @@
                 + `<div style="margin-top:6px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">${rows}</div>`
                 + `</div>`;
 
-            enqueueMsg('tool', '🧾', `日志文件: ${item.log_file_path}`, bodyHtml, '', { instant: true });
+            enqueueMsg('tool', '🧾', `日志文件: ${item.log_file_path}`, bodyHtml, '', {instant: true});
         }
 
         return true;
@@ -1555,7 +1750,7 @@
     function _formatResultForDisplay(result) {
         if (result === null || result === undefined) return '';
         const text = String(result);
-        const parsed = _tryParseJsonArrayString(text);
+        const parsed = _tryParseJsonString(text);
         if (parsed !== null) {
             try {
                 return escHtml(JSON.stringify(parsed, null, 2));
@@ -1579,7 +1774,7 @@
         }
 
         const text = String(chunkValue);
-        const parsed = _tryParseJsonArrayString(text);
+        const parsed = _tryParseJsonString(text);
         if (parsed !== null) {
             try {
                 return JSON.stringify(parsed, null, 2);
@@ -1650,7 +1845,7 @@
         messagesDiv.appendChild(card);
         scrollToBottom();
         const textEl = card.querySelector('.msg-text');
-        return { card, textEl };
+        return {card, textEl};
     }
 
     // --- 打字机核心：逐 token 渲染到 textEl ---
@@ -1693,6 +1888,7 @@
                     setTimeout(tick, CHAR_INTERVAL);
                 }
             }
+
             tick();
         });
     }
@@ -1734,7 +1930,7 @@
             } else {
                 // 打字机渲染
                 const tokens = tokenizeHtml(item.html);
-                const { card, textEl } = createCardSkeleton(item.type, item.icon, item.label, item.extra);
+                const {card, textEl} = createCardSkeleton(item.type, item.icon, item.label, item.extra);
                 await typewriteTokens(textEl, tokens);
                 card.classList.remove('typing');
                 if (item.afterRender) item.afterRender(card);
@@ -1748,7 +1944,15 @@
 
     // --- 入队辅助 ---
     function enqueueMsg(type, icon, label, html, extra, opts) {
-        msgQueue.push({ type, icon, label, html, extra: extra || '', instant: !!(opts && opts.instant), afterRender: opts && opts.afterRender });
+        msgQueue.push({
+            type,
+            icon,
+            label,
+            html,
+            extra: extra || '',
+            instant: !!(opts && opts.instant),
+            afterRender: opts && opts.afterRender
+        });
         updateQueueIndicator();
         processQueue();
     }
@@ -1756,32 +1960,32 @@
     // ---------- 将纯文本中的 emoji 前缀映射到卡片类型 ----------
     function classifyPlainText(text) {
         if (text.includes('🧠') || text.includes('正在识别'))
-            return { type: 'status', icon: '🧠', label: '意图识别' };
+            return {type: 'status', icon: '🧠', label: '意图识别'};
         if (text.includes('✅ 用户意图识别') || text.includes('意图'))
-            return { type: 'intent', icon: '🎯', label: '意图结果' };
+            return {type: 'intent', icon: '🎯', label: '意图结果'};
         if (text.includes('📚') || text.includes('知识库'))
-            return { type: 'knowledge', icon: '📚', label: '知识库' };
+            return {type: 'knowledge', icon: '📚', label: '知识库'};
         if (text.includes('🧰') || text.includes('检索工具'))
-            return { type: 'tool', icon: '🧰', label: '工具检索' };
+            return {type: 'tool', icon: '🧰', label: '工具检索'};
         if (text.includes('🛠️') || text.includes('skills'))
-            return { type: 'tool', icon: '🛠️', label: 'Skills检索' };
+            return {type: 'tool', icon: '🛠️', label: 'Skills检索'};
         if (text.includes('🔧') || text.includes('排查') || text.includes('AI分析'))
-            return { type: 'reasoning', icon: '🔧', label: '分析中' };
+            return {type: 'reasoning', icon: '🔧', label: '分析中'};
         if (text.includes('📊'))
-            return { type: 'knowledge', icon: '📊', label: '知识库' };
+            return {type: 'knowledge', icon: '📊', label: '知识库'};
         if (text.includes('📭'))
-            return { type: 'status', icon: '📭', label: '无结果' };
+            return {type: 'status', icon: '📭', label: '无结果'};
         if (text.includes('⚠️'))
-            return { type: 'error', icon: '⚠️', label: '警告' };
+            return {type: 'error', icon: '⚠️', label: '警告'};
         if (text.includes('❌'))
-            return { type: 'error', icon: '❌', label: '错误' };
+            return {type: 'error', icon: '❌', label: '错误'};
         if (text.includes('🤖'))
-            return { type: 'answer', icon: '🤖', label: 'AI回答' };
-        return { type: 'status', icon: 'AI', label: '消息' };
+            return {type: 'answer', icon: '🤖', label: 'AI回答'};
+        return {type: 'status', icon: 'AI', label: '消息'};
     }
 
     // ---------- ws.onmessage — 收到消息先入队 ----------
-    ws.onmessage = function(event) {
+    ws.onmessage = function (event) {
         const response = event.data;
         hideTypingIndicator();
         isStreaming = true;
@@ -1797,10 +2001,10 @@
         if (data && data.type === 'abort_ack') {
             enqueueMsg('completion', '🛑', '已终止',
                 escHtml(data.content || '对话已终止'), '', {
-                afterRender: function() {
-                    resetUIState();
-                }
-            });
+                    afterRender: function () {
+                        resetUIState();
+                    }
+                });
             return;
         }
 
@@ -1864,26 +2068,26 @@
         if (shouldAbortCurrentRequest && !(data.content_type === 'completion' || data.is_completed)) {
             return;
         }
-        
+
         // 处理完成消息 → 恢复输入
         if (data.content_type === 'completion' || data.is_completed) {
             isStreaming = false;
-            
+
             // 根据是否被终止显示不同的消息
             if (shouldAbortCurrentRequest) {
                 enqueueMsg('completion', '🛑', '已终止',
                     escHtml('对话已被终止'), '', {
-                    afterRender: function() {
-                        resetUIState();
-                    }
-                });
+                        afterRender: function () {
+                            resetUIState();
+                        }
+                    });
             } else {
                 enqueueMsg('completion', '✅', '处理完成',
                     escHtml('请求已处理完毕'), '', {
-                    afterRender: function() {
-                        resetUIState();
-                    }
-                });
+                        afterRender: function () {
+                            resetUIState();
+                        }
+                    });
             }
             return;
         }
@@ -1896,7 +2100,7 @@
             const chunk = _formatChunkForDisplay(data.tool_result_chunk || '');
             if (!window._rcaChunkBuffer) window._rcaChunkBuffer = {};
             if (!window._rcaChunkBuffer[chunkId]) {
-                window._rcaChunkBuffer[chunkId] = { chunks: [], done: false };
+                window._rcaChunkBuffer[chunkId] = {chunks: [], done: false};
             }
             window._rcaChunkBuffer[chunkId].chunks.push(chunk);
             // 如果容器已就绪，立即 flush（增量追加）
@@ -1909,7 +2113,7 @@
             const chunkId = data.rca_chunk_id;
             if (!window._rcaChunkBuffer) window._rcaChunkBuffer = {};
             if (!window._rcaChunkBuffer[chunkId]) {
-                window._rcaChunkBuffer[chunkId] = { chunks: [], done: true };
+                window._rcaChunkBuffer[chunkId] = {chunks: [], done: true};
             } else {
                 window._rcaChunkBuffer[chunkId].done = true;
             }
@@ -1937,11 +2141,11 @@
 
         // 根据content_type映射卡片类型
         const typeMap = {
-            'reasoning': { type: 'reasoning', icon: '🤔', label: '思考' },
-            'iteration': { type: 'iteration', icon: '🔄', label: `迭代 ${iterCount}` },
-            'final_answer': { type: 'answer', icon: '💡', label: '最终回答' },
-            'text': { type: 'status', icon: '💬', label: '响应' },
-            'tool': { type: 'tool', icon: '🔧', label: '工具' },
+            'reasoning': {type: 'reasoning', icon: '🤔', label: '思考'},
+            'iteration': {type: 'iteration', icon: '🔄', label: `迭代 ${iterCount}`},
+            'final_answer': {type: 'answer', icon: '💡', label: '最终回答'},
+            'text': {type: 'status', icon: '💬', label: '响应'},
+            'tool': {type: 'tool', icon: '🔧', label: '工具'},
         };
         const cfg = typeMap[contentType] || typeMap['text'];
 
@@ -1963,8 +2167,8 @@
         let tool_command = '';
         if (data.tool_args) {
             tool_command = _renderCommandBlock(data.tool_args.command) || data.tool_args.query || data.tool_args.path ||
-                         data.tool_args.file || data.tool_args.function_name ||
-                         JSON.stringify(data.tool_args, null, 2);
+                data.tool_args.file || data.tool_args.function_name ||
+                JSON.stringify(data.tool_args, null, 2);
         }
 
         let bodyHtml = '';
@@ -1977,8 +2181,8 @@
                     return;
                 }
                 const result = data.tool_result || '无结果';
-                const formattedResult = _formatResultForDisplay(result).replace(/\n/g,'<br/>');
-                const resultId = 'tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+                const formattedResult = _formatResultForDisplay(result).replace(/\n/g, '<br/>');
+                const resultId = 'tr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
                 bodyHtml = `✅ <strong>${escHtml(toolName)}</strong> 执行完成`
                     + _renderCommandBlock(tool_command)
                     + `<div class="tool-result-block">
@@ -1992,13 +2196,13 @@
             case 'error': {
                 const errorMsg = data.tool_error || '未知错误';
                 bodyHtml = `❌ <strong>${escHtml(toolName)}</strong> 执行失败` +
-                    `<div style="margin-top:6px;padding:8px;background:#fef2f2;border-radius:6px;color:#991b1b;font-size:0.9rem;">${escHtml(errorMsg).replace(/\n/g,'<br/>')}</div>`;
+                    `<div style="margin-top:6px;padding:8px;background:#fef2f2;border-radius:6px;color:#991b1b;font-size:0.9rem;">${escHtml(errorMsg).replace(/\n/g, '<br/>')}</div>`;
                 break;
             }
         }
 
         const icon = toolStatus === 'error' ? '❌' : (toolStatus === 'completed' ? '✅' : '🔧');
-        enqueueMsg('tool', icon, `工具: ${toolName}`, bodyHtml, '', { instant: true });
+        enqueueMsg('tool', icon, `工具: ${toolName}`, bodyHtml, '', {instant: true});
     }
 
     // ---------- RCA 步骤卡片（专用渲染） ----------
@@ -2072,7 +2276,7 @@
 
                 // 执行结果区域（可折叠），使用 rca_chunk_id 作为容器 ID
                 // 内容通过后续 result_chunk 消息逐块追加，不做截断
-                const chunkId = data.rca_chunk_id || ('rca-tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6));
+                const chunkId = data.rca_chunk_id || ('rca-tr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6));
                 const resultHtml = `<div class="tool-result-block">
                         <div class="tool-result-header" onclick="(function(el){var b=el.nextElementSibling;b.classList.toggle('collapsed');el.querySelector('.arrow').textContent=b.classList.contains('collapsed')?'▶':'▼';})(this)">
                             <span>📋 执行结果</span><span class="arrow">▼</span>
@@ -2096,23 +2300,23 @@
                 bodyHtml = `${badgeHtml} ${typeTagHtml} ${durationHtml}` +
                     `<div style="margin-top:6px;font-weight:600;color:#991b1b;">${escHtml(toolName)}</div>` +
                     progressHtml +
-                    `<div style="margin-top:6px;padding:10px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border-radius:8px;color:#991b1b;font-size:0.88rem;border:1px solid #fecaca;">${escHtml(errorMsg).replace(/\n/g,'<br/>')}</div>`;
+                    `<div style="margin-top:6px;padding:10px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border-radius:8px;color:#991b1b;font-size:0.88rem;border:1px solid #fecaca;">${escHtml(errorMsg).replace(/\n/g, '<br/>')}</div>`;
                 break;
             }
         }
 
-        const iconMap = { start: '🔄', completed: '✅', error: '❌' };
+        const iconMap = {start: '🔄', completed: '✅', error: '❌'};
         const icon = iconMap[toolStatus] || '📋';
         const cardLabel = `RCA 步骤 ${stepIndex}/${totalSteps}: ${toolName}`;
 
         // completed 状态需要 afterRender 回调来 flush 缓冲区中积压的 chunk
         const chunkIdForFlush = data.rca_chunk_id;
-        const afterRenderFn = (toolStatus === 'completed' && chunkIdForFlush) ? function() {
+        const afterRenderFn = (toolStatus === 'completed' && chunkIdForFlush) ? function () {
             // DOM 已渲染，立即 flush 已缓存的 chunk
             _rcaFlushChunks(chunkIdForFlush);
 
             // 启动轮询：后续可能还有 chunk 陆续到达，持续 flush 直到 done
-            const flushInterval = setInterval(function() {
+            const flushInterval = setInterval(function () {
                 _rcaFlushChunks(chunkIdForFlush);
                 // 缓冲区已清理（done 且全部写入）则停止轮询
                 if (!window._rcaChunkBuffer || !window._rcaChunkBuffer[chunkIdForFlush]) {
@@ -2121,10 +2325,12 @@
             }, 100); // 每 100ms 检查一次
 
             // 安全兜底：最多轮询 60 秒后强制停止
-            setTimeout(function() { clearInterval(flushInterval); }, 60000);
+            setTimeout(function () {
+                clearInterval(flushInterval);
+            }, 60000);
         } : null;
 
-        enqueueMsg('tool', icon, cardLabel, bodyHtml, '', { instant: true, afterRender: afterRenderFn });
+        enqueueMsg('tool', icon, cardLabel, bodyHtml, '', {instant: true, afterRender: afterRenderFn});
     }
 
     // ---------- 知识库查询卡片（即时渲染） ----------
@@ -2161,13 +2367,13 @@
                 break;
             }
             case 'success': {
-                const previewLinksId = `kpl-${Date.now()}-${Math.random().toString(36).slice(2,5)}`;
+                const previewLinksId = `kpl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
                 bodyHtml = `${escHtml(content)} <span class="knowledge-count">${count}</span>` +
                     (result ? `<div style="margin-top:8px;max-height:200px;overflow-y:auto;background:#fafafa;padding:10px;border-radius:6px;font-size:0.9rem;border:1px solid #e2e8f0;">${escHtml(result)}</div>` : '') +
                     `<div class="knowledge-preview-area" id="${previewLinksId}"></div>`;
                 const _previewItems = data.preview_items;
-                afterRender = function() {
-                    setTimeout(function() {
+                afterRender = function () {
+                    setTimeout(function () {
                         if (_previewItems && _previewItems.length > 0) {
                             createPreviewLinksFromArray(_previewItems, previewLinksId);
                         }
@@ -2188,9 +2394,19 @@
                 bodyHtml = escHtml(content);
         }
 
-        const iconMap = { start: '📚', searching: '🔍', success: '✅', no_results: '📭', error: '❌', skipped: '⚠️' };
-        const titleMap = { start: '工具检索', searching: '工具检索 · 重排序中', success: '工具检索 · 完成', no_results: '工具检索 · 无结果', error: '工具检索 · 异常', skipped: '工具检索 · 已跳过' };
-        enqueueMsg('knowledge', iconMap[status] || '📚', titleMap[status] || '知识库查询', bodyHtml, '', { instant: true, afterRender: afterRender });
+        const iconMap = {start: '📚', searching: '🔍', success: '✅', no_results: '📭', error: '❌', skipped: '⚠️'};
+        const titleMap = {
+            start: '工具检索',
+            searching: '工具检索 · 重排序中',
+            success: '工具检索 · 完成',
+            no_results: '工具检索 · 无结果',
+            error: '工具检索 · 异常',
+            skipped: '工具检索 · 已跳过'
+        };
+        enqueueMsg('knowledge', iconMap[status] || '📚', titleMap[status] || '知识库查询', bodyHtml, '', {
+            instant: true,
+            afterRender: afterRender
+        });
     }
 
     // (旧的 handleToolCallData 和 createToolSection 已迁移到 handleToolCallCard)
@@ -2201,19 +2417,19 @@
     function parseKnowledgeResultsForPreview(resultHtml, containerId) {
         const container = document.getElementById(containerId);
         if (!container) return;
-        
+
         // 创建临时元素来解析HTML
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = resultHtml;
-        
+
         // 查找所有包含预览信息的知识条目
         const knowledgeItems = tempDiv.querySelectorAll('h3');
-        
+
         knowledgeItems.forEach((item, index) => {
             // 获取整个知识条目的文本内容
             let currentElement = item;
             let itemText = '';
-            
+
             // 收集从h3开始到下一个h3或结束的所有文本
             while (currentElement && currentElement.nextSibling) {
                 currentElement = currentElement.nextSibling;
@@ -2226,13 +2442,13 @@
                     itemText += currentElement.textContent || '';
                 }
             }
-            
+
             // 检查各种类型的预览信息
             const docLinkMatch = itemText.match(/📄 文档链接[:：]\s*([^\n|]+)/);
             const filePathMatch = itemText.match(/📁 文件路径[:：]\s*([^\n|]+)/);
             const itemIdMatch = itemText.match(/🆔 条目ID[:：]\s*([^\n|]+)/);
             const previewAvailableMatch = itemText.match(/🔍 支持预览/);
-            
+
             // 创建预览链接容器
             const previewContainer = document.createElement('div');
             previewContainer.className = 'preview-links-container';
@@ -2243,9 +2459,9 @@
                 border-radius: 4px;
                 border-left: 3px solid #4299e1;
             `;
-            
+
             let hasPreviewOptions = false;
-            
+
             // 添加文档链接预览
             if (docLinkMatch) {
                 const linkText = docLinkMatch[1].trim();
@@ -2253,7 +2469,7 @@
                 previewContainer.appendChild(previewLink);
                 hasPreviewOptions = true;
             }
-            
+
             // 添加文件路径预览
             if (filePathMatch) {
                 const pathText = filePathMatch[1].trim();
@@ -2261,7 +2477,7 @@
                 previewContainer.appendChild(previewLink);
                 hasPreviewOptions = true;
             }
-            
+
             // 添加知识条目完整内容预览
             if (itemIdMatch && previewAvailableMatch) {
                 const itemId = itemIdMatch[1].trim();
@@ -2269,19 +2485,19 @@
                 previewContainer.appendChild(previewLink);
                 hasPreviewOptions = true;
             }
-            
+
             // 如果有预览选项，添加到容器中
             if (hasPreviewOptions) {
                 container.appendChild(previewContainer);
             }
         });
     }
-    
+
     // 使用预览项目数组创建预览链接
     function createPreviewLinksFromArray(previewItems, containerId) {
         const container = document.getElementById(containerId);
         if (!container || !previewItems || previewItems.length === 0) return;
-        
+
         // 创建预览链接容器
         const previewContainer = document.createElement('div');
         previewContainer.className = 'preview-links-container';
@@ -2292,7 +2508,7 @@
             border-radius: 4px;
             border-left: 3px solid #4299e1;
         `;
-        
+
         // 为每个预览项目创建链接
         previewItems.forEach((item, index) => {
             const previewLink = document.createElement('a');
@@ -2309,12 +2525,12 @@
                 font-size: 0.85rem;
                 transition: background-color 0.2s;
             `;
-            
+
             previewLink.textContent = item.label;
             previewLink.dataset.type = item.type;
             previewLink.dataset.id = item.id;
             previewLink.dataset.index = index;
-            
+
             // 根据类型设置额外的数据属性
             if (item.type === 'file' && item.path) {
                 previewLink.dataset.path = item.path;
@@ -2323,26 +2539,26 @@
             } else if (item.type === 'item' && item.item_id) {
                 previewLink.dataset.itemId = item.item_id;
             }
-            
-            previewLink.addEventListener('click', function(e) {
+
+            previewLink.addEventListener('click', function (e) {
                 e.preventDefault();
                 showDocumentPreviewFromArray(this.dataset);
             });
-            
-            previewLink.addEventListener('mouseenter', function() {
+
+            previewLink.addEventListener('mouseenter', function () {
                 this.style.background = '#3182ce';
             });
-            
-            previewLink.addEventListener('mouseleave', function() {
+
+            previewLink.addEventListener('mouseleave', function () {
                 this.style.background = '#4299e1';
             });
-            
+
             previewContainer.appendChild(previewLink);
         });
-        
+
         container.appendChild(previewContainer);
     }
-    
+
     // 创建预览链接
     function createPreviewLink(text, link, type, index) {
         const previewLink = document.createElement('a');
@@ -2363,20 +2579,20 @@
         previewLink.dataset.link = link;
         previewLink.dataset.type = type;
         previewLink.dataset.index = index;
-        
-        previewLink.addEventListener('click', function(e) {
+
+        previewLink.addEventListener('click', function (e) {
             e.preventDefault();
             showDocumentPreview(this.dataset.link, this.dataset.type, this.dataset.index);
         });
-        
-        previewLink.addEventListener('mouseenter', function() {
+
+        previewLink.addEventListener('mouseenter', function () {
             this.style.background = '#3182ce';
         });
-        
-        previewLink.addEventListener('mouseleave', function() {
+
+        previewLink.addEventListener('mouseleave', function () {
             this.style.background = '#4299e1';
         });
-        
+
         return previewLink;
     }
 
@@ -2398,7 +2614,7 @@
             z-index: 1000;
             animation: fadeIn 0.2s ease-out;
         `;
-        
+
         // 创建内容区域
         const content = document.createElement('div');
         content.className = 'doc-preview-content';
@@ -2414,7 +2630,7 @@
             display: flex;
             flex-direction: column;
         `;
-        
+
         // 创建头部
         const header = document.createElement('div');
         header.style.cssText = `
@@ -2423,7 +2639,7 @@
             background: #f8fafc;
             border-radius: 12px 12px 0 0;
         `;
-        
+
         // 添加关闭按钮
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '×';
@@ -2456,7 +2672,7 @@
             modal.style.animation = 'fadeOut 0.2s ease-out';
             setTimeout(() => document.body.removeChild(modal), 200);
         });
-        
+
         // 添加标题和来源信息
         const title = document.createElement('h3');
         title.style.cssText = `
@@ -2464,14 +2680,14 @@
             color: #2d3748;
             font-size: 1.2rem;
         `;
-        
+
         const typeNames = {
             'url': '文档链接',
             'file': '本地文件',
             'item': '知识条目'
         };
         title.textContent = `${typeNames[type] || '文档'}预览`;
-        
+
         const linkInfo = document.createElement('p');
         linkInfo.style.cssText = `
             margin: 0;
@@ -2480,7 +2696,7 @@
             word-break: break-all;
         `;
         linkInfo.textContent = `来源: ${link}`;
-        
+
         // 创建内容区域
         const contentArea = document.createElement('div');
         contentArea.className = 'doc-preview-text';
@@ -2495,7 +2711,7 @@
             white-space: pre-wrap;
             word-wrap: break-word;
         `;
-        
+
         // 添加加载状态
         contentArea.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #718096;">
@@ -2503,7 +2719,7 @@
                 <div>正在加载文档内容...</div>
             </div>
         `;
-        
+
         // 组装模态框
         header.appendChild(title);
         header.appendChild(linkInfo);
@@ -2511,7 +2727,7 @@
         content.appendChild(header);
         content.appendChild(contentArea);
         modal.appendChild(content);
-        
+
         // 添加CSS动画
         const style = document.createElement('style');
         style.textContent = `
@@ -2529,10 +2745,10 @@
             }
         `;
         document.head.appendChild(style);
-        
+
         // 添加到页面
         document.body.appendChild(modal);
-        
+
         // 点击背景关闭
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
@@ -2540,7 +2756,7 @@
                 setTimeout(() => document.body.removeChild(modal), 200);
             }
         });
-        
+
         // ESC键关闭
         const escHandler = (e) => {
             if (e.key === 'Escape') {
@@ -2550,7 +2766,7 @@
             }
         };
         document.addEventListener('keydown', escHandler);
-        
+
         // 加载文档内容
         loadDocumentContent(link, type, contentArea);
     }
@@ -2559,7 +2775,7 @@
     function loadDocumentContent(link, type, contentArea) {
         // 调用后端API获取文档内容
         const params = new URLSearchParams();
-        
+
         if (type === 'url') {
             params.append('source_url', link);
         } else if (type === 'file') {
@@ -2567,14 +2783,14 @@
         } else if (type === 'item') {
             params.append('item_id', link);
         }
-        
+
         fetch(`/api/knowledge/preview?${params}`)
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
                     // 成功加载内容
                     contentArea.innerHTML = '';
-                    
+
                     // 如果有元数据，显示元数据信息
                     if (data.metadata && type === 'item') {
                         const metadataDiv = document.createElement('div');
@@ -2585,7 +2801,7 @@
                             margin-bottom: 15px;
                             border-left: 4px solid #4299e1;
                         `;
-                        
+
                         const metadataHtml = `
                             <div style="font-weight: 600; color: #2d3748; margin-bottom: 8px;">📋 文档信息</div>
                             <div style="font-size: 0.9rem; color: #4a5568; line-height: 1.4;">
@@ -2601,7 +2817,7 @@
                         metadataDiv.innerHTML = metadataHtml;
                         contentArea.appendChild(metadataDiv);
                     }
-                    
+
                     // 显示文档内容
                     const contentDiv = document.createElement('div');
                     contentDiv.style.cssText = `
@@ -2613,10 +2829,10 @@
                         word-wrap: break-word;
                         line-height: 1.6;
                     `;
-                    
+
                     // 简单的内容格式化
                     let formattedContent = data.content;
-                    
+
                     // 检测并高亮代码块
                     if (formattedContent.includes('```')) {
                         formattedContent = formattedContent.replace(
@@ -2624,22 +2840,22 @@
                             '<div style="background: #f1f5f9; padding: 10px; border-radius: 4px; margin: 10px 0; border-left: 3px solid #64748b;"><code style="font-family: Monaco, monospace; font-size: 0.9rem;">$2</code></div>'
                         );
                     }
-                    
+
                     // 高亮标题
                     formattedContent = formattedContent.replace(
                         /^(#{1,6})\s+(.+)$/gm,
                         '<div style="font-weight: 600; color: #2d3748; margin: 15px 0 8px 0; font-size: 1.1rem;">$2</div>'
                     );
-                    
+
                     // 高亮重要信息
                     formattedContent = formattedContent.replace(
                         /\*\*(.*?)\*\*/g,
                         '<strong style="color: #2d3748;">$1</strong>'
                     );
-                    
+
                     contentDiv.innerHTML = formattedContent;
                     contentArea.appendChild(contentDiv);
-                    
+
                 } else {
                     // 显示错误信息
                     contentArea.innerHTML = `
@@ -2666,7 +2882,7 @@
     function showDocumentPreviewFromArray(dataset) {
         const type = dataset.type;
         const id = dataset.id;
-        
+
         // 创建模态框
         const modal = document.createElement('div');
         modal.className = 'doc-preview-modal';
@@ -2683,7 +2899,7 @@
             z-index: 10000;
             animation: fadeIn 0.3s ease-out;
         `;
-        
+
         // 创建内容容器
         const content = document.createElement('div');
         content.className = 'doc-preview-content';
@@ -2698,7 +2914,7 @@
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             animation: slideIn 0.3s ease-out;
         `;
-        
+
         // 创建头部
         const header = document.createElement('div');
         header.style.cssText = `
@@ -2710,21 +2926,21 @@
             background: #f8fafc;
             border-radius: 8px 8px 0 0;
         `;
-        
+
         const title = document.createElement('h3');
         title.style.cssText = `
             margin: 0;
             color: #2d3748;
             font-size: 1.2rem;
         `;
-        
+
         const typeNames = {
             'file': '文件',
             'url': '文档链接',
             'item': '完整内容'
         };
         title.textContent = `${typeNames[type] || '文档'}预览`;
-        
+
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '✕';
         closeBtn.style.cssText = `
@@ -2742,24 +2958,24 @@
             border-radius: 50%;
             transition: all 0.2s;
         `;
-        
+
         closeBtn.addEventListener('click', () => {
             document.body.removeChild(modal);
         });
-        
+
         closeBtn.addEventListener('mouseenter', () => {
             closeBtn.style.background = '#e2e8f0';
             closeBtn.style.color = '#2d3748';
         });
-        
+
         closeBtn.addEventListener('mouseleave', () => {
             closeBtn.style.background = 'none';
             closeBtn.style.color = '#718096';
         });
-        
+
         header.appendChild(title);
         header.appendChild(closeBtn);
-        
+
         // 创建内容区域
         const contentArea = document.createElement('div');
         contentArea.className = 'doc-preview-text';
@@ -2773,7 +2989,7 @@
             color: #2d3748;
             background: #fafafa;
         `;
-        
+
         // 显示加载状态
         contentArea.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 200px;">
@@ -2783,19 +2999,19 @@
                 </div>
             </div>
         `;
-        
+
         content.appendChild(header);
         content.appendChild(contentArea);
         modal.appendChild(content);
         document.body.appendChild(modal);
-        
+
         // 点击模态框外部关闭
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
                 document.body.removeChild(modal);
             }
         });
-        
+
         // ESC键关闭
         const handleEsc = (e) => {
             if (e.key === 'Escape') {
@@ -2804,7 +3020,7 @@
             }
         };
         document.addEventListener('keydown', handleEsc);
-        
+
         // 加载文档内容
         loadDocumentContentFromArray(dataset, contentArea);
     }
@@ -2813,7 +3029,7 @@
     function loadDocumentContentFromArray(dataset, contentArea) {
         const type = dataset.type;
         const params = new URLSearchParams();
-        
+
         // 根据类型设置不同的参数
         if (type === 'file' && dataset.path) {
             params.append('file_path', dataset.path);
@@ -2830,7 +3046,7 @@
             `;
             return;
         }
-        
+
         fetch(`/api/knowledge/preview?${params}`)
             .then(response => response.json())
             .then(data => {
@@ -2842,9 +3058,9 @@
                         .replace(/>/g, '&gt;')
                         .replace(/\\n/g, '<br>')
                         .replace(/\\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
-                    
+
                     contentArea.innerHTML = `<pre style="white-space: pre-wrap; margin: 0;">${formattedContent}</pre>`;
-                    
+
                     // 如果有元数据，显示元数据信息
                     if (data.metadata && type === 'item') {
                         const metadataDiv = document.createElement('div');
@@ -2855,7 +3071,7 @@
                             margin-bottom: 15px;
                             border-left: 4px solid #4299e1;
                         `;
-                        
+
                         const metadataHtml = `
                             <div style="font-weight: 600; color: #2d3748; margin-bottom: 8px;">📋 文档信息</div>
                             <div style="font-size: 0.9rem; color: #4a5568; line-height: 1.4;">
@@ -2868,7 +3084,7 @@
                                 ${data.metadata.file_path ? `<div><strong>文件路径:</strong> ${data.metadata.file_path}</div>` : ''}
                             </div>
                         `;
-                        
+
                         metadataDiv.innerHTML = metadataHtml;
                         contentArea.insertBefore(metadataDiv, contentArea.firstChild);
                     }
@@ -2991,14 +3207,14 @@
 
             // 发送终止消息到后端，等待后端确认后再恢复UI
             if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'abort' }));
+                ws.send(JSON.stringify({type: 'abort'}));
             }
 
             // 兜底：若后端终止确认丢失，2秒后强制恢复UI，避免按钮卡死
             if (abortAckTimeoutId) {
                 clearTimeout(abortAckTimeoutId);
             }
-            abortAckTimeoutId = setTimeout(function() {
+            abortAckTimeoutId = setTimeout(function () {
                 if (shouldAbortCurrentRequest) {
                     resetUIState();
                 }
@@ -3024,11 +3240,11 @@
         hideTypingIndicator();
     }
 
-    messageInput.addEventListener('input', function() {
+    messageInput.addEventListener('input', function () {
         updateCommandSuggestionsByInput();
     });
 
-    messageInput.addEventListener('keydown', function(e) {
+    messageInput.addEventListener('keydown', function (e) {
         const hasSuggestions = matchedCommands.length > 0 && commandSuggestionBox && commandSuggestionBox.style.display !== 'none';
 
         if (hasSuggestions && e.key === 'ArrowDown') {
@@ -3070,7 +3286,7 @@
     fetchSystemCommands();
 
     // 点击输入区外部时收起补全
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         if (!commandSuggestionBox) return;
         if (e.target === messageInput || commandSuggestionBox.contains(e.target)) {
             return;
@@ -3079,11 +3295,11 @@
     });
 
     // Handle WebSocket connection status
-    ws.onopen = function() {
+    ws.onopen = function () {
         sendButton.disabled = false;
     };
 
-    ws.onclose = function() {
+    ws.onclose = function () {
         sendButton.disabled = true;
         messageInput.disabled = true;
         addAIMessage("Connection lost. Please refresh the page.");
