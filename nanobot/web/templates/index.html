@@ -129,7 +129,60 @@
             font-weight: 500;
         }
 
+        .command-suggestion-box {
+            margin-top: 8px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 6px;
+        }
+
+        .command-suggestion-item {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .command-suggestion-item:hover,
+        .command-suggestion-item.active {
+            background: #f3f4f6;
+        }
+
+        .command-suggestion-left {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .command-suggestion-command {
+            color: #111827;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .command-suggestion-desc {
+            color: #6b7280;
+            font-size: 12px;
+            line-height: 1.25;
+        }
+
+        .command-suggestion-hint {
+            color: #9ca3af;
+            font-size: 11px;
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+
         .chat-input-actions {
+
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -753,7 +806,8 @@
             font-size: 0.82rem;
             line-height: 1.5;
             white-space: pre-wrap;
-            word-break: break-all;
+            overflow-wrap: anywhere;
+            word-break: break-word;
             max-height: 300px;
             overflow-y: auto;
             color: #334155;
@@ -1067,6 +1121,7 @@
                 <div class="input-wrapper">
                     <div class="chat-input-top">
                         <input autocomplete="off" id="messageInput" placeholder="How can I help you today?" type="text">
+                        <div id="commandSuggestionBox" class="command-suggestion-box" style="display:none;"></div>
                     </div>
 
                     <div class="chat-input-actions">
@@ -1101,9 +1156,13 @@
     const uploadButton = document.getElementById("uploadButton");
     const uploadStatus = document.getElementById("uploadStatus");
     const removeUploadButton = document.getElementById("removeUploadButton");
+    const commandSuggestionBox = document.getElementById("commandSuggestionBox");
     let uploadedFilePath = '';
     let uploadedFileName = '';
     let isTyping = false;
+    let allSystemCommands = [];
+    let matchedCommands = [];
+    let commandActiveIndex = -1;
 
     let isProcessing = false; // 标记是否正在处理请求
     let userScrolledUp = false; // 标记用户是否手动上滑
@@ -1124,7 +1183,107 @@
         refreshUploadStatus();
     }
 
+    async function fetchSystemCommands() {
+        try {
+            const resp = await fetch('/api/system-commands');
+            const data = await resp.json();
+            if (data && data.success && Array.isArray(data.commands)) {
+                allSystemCommands = data.commands
+                    .map(item => ({
+                        command: String(item.command || '').trim(),
+                        description: String(item.description || '').trim(),
+                    }))
+                    .filter(item => item.command.startsWith('/'));
+            }
+        } catch (e) {
+            allSystemCommands = [];
+        }
+    }
+
+    function hideCommandSuggestions() {
+        matchedCommands = [];
+        commandActiveIndex = -1;
+        if (commandSuggestionBox) {
+            commandSuggestionBox.style.display = 'none';
+            commandSuggestionBox.innerHTML = '';
+        }
+    }
+
+    function fuzzyMatchCommand(inputText, command) {
+        const source = (inputText || '').toLowerCase();
+        const target = (command || '').toLowerCase();
+        if (!source || source === '/') {
+            return true;
+        }
+        let i = 0;
+        for (let j = 0; j < target.length && i < source.length; j++) {
+            if (source[i] === target[j]) {
+                i++;
+            }
+        }
+        return i === source.length;
+    }
+
+    function renderCommandSuggestions(list) {
+        if (!commandSuggestionBox) return;
+        if (!list || list.length === 0) {
+            hideCommandSuggestions();
+            return;
+        }
+
+        const html = list.map((item, idx) => {
+            const activeClass = idx === commandActiveIndex ? ' active' : '';
+            const desc = item.description ? `<div class="command-suggestion-desc">${escHtml(item.description)}</div>` : '';
+            return `<div class="command-suggestion-item${activeClass}" data-index="${idx}">
+                <div class="command-suggestion-left">
+                    <div class="command-suggestion-command">${escHtml(item.command)}</div>
+                    ${desc}
+                </div>
+                <div class="command-suggestion-hint">Tab / Enter</div>
+            </div>`;
+        }).join('');
+
+        commandSuggestionBox.innerHTML = html;
+        commandSuggestionBox.style.display = 'block';
+
+        const items = commandSuggestionBox.querySelectorAll('.command-suggestion-item');
+        items.forEach(el => {
+            el.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                const idx = Number(el.dataset.index || '-1');
+                if (Number.isInteger(idx) && idx >= 0 && idx < matchedCommands.length) {
+                    applyCommandSuggestion(idx);
+                }
+            });
+        });
+    }
+
+    function updateCommandSuggestionsByInput() {
+        const current = (messageInput.value || '').trim();
+        if (!current.startsWith('/')) {
+            hideCommandSuggestions();
+            return;
+        }
+
+        const keyword = current.toLowerCase();
+        matchedCommands = allSystemCommands
+            .filter(item => fuzzyMatchCommand(keyword, item.command) || item.command.toLowerCase().includes(keyword))
+            .slice(0, 8);
+
+        commandActiveIndex = matchedCommands.length > 0 ? 0 : -1;
+        renderCommandSuggestions(matchedCommands);
+    }
+
+    function applyCommandSuggestion(index) {
+        const item = matchedCommands[index];
+        if (!item) return;
+        messageInput.value = `${item.command} `;
+        hideCommandSuggestions();
+        messageInput.focus();
+    }
+
     // 点击+号先弹出文件选择框
+
     uploadButton.addEventListener('click', () => {
         if (uploadButton.disabled) {
             return;
@@ -1283,7 +1442,123 @@
 
     // --- 安全转义HTML ---
     function escHtml(s) {
-        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function _tryParseJsonArrayString(raw) {
+        if (typeof raw !== 'string') return null;
+        const text = raw.trim();
+        if (!text || (text[0] !== '[' && text[0] !== '{')) return null;
+        try {
+            const parsed = JSON.parse(text);
+            return parsed;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function _renderCommandBlock(commandValue) {
+        if (!commandValue) return '';
+
+        let lines = [];
+        const parsed = _tryParseJsonArrayString(commandValue);
+        if (Array.isArray(parsed)) {
+            lines = parsed.map(x => String(x || '')).filter(Boolean);
+        } else if (typeof commandValue === 'string') {
+            lines = commandValue.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        } else {
+            lines = [String(commandValue)];
+        }
+
+        if (!lines.length) return '';
+        const listHtml = lines.map(cmd => `<div>${escHtml(cmd)}</div>`).join('');
+        return `<div style="margin-top:6px;padding:8px;background:#f1f5f9;border-radius:6px;font-family:monospace;font-size:0.85rem;line-height:1.45;">${listHtml}</div>`;
+    }
+
+    function _escapeRegExp(str) {
+        return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function _highlightKeywords(text, keywords) {
+        let html = escHtml(text);
+        const validKeywords = (Array.isArray(keywords) ? keywords : [])
+            .map(k => String(k || '').trim())
+            .filter(Boolean)
+            .sort((a, b) => b.length - a.length);
+        for (const kw of validKeywords) {
+            const re = new RegExp(_escapeRegExp(kw), 'gi');
+            html = html.replace(re, (m) => `<span style="background:#fef08a;color:#7c2d12;border-radius:3px;padding:0 2px;font-weight:600;">${m}</span>`);
+        }
+        return html;
+    }
+
+    function _renderStructuredLogCards(data) {
+        const parsed = _tryParseJsonArrayString(data.tool_result || '');
+        if (!Array.isArray(parsed)) return false;
+
+        const logItems = parsed.filter(item => item && typeof item === 'object' && item.log_file_path && Array.isArray(item.matches));
+        if (!logItems.length) return false;
+
+        for (const item of logItems) {
+            const keywords = Array.isArray(item.matched_keywords) ? item.matched_keywords : [];
+            const keywordText = keywords.length ? keywords.join(', ') : '-';
+            const rows = item.matches.map((m) => {
+                const lineNo = Number(m.line_number || 0);
+                const content = _highlightKeywords(m.content || '', keywords);
+                return `<div style="margin-top:4px;display:flex;gap:8px;align-items:flex-start;">`
+                    + `<span style="min-width:64px;color:#1d4ed8;font-weight:700;">第${lineNo}行</span>`
+                    + `<span style="white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;">${content}</span>`
+                    + `</div>`;
+            }).join('') || `<div style="margin-top:4px;color:#64748b;">无匹配行</div>`;
+
+            const bodyHtml = `<div style="line-height:1.5;">`
+                + `<div><strong>日志路径：</strong>${escHtml(item.log_file_path)}</div>`
+                + `<div style="margin-top:4px;"><strong>匹配关键字：</strong>${escHtml(keywordText)}</div>`
+                + `<div style="margin-top:6px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">${rows}</div>`
+                + `</div>`;
+
+            enqueueMsg('tool', '🧾', `日志文件: ${item.log_file_path}`, bodyHtml, '', { instant: true });
+        }
+
+        return true;
+    }
+
+    function _formatResultForDisplay(result) {
+        if (result === null || result === undefined) return '';
+        const text = String(result);
+        const parsed = _tryParseJsonArrayString(text);
+        if (parsed !== null) {
+            try {
+                return escHtml(JSON.stringify(parsed, null, 2));
+            } catch (e) {
+                console.warn('_formatResultForDisplay error', result, e);
+                return escHtml(text);
+            }
+        }
+        return escHtml(text);
+    }
+
+    function _formatChunkForDisplay(chunkValue) {
+        if (chunkValue === null || chunkValue === undefined) return '';
+
+        if (typeof chunkValue === 'object') {
+            try {
+                return JSON.stringify(chunkValue, null, 2);
+            } catch (e) {
+                return String(chunkValue);
+            }
+        }
+
+        const text = String(chunkValue);
+        const parsed = _tryParseJsonArrayString(text);
+        if (parsed !== null) {
+            try {
+                return JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                return text;
+            }
+        }
+        return text;
     }
 
     // --- 将文本中的特殊序列转换为显示用的 token 列表 ---
@@ -1589,7 +1864,7 @@
         // 由 afterRender 回调或 result_done 触发统一 flush。
         if (data.tool_status === 'result_chunk' && data.rca_chunk_id) {
             const chunkId = data.rca_chunk_id;
-            const chunk = data.tool_result_chunk || '';
+            const chunk = _formatChunkForDisplay(data.tool_result_chunk || '');
             if (!window._rcaChunkBuffer) window._rcaChunkBuffer = {};
             if (!window._rcaChunkBuffer[chunkId]) {
                 window._rcaChunkBuffer[chunkId] = { chunks: [], done: false };
@@ -1666,18 +1941,22 @@
         let bodyHtml = '';
         switch (toolStatus) {
             case 'start':
-                bodyHtml = `🔧 开始执行: <strong>${escHtml(toolName)}</strong>` +
-                    (tool_command ? `<div style="margin-top:6px;padding:8px;background:#f1f5f9;border-radius:6px;font-family:monospace;font-size:0.85rem;">${escHtml(tool_command)}</div>` : '');
+                bodyHtml = `🔧 开始执行: <strong>${escHtml(toolName)}</strong>` + _renderCommandBlock(tool_command);
                 break;
             case 'completed': {
+                if (_renderStructuredLogCards(data)) {
+                    return;
+                }
                 const result = data.tool_result || '无结果';
+                const formattedResult = _formatResultForDisplay(result).replace(/\n/g,'<br/>');
                 const resultId = 'tr-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
-                bodyHtml = `✅ <strong>${escHtml(toolName)}</strong> 执行完成` +
-                    `<div class="tool-result-block">
+                bodyHtml = `✅ <strong>${escHtml(toolName)}</strong> 执行完成`
+                    + _renderCommandBlock(tool_command)
+                    + `<div class="tool-result-block">
                         <div class="tool-result-header" onclick="(function(el){var b=el.nextElementSibling;b.classList.toggle('collapsed');el.querySelector('.arrow').textContent=b.classList.contains('collapsed')?'▶':'▼';})(this)">
                             <span>📋 执行结果</span><span class="arrow">▼</span>
                         </div>
-                        <div class="tool-result-body" id="${resultId}">${escHtml(result)}</div>
+                        <div class="tool-result-body" id="${resultId}">${formattedResult}</div>
                     </div>`;
                 break;
             }
@@ -1742,7 +2021,7 @@
 
                 let descHtml = '';
                 if (data.tool_args && data.tool_args.command) {
-                    descHtml = `<div class="rca-step-command">${escHtml(data.tool_args.command)}</div>`;
+                    descHtml = _renderCommandBlock(data.tool_args.command);
                 }
 
                 bodyHtml = `${badgeHtml} ${typeTagHtml} ${spinnerHtml}` +
@@ -1756,10 +2035,10 @@
                 const badgeHtml = `<span class="rca-step-badge badge-completed">第 ${stepIndex} 步 ✓</span>`;
                 const durationHtml = duration ? `<span class="rca-step-duration">⏱ ${duration}s</span>` : '';
 
-                // 命令摘要
+                // 命令摘要（支持JSON数组字符串）
                 let cmdHtml = '';
                 if (data.tool_args && data.tool_args.command) {
-                    cmdHtml = `<div class="rca-step-command">${escHtml(data.tool_args.command)}</div>`;
+                    cmdHtml = _renderCommandBlock(data.tool_args.command);
                 }
 
                 // 执行结果区域（可折叠），使用 rca_chunk_id 作为容器 ID
@@ -2668,6 +2947,8 @@
             showTypingIndicator();
             ws.send(JSON.stringify(payload));
             messageInput.value = '';
+            hideCommandSuggestions();
+
         }
     }
 
@@ -2714,8 +2995,39 @@
         hideTypingIndicator();
     }
 
-    // Enter key to send
-    messageInput.addEventListener('keypress', function(e) {
+    messageInput.addEventListener('input', function() {
+        updateCommandSuggestionsByInput();
+    });
+
+    messageInput.addEventListener('keydown', function(e) {
+        const hasSuggestions = matchedCommands.length > 0 && commandSuggestionBox && commandSuggestionBox.style.display !== 'none';
+
+        if (hasSuggestions && e.key === 'ArrowDown') {
+            e.preventDefault();
+            commandActiveIndex = (commandActiveIndex + 1) % matchedCommands.length;
+            renderCommandSuggestions(matchedCommands);
+            return;
+        }
+
+        if (hasSuggestions && e.key === 'ArrowUp') {
+            e.preventDefault();
+            commandActiveIndex = (commandActiveIndex - 1 + matchedCommands.length) % matchedCommands.length;
+            renderCommandSuggestions(matchedCommands);
+            return;
+        }
+
+        if (hasSuggestions && (e.key === 'Tab' || e.key === 'Enter')) {
+            e.preventDefault();
+            const idx = commandActiveIndex >= 0 ? commandActiveIndex : 0;
+            applyCommandSuggestion(idx);
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            hideCommandSuggestions();
+            return;
+        }
+
         if (e.key === 'Enter') {
             sendMessage();
         }
@@ -2723,6 +3035,18 @@
 
     // Auto-focus input
     messageInput.focus();
+
+    // 初始化加载系统命令（一次性）
+    fetchSystemCommands();
+
+    // 点击输入区外部时收起补全
+    document.addEventListener('click', function(e) {
+        if (!commandSuggestionBox) return;
+        if (e.target === messageInput || commandSuggestionBox.contains(e.target)) {
+            return;
+        }
+        hideCommandSuggestions();
+    });
 
     // Handle WebSocket connection status
     ws.onopen = function() {

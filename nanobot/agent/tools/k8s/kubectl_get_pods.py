@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """kubectl get pods 工具 —— 根据组件名字关键字查询匹配的 Pod。"""
 
 import asyncio
@@ -36,7 +37,7 @@ class KubectlGetPodsTool(Tool):
         return {
             "type": "object",
             "properties": {
-                "component_keyword": {
+                "pod_keyword": {
                     "type": "string",
                     "description": "组件名字关键字，用于 grep 过滤 Pod 列表，例如 'rocketmq-broker'",
                 },
@@ -49,15 +50,15 @@ class KubectlGetPodsTool(Tool):
                     "description": "（可选）排除关键字，多个用逗号分隔，例如 'cmq,test' 表示排除包含 cmq 或 test 的行",
                 },
             },
-            "required": ["component_keyword"],
+            "required": ["pod_keyword"],
         }
 
     async def execute(
-        self,
-        component_keyword: str,
-        namespace: str | None = None,
-        exclude_keywords: str | None = None,
-        **kwargs: Any,
+            self,
+            pod_keyword: str,
+            namespace: str | None = None,
+            exclude_keywords: str | None = None,
+            **kwargs: Any,
     ) -> dict[str, Any]:
         """执行工具：先 grep 获取 Pod 列表，再逐个获取 JSON 详情。
 
@@ -72,7 +73,7 @@ class KubectlGetPodsTool(Tool):
         commands_executed: list[str] = []
 
         # ---------- 步骤1：用 grep 获取匹配的 Pod 列表 ----------
-        safe_keyword = re.sub(r"[;|&`$<>\\]", "", component_keyword)
+        safe_keyword = re.sub(r"[;|&`$<>\\]", "", pod_keyword)
 
         if namespace:
             safe_ns = re.sub(r"[;|&`$<>\\]", "", namespace)
@@ -221,13 +222,13 @@ class KubectlGetPodsTool(Tool):
         }
 
     async def get_pod_list(
-        self,
-        component_keyword: str,
-        namespace: str | None = None,
-        exclude_keywords: str | None = None,
+            self,
+            pod_keyword: str,
+            namespace: str | None = None,
+            exclude_keywords: str | None = None,
     ) -> list[dict[str, str]]:
         """获取 Pod 列表（供其他工具调用），返回 [{"namespace": str, "pod_name": str}, ...]"""
-        result = await self.execute(component_keyword, namespace, exclude_keywords)
+        result = await self.execute(pod_keyword, namespace, exclude_keywords)
 
         # 从结构化结果中提取 Pod 名称列表
         pods_info = result.get("pods", [])

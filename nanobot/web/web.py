@@ -181,6 +181,21 @@ intent_routing_store: IntentRoutingStore = None
 MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024  # 100MB
 UPLOAD_SUBDIR = ".web_uploads"
 
+# Skill 向量索引定时重建配置
+SKILL_INDEX_REBUILD_INTERVAL_SECONDS = max(
+    60,
+    int(os.getenv("NANOBOT_SKILL_INDEX_REBUILD_INTERVAL_SECONDS", "1800")),
+)
+skill_index_rebuild_task: asyncio.Task | None = None
+
+# 系统命令注册表（前端自动补全与命令执行共享）
+SYSTEM_COMMANDS: list[dict[str, str]] = [
+    {
+        "command": "/update_skill",
+        "description": "重建 Skill 向量索引",
+    },
+]
+
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics endpoint
@@ -195,7 +210,86 @@ async def prometheus_metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+def rebuild_skill_vector_index(trigger: str = "manual") -> tuple[bool, str]:
+    """重建 Skill 向量索引（tools + skills）。"""
+    global intent_routing_store
+
+    if not config or not agent_loop:
+        return False, "Web UI 资源未初始化，无法重建 Skill 向量索引"
+
+    try:
+        if not intent_routing_store:
+            intent_routing_store = get_intent_routing_store(config.workspace_path, config)
+
+        tools_count = intent_routing_store.init_tools_index(
+            tool_schemas=agent_loop.tools.get_definitions(),
+            mcp_servers=config.mcp.servers,
+        )
+
+        from nanobot.rca.loader import RCASkillLoader
+        skill_loader = RCASkillLoader(
+            skill_dir=config.rca.skill_dir,
+            intent_routing_store=intent_routing_store,
+        )
+        loaded_count = skill_loader.load_all()
+        skills_count = intent_routing_store.init_skills_index(skill_loader)
+
+        msg = (
+            f"Skill 向量索引重建完成(trigger={trigger}): "
+            f"tools={tools_count}, skills={skills_count}, loaded={loaded_count}"
+        )
+        logger.info(f"[WEB] 🧭 {msg}")
+        return True, msg
+    except Exception as e:
+        err = f"Skill 向量索引重建失败(trigger={trigger}): {e}"
+        logger.error(f"[WEB] ❌ {err}")
+        return False, err
+
+
+async def _skill_index_rebuild_loop() -> None:
+    """后台定时重建 Skill 向量索引。"""
+    logger.info(
+        f"[WEB] ⏰ Skill 向量索引定时任务已启动，间隔={SKILL_INDEX_REBUILD_INTERVAL_SECONDS}s"
+    )
+    try:
+        while True:
+            await asyncio.sleep(SKILL_INDEX_REBUILD_INTERVAL_SECONDS)
+            await asyncio.to_thread(rebuild_skill_vector_index, "timer")
+    except asyncio.CancelledError:
+        logger.info("[WEB] ⏹️ Skill 向量索引定时任务已停止")
+        raise
+
+
+def _start_skill_index_rebuild_task() -> None:
+    """在事件循环中启动定时重建任务（重复调用幂等）。"""
+    global skill_index_rebuild_task
+
+    if skill_index_rebuild_task and not skill_index_rebuild_task.done():
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    skill_index_rebuild_task = loop.create_task(_skill_index_rebuild_loop())
+
+
+async def _stop_skill_index_rebuild_task() -> None:
+    """停止定时重建任务。"""
+    global skill_index_rebuild_task
+
+    if skill_index_rebuild_task and not skill_index_rebuild_task.done():
+        skill_index_rebuild_task.cancel()
+        try:
+            await skill_index_rebuild_task
+        except asyncio.CancelledError:
+            pass
+    skill_index_rebuild_task = None
+
+
 def initialize_webui_resources():
+
     """Initialize resources for webui."""
     global provider, agent_loop, config, intent_routing_store
     from nanobot.config.loader import load_config
@@ -235,26 +329,9 @@ def initialize_webui_resources():
     logger.info(f"[WEB] 📚 知识库状态: {knowledge_status}")
 
     # 初始化意图路由向量库（tools/skills）
-    try:
-        intent_routing_store = get_intent_routing_store(config.workspace_path, config)
-        tools_count = intent_routing_store.init_tools_index(
-            tool_schemas=agent_loop.tools.get_definitions(),
-            mcp_servers=config.mcp.servers,
-        )
-
-        # 使用 RCASkillLoader 统一加载 YAML Skill 并构建索引
-        from nanobot.rca.loader import RCASkillLoader
-        skill_loader = RCASkillLoader(
-            skill_dir=config.rca.skill_dir,
-            intent_routing_store=intent_routing_store,
-        )
-        loaded_count = skill_loader.load_all()
-        skills_count = intent_routing_store.init_skills_index(skill_loader)
-        logger.info(
-            f"[WEB] 🧭 意图路由索引初始化完成: tools={tools_count}, skills={skills_count} (loaded={loaded_count})"
-        )
-    except Exception as e:
-        logger.error(f"[WEB] ❌ 意图路由索引初始化失败: {e}")
+    ok, msg = rebuild_skill_vector_index(trigger="startup")
+    if not ok:
+        logger.error(f"[WEB] ❌ 意图路由索引初始化失败: {msg}")
 
     # 启动定时指标打印（每3秒写入日志，按日期自动分割）
     try:
@@ -264,12 +341,62 @@ def initialize_webui_resources():
     except Exception as e:
         logger.warning(f"[WEB] ⚠️ 定时指标打印启动失败: {e}")
 
+    # 启动 Skill 向量索引定时重建任务
+    _start_skill_index_rebuild_task()
+
     return True
+
+
+async def process_agent_command(command_text: str, ws_queue: WebSocketMessageQueue) -> None:
+    """处理以 / 开头的 agent 命令。"""
+    import time
+
+    raw = (command_text or "").strip()
+    if not raw.startswith("/"):
+        return
+
+    command = raw.split()[0].lower()
+    command_set = {item.get("command", "").strip().lower() for item in SYSTEM_COMMANDS}
+
+    if command == "/update_skill":
+        await ws_queue.send_text("🧭 检测到命令 /update_skill，正在重建 Skill 向量索引...\n")
+        ok, msg = await asyncio.to_thread(rebuild_skill_vector_index, "command:/update_skill")
+        if ok:
+            await ws_queue.send_text(f"✅ {msg}\n\n")
+        else:
+            await ws_queue.send_text(f"❌ {msg}\n\n")
+    elif command in command_set:
+        await ws_queue.send_text(f"⚠️ 命令 {command} 暂未实现\n\n")
+    else:
+        available = ", ".join(sorted(command_set)) if command_set else "(无)"
+        await ws_queue.send_text(f"⚠️ 未知命令: {command}（可用命令: {available}）\n\n")
+
+    completion_message = {
+        "type": "stream_chunk",
+        "content_type": "completion",
+        "content": "处理完成",
+        "is_completed": True,
+        "timestamp": time.time(),
+    }
+    await ws_queue.send_text(json.dumps(completion_message, ensure_ascii=False))
+
+
+@web_app.on_event("startup")
+async def _web_app_startup() -> None:
+    """Web 应用启动后启动后台定时任务。"""
+    _start_skill_index_rebuild_task()
+
+
+@web_app.on_event("shutdown")
+async def _web_app_shutdown() -> None:
+    """Web 应用退出前停止后台定时任务。"""
+    await _stop_skill_index_rebuild_task()
 
 
 def load_html_template(template_name: str) -> str:
     """Load HTML template from file."""
     template_path = Path(__file__).parent / "templates" / template_name
+
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
             return f.read()
@@ -286,8 +413,18 @@ async def get():
     return HTMLResponse(content=html_content)
 
 
+@web_app.get("/api/system-commands")
+async def get_system_commands():
+    """获取系统命令列表（用于前端自动补全）。"""
+    return {
+        "success": True,
+        "commands": SYSTEM_COMMANDS,
+    }
+
+
 @web_app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
+
     """上传文件到工作空间并返回保存路径（最大 100MB）。"""
     try:
         if config and config.workspace_path:
@@ -637,7 +774,19 @@ async def websocket_endpoint(websocket: WebSocket):
                     # 确保消费者协程正常退出
                     await queue.stop()
 
-            current_task = asyncio.create_task(_runner(user_input, ws_queue, uploaded_file_path or None))
+            async def _runner_command(command_text: str, queue: WebSocketMessageQueue):
+                try:
+                    await process_agent_command(command_text, queue)
+                except asyncio.CancelledError:
+                    logger.info("[WEB] 命令处理任务被取消")
+                    raise
+                finally:
+                    await queue.stop()
+
+            if user_input.startswith("/"):
+                current_task = asyncio.create_task(_runner_command(user_input, ws_queue))
+            else:
+                current_task = asyncio.create_task(_runner(user_input, ws_queue, uploaded_file_path or None))
 
     except WebSocketDisconnect:
         await _cancel_current_task()
@@ -1208,7 +1357,7 @@ async def process_ops_intent(
     additional_context = "\n".join(skill_context_parts)
 
     # 根据工具数量选择不同的日志文案
-    if filtered_tool_names and len(filtered_tool_names) == 1:
+    if filtered_tool_names and len(filtered_tool_names) >= 1:
         await ws_queue.send_text(
             f"🔧 匹配到运维 Skill: **{matched_skill_name}**"
             f"，准备调用工具 `{filtered_tool_names[0]}` ...\n\n"
@@ -1833,10 +1982,8 @@ async def _execute_rca_skill(
                     f"first_200_chars={full_result[:200]!r}"
                 )
 
-                # 构建命令摘要
-                cmd_summary = ""
-                if commands:
-                    cmd_summary = " | ".join(str(c) for c in commands[:3])
+                # 构建命令JSON数组字符串（前端按每行展示）
+                command_json = json.dumps(commands or [], ensure_ascii=False)
 
                 # 为当前步骤生成唯一 chunk_id，前端用它来关联追加内容
                 chunk_id = f"rca-chunk-{step_index}-{int(time.time()*1000)}"
@@ -1852,8 +1999,8 @@ async def _execute_rca_skill(
                     "tool_result": "",
                     "tool_args": {
                         "step_type": step_type,
-                        "command": cmd_summary,
-                    } if cmd_summary else None,
+                        "command": command_json,
+                    },
                     "rca_step_index": step_index,
                     "rca_total_steps": total_steps,
                     "rca_step_type": step_type,

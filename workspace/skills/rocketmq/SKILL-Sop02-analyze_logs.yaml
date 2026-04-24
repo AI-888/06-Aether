@@ -20,9 +20,9 @@ skill:
   input_schema:
     namespace: string
     component_keyword: string
-    log_path: string
-    log_keyword: string
-    exclude_keywords: string
+    log_paths: list
+    log_keywords: list
+    exclude_keywords: list
     lines: number
 
   # 输出参数定义：定义该技能返回的结果数据结构
@@ -45,10 +45,10 @@ skill:
       input:
         namespace: "{{namespace}}"
         component_keyword: "{{component_keyword}}"
-        log_path: "{{log_path}}"
-        log_keyword: "{{log_keyword}}"
+        log_paths: "{{log_paths}}"
+        log_keywords: "{{log_keywords}}"
         exclude_keywords: "{{exclude_keywords}}"
-        lines: "{{lines}}"
+        lines: {{lines}}
 
     # 步骤2：分析日志内容
     - id: analyze_logs

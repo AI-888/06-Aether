@@ -23,7 +23,7 @@ skill:
     - namesrv / nameserver → ocloud-tdmq-rocketmq5-namesrv
     - broker → ocloud-tdmq-rocketmq5-broker
     - proxy → ocloud-tdmq-rocketmq5-proxy
-    - manager → rocketmq-manager（需排除 cmq）
+    - manager → ocloud-tdmq-rocketmq-manager（需排除 cmq）
     - billing → rocketmq-billing（需排除 cmq）
     - operation → rocketmq-operation（需排除 cmq）
     - router → rocketmq-router（需排除 cmq）

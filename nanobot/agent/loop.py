@@ -466,13 +466,16 @@ class AgentLoop:
 
                     # 发送工具执行结果到前端
                     if stream_callback:
+                        command_json = json.dumps(tool_commands, ensure_ascii=False)
                         tool_result_info = {
                             "content": f"✅ 工具执行完成: {display_tool_name}\n执行结果: {result_preview}\n",
                             "is_tool_call": True,
                             "tool_name": display_tool_name,
-                            "tool_args": tool_args,
+                            "tool_args": {
+                                "command": command_json,
+                            },
                             "tool_status": "completed",
-                            "tool_result": result_preview,
+                            "tool_result": result,
                             "tool_commands": tool_commands,
                         }
                         if asyncio.iscoroutinefunction(stream_callback):
@@ -981,13 +984,16 @@ class AgentLoop:
 
                 # 通知前端工具执行完成
                 if stream_callback:
+                    command_json = json.dumps(tool_commands, ensure_ascii=False)
                     tool_result_info = {
                         "content": f"✅ 工具执行完成: {display_tool_name}\n执行结果: {result_preview}\n",
                         "is_tool_call": True,
                         "tool_name": display_tool_name,
-                        "tool_args": tool_args,
+                        "tool_args": {
+                            "command": command_json,
+                        },
                         "tool_status": "completed",
-                        "tool_result": result_preview,
+                        "tool_result": result,
                         "tool_commands": tool_commands,
                     }
                     if asyncio.iscoroutinefunction(stream_callback):
@@ -1073,13 +1079,14 @@ class AgentLoop:
 
                 # 通知前端工具执行完成
                 if stream_callback:
+                    command_json = json.dumps(tool_commands, ensure_ascii=False)
                     tool_result_info = {
                         "content": f"✅ 命令执行完成: {display_name}\n执行结果: {result_preview}\n",
                         "is_tool_call": True,
                         "tool_name": display_name,
-                        "tool_args": {"command": cmd},
+                        "tool_args": {"command": command_json},
                         "tool_status": "completed",
-                        "tool_result": result_preview,
+                        "tool_result": result,
                         "tool_commands": tool_commands,
                     }
                     if asyncio.iscoroutinefunction(stream_callback):
