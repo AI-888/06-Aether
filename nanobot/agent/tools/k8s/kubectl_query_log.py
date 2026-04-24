@@ -211,6 +211,7 @@ class KubectlQueryLogTool(Tool):
                             {
                                 "line_number": int(match_line.group(1)),
                                 "content": match_line.group(2).lstrip(),
+                                "log_file": current_file_path,
                             }
                         )
 

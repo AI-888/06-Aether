@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 """Web interface for nanobot with intent classification."""
 
 from pathlib import Path
 from typing import Any
 import os
+import shutil
 
 import asyncio
 import json
@@ -167,6 +169,7 @@ manager = ConnectionManager()
 # 注册源代码 RAG 管理 API 路由
 try:
     from nanobot.web.source_code_api import router as source_code_router
+
     web_app.include_router(source_code_router)
 except ImportError as _sc_err:
     logger.warning(f"[WEB] 源代码 RAG API 加载失败: {_sc_err}")
@@ -211,29 +214,60 @@ async def prometheus_metrics():
 
 
 def rebuild_skill_vector_index(trigger: str = "manual") -> tuple[bool, str]:
-    """重建 Skill 向量索引（tools + skills）。"""
+    """重建 Skill 向量索引（tools + skills）。
+
+    流程：
+    1) 先在临时目录初始化 skills 索引
+    2) 初始化成功后，删除旧目录并将临时目录移动为正式目录
+    3) 初始化失败时，仅删除临时目录，保留旧目录
+    """
     global intent_routing_store
 
     if not config or not agent_loop:
         return False, "Web UI 资源未初始化，无法重建 Skill 向量索引"
 
-    try:
-        if not intent_routing_store:
-            intent_routing_store = get_intent_routing_store(config.workspace_path, config)
+    base_workspace = Path(config.workspace_path).expanduser().resolve()
+    skills_dir = base_workspace / "skills_index"
+    tmp_workspace = base_workspace / f"tmp_skill_rebuild_{os.getpid()}_{uuid.uuid4().hex}"
+    tmp_skills_dir = tmp_workspace / "skills_index"
 
-        tools_count = intent_routing_store.init_tools_index(
+    try:
+        # 每次重建都使用新的 store 实例，避免缓存连接指向已移动/删除的数据库文件
+        current_store = IntentRoutingStore(base_workspace, config)
+
+        tools_count = current_store.init_tools_index(
             tool_schemas=agent_loop.tools.get_definitions(),
             mcp_servers=config.mcp.servers,
         )
 
+        tmp_intent_store = IntentRoutingStore(tmp_workspace, config)
+
         from nanobot.rca.loader import RCASkillLoader
         skill_loader = RCASkillLoader(
             skill_dir=config.rca.skill_dir,
-            intent_routing_store=intent_routing_store,
+            intent_routing_store=tmp_intent_store,
         )
         loaded_count = skill_loader.load_all()
-        skills_count = intent_routing_store.init_skills_index(skill_loader)
+        logger.info(f"[WEB] 🧹加载skills.loaded_count: {loaded_count}")
+        skills_count = tmp_intent_store.init_skills_index(skill_loader)
+        logger.info(f"[WEB] 🧹初始化skills到临时目录成功: {skills_count}")
 
+        if tmp_skills_dir.exists():
+            if skills_dir.exists():
+                shutil.rmtree(skills_dir)
+                logger.info(f"[WEB] 🧹删除旧skills目录成功")
+            shutil.move(str(tmp_skills_dir), str(skills_dir))
+            logger.info(f"[WEB] 🧹移动临时目录为正式skills目录成功")
+        else:
+            logger.error(f"[WEB] 临时 skill 目录不存在，初始化结果无效")
+            raise RuntimeError("临时 skill 目录不存在，初始化结果无效")
+
+        if tmp_workspace.exists():
+            logger.info(f"[WEB] 移动正式skills目录完成， 清理临时目录")
+            shutil.rmtree(tmp_workspace, ignore_errors=True)
+
+        # 切换全局路由 store 到正式目录，避免后续查询仍命中旧对象或旧连接
+        intent_routing_store = IntentRoutingStore(base_workspace, config)
         msg = (
             f"Skill 向量索引重建完成(trigger={trigger}): "
             f"tools={tools_count}, skills={skills_count}, loaded={loaded_count}"
@@ -241,6 +275,8 @@ def rebuild_skill_vector_index(trigger: str = "manual") -> tuple[bool, str]:
         logger.info(f"[WEB] 🧭 {msg}")
         return True, msg
     except Exception as e:
+        if tmp_workspace.exists():
+            shutil.rmtree(tmp_workspace, ignore_errors=True)
         err = f"Skill 向量索引重建失败(trigger={trigger}): {e}"
         logger.error(f"[WEB] ❌ {err}")
         return False, err
@@ -289,7 +325,6 @@ async def _stop_skill_index_rebuild_task() -> None:
 
 
 def initialize_webui_resources():
-
     """Initialize resources for webui."""
     global provider, agent_loop, config, intent_routing_store
     from nanobot.config.loader import load_config
@@ -424,7 +459,6 @@ async def get_system_commands():
 
 @web_app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
-
     """上传文件到工作空间并返回保存路径（最大 100MB）。"""
     try:
         if config and config.workspace_path:
@@ -889,9 +923,9 @@ async def classify_user_intent(user_input: str, ws_queue: WebSocketMessageQueue)
 
 
 async def process_user_message_streaming(
-    user_input: str,
-    ws_queue: WebSocketMessageQueue,
-    file_path: str | None = None,
+        user_input: str,
+        ws_queue: WebSocketMessageQueue,
+        file_path: str | None = None,
 ):
     """Process user message with real-time streaming output."""
     import time
@@ -1077,12 +1111,11 @@ def _rerank_route_candidates(query: str, results: list[dict[str, Any]]) -> list[
 
 
 async def process_ops_intent(
-    user_input: str,
-    ws_queue: WebSocketMessageQueue,
-    start_time: float,
-    file_path: str | None = None,
+        user_input: str,
+        ws_queue: WebSocketMessageQueue,
+        start_time: float,
+        file_path: str | None = None,
 ):
-
     """处理 D 类简单操作意图：检索 Skill → rerank top1 → 提取工具 → 筛选已注册工具 → LLM 决策。
 
     D 类子分类为 simple 时调用此函数。
@@ -1617,7 +1650,6 @@ async def process_troubleshooting_intent(
         start_time: float,
         file_path: str | None = None,
 ):
-
     """处理 D 类复杂操作意图：搜索 SOP Skill → rerank top1 → RCA Engine 执行。
 
     D 类子分类为 complex 时调用此函数，执行 SOP Skill 分步诊断流程。
@@ -1806,13 +1838,12 @@ async def process_troubleshooting_intent(
 
 
 async def _execute_rca_skill(
-    skill_name: str,
-    user_input: str,
-    ws_queue: WebSocketMessageQueue,
-    skill_loader: "RCASkillLoader | None" = None,
-    file_path: str | None = None,
+        skill_name: str,
+        user_input: str,
+        ws_queue: WebSocketMessageQueue,
+        skill_loader: "RCASkillLoader | None" = None,
+        file_path: str | None = None,
 ) -> "RCAReport | None":
-
     """加载并执行指定的 RCA Skill。
 
     Args:
@@ -1990,7 +2021,7 @@ async def _execute_rca_skill(
 
                 logger.debug(
                     f"[RCA_STREAM][{step_id}] full_result len={len(full_result)}, "
-                    f"lines={full_result.count(chr(10))+1}, "
+                    f"lines={full_result.count(chr(10)) + 1}, "
                     f"first_200_chars={full_result[:200]!r}"
                 )
 
@@ -1998,7 +2029,7 @@ async def _execute_rca_skill(
                 command_json = json.dumps(commands or [], ensure_ascii=False)
 
                 # 为当前步骤生成唯一 chunk_id，前端用它来关联追加内容
-                chunk_id = f"rca-chunk-{step_index}-{int(time.time()*1000)}"
+                chunk_id = f"rca-chunk-{step_index}-{int(time.time() * 1000)}"
 
                 # 先发送 completed 消息（不含 tool_result，前端创建卡片骨架）
                 step_msg = {
@@ -2133,13 +2164,12 @@ class _AsyncCallbackTracker:
 
 
 async def _run_agent_loop(
-    user_input: str,
-    ws_queue: WebSocketMessageQueue,
-    additional_context: str | None = None,
-    tool_names_filter: list[str] | None = None,
-    file_path: str | None = None,
+        user_input: str,
+        ws_queue: WebSocketMessageQueue,
+        additional_context: str | None = None,
+        tool_names_filter: list[str] | None = None,
+        file_path: str | None = None,
 ):
-
     """通用的 agent loop 执行入口（用于 D 类简单操作和复杂操作回退）。"""
     import time
     import json
@@ -2288,5 +2318,3 @@ async def chat_endpoint(message: dict):
 
     response = await process_user_message(user_input)
     return {"response": response}
-
-
