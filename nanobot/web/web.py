@@ -1963,6 +1963,18 @@ async def _execute_rca_skill(
 
                 # 获取完整结果文本（不做截断）
                 raw_result = business_output.get("result", "")
+                tool_param_validation_failed = bool(
+                    business_output.get("tool_param_validation_failed", False)
+                )
+                tool_param_validation_errors = business_output.get(
+                    "tool_param_validation_errors", []
+                )
+                tool_param_validation_tag = business_output.get(
+                    "tool_param_validation_tag", ""
+                )
+                should_refill_last_user_input = bool(
+                    business_output.get("should_refill_last_user_input", False)
+                )
                 logger.debug(
                     f"[RCA_STREAM][{step_id}] raw_result type={type(raw_result).__name__}, "
                     f"truthy={bool(raw_result)}, is_str={isinstance(raw_result, str)}, "
@@ -2001,6 +2013,10 @@ async def _execute_rca_skill(
                         "step_type": step_type,
                         "command": command_json,
                     },
+                    "tool_param_validation_failed": tool_param_validation_failed,
+                    "tool_param_validation_errors": tool_param_validation_errors,
+                    "tool_param_validation_tag": tool_param_validation_tag,
+                    "should_refill_last_user_input": should_refill_last_user_input,
                     "rca_step_index": step_index,
                     "rca_total_steps": total_steps,
                     "rca_step_type": step_type,
@@ -2031,6 +2047,10 @@ async def _execute_rca_skill(
                             "type": "stream_chunk",
                             "content_type": "tool",
                             "tool_status": "result_chunk",
+                            "tool_param_validation_failed": tool_param_validation_failed,
+                            "tool_param_validation_errors": tool_param_validation_errors,
+                            "tool_param_validation_tag": tool_param_validation_tag,
+                            "should_refill_last_user_input": should_refill_last_user_input,
                             "rca_chunk_id": chunk_id,
                             "rca_step_index": step_index,
                             "tool_result_chunk": chunk_text,
@@ -2043,6 +2063,10 @@ async def _execute_rca_skill(
                     "type": "stream_chunk",
                     "content_type": "tool",
                     "tool_status": "result_done",
+                    "tool_param_validation_failed": tool_param_validation_failed,
+                    "tool_param_validation_errors": tool_param_validation_errors,
+                    "tool_param_validation_tag": tool_param_validation_tag,
+                    "should_refill_last_user_input": should_refill_last_user_input,
                     "rca_chunk_id": chunk_id,
                     "rca_step_index": step_index,
                     "timestamp": time.time(),
@@ -2186,6 +2210,9 @@ async def _run_agent_loop(
             message_data['tool_result'] = context_info.get('tool_result', '')
             message_data['tool_error'] = context_info.get('tool_error', '')
             message_data['tool_args'] = context_info.get('tool_args')
+            message_data['tool_param_validation_failed'] = context_info.get('tool_param_validation_failed', False)
+            message_data['tool_param_validation_errors'] = context_info.get('tool_param_validation_errors', [])
+            message_data['should_refill_last_user_input'] = context_info.get('should_refill_last_user_input', False)
 
         # 如果是知识库查询，添加知识库相关信息
         if content_type == 'knowledge':

@@ -1381,6 +1381,8 @@
     let userScrolledUp = false; // 标记用户是否手动上滑
     let shouldAbortCurrentRequest = false; // 标记是否应该终止当前请求
     let abortAckTimeoutId = null; // 终止确认超时兜底定时器
+    let lastUserMessageText = ''; // 上次用户发送的提问
+    let hasRefilledLastUserMessage = false; // 当前轮次是否已回填过
     const SCROLL_THRESHOLD = 60; // 距底部多少px以内视为"在底部"
 
     function refreshUploadStatus() {
@@ -2062,11 +2064,27 @@
         }
     }
 
+    function refillLastUserMessageToInput() {
+        const text = (lastUserMessageText || '').trim();
+        if (!text) return;
+        messageInput.value = text;
+        hasRefilledLastUserMessage = true;
+    }
+
     // ---------- 处理JSON流式分块数据 ----------
     function handleStreamChunk(data) {
         // 终止后仅放行完成消息，其余流消息忽略
         if (shouldAbortCurrentRequest && !(data.content_type === 'completion' || data.is_completed)) {
             return;
+        }
+
+        if (
+            data
+            && data.should_refill_last_user_input
+            && data.tool_param_validation_failed
+            && !hasRefilledLastUserMessage
+        ) {
+            refillLastUserMessageToInput();
         }
 
         // 处理完成消息 → 恢复输入
@@ -3167,9 +3185,12 @@
 
         const message = messageInput.value.trim();
         if (message && ws.readyState === WebSocket.OPEN) {
+            lastUserMessageText = message;
+            hasRefilledLastUserMessage = false;
             isProcessing = true; // 标记为正在处理
             shouldAbortCurrentRequest = false; // 重置终止标记
             sendButton.disabled = false; // 启用按钮（用于终止）
+
             sendButton.textContent = '■'; // 按钮文本改为终止图标
             sendButton.onclick = abortCurrentRequest; // 切换点击事件
 

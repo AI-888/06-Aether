@@ -493,7 +493,14 @@ class RCAEngine:
         return {"result": str(raw_result)}
 
     # 工具返回中需要始终透传的通用字段（供前端展示命令和可读文本）
-    _PASSTHROUGH_FIELDS = ("result", "commands")
+    _PASSTHROUGH_FIELDS = (
+        "result",
+        "commands",
+        "tool_param_validation_failed",
+        "tool_param_validation_errors",
+        "tool_param_validation_tag",
+        "should_refill_last_user_input",
+    )
 
     @staticmethod
     def _validate_skill_output(

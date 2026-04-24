@@ -91,21 +91,23 @@ class KubectlQueryLogTool(Tool):
         # 参数清洗
         safe_lines = lines if isinstance(lines, int) and lines > 0 else 50
 
-        safe_log_paths = [
-            re.sub(r"[;|&`$<>\\\"']", "", (p or "")).strip()
-            for p in log_paths
-            if isinstance(p, str) and p.strip()
-        ]
-        if not safe_log_paths:
-            return self.make_result("log_paths 不能为空，且至少包含一个有效路径。", commands_executed)
-
         normalized_keywords = [
             re.sub(r"[;|&`$<>\"']", "", (kw or "")).strip()
             for kw in log_keywords
             if isinstance(kw, str) and kw.strip()
         ]
         if not normalized_keywords:
-            return self.make_result("log_keywords 不能为空，且至少包含一个有效关键字。", commands_executed)
+            return self.make_result("log_keywords 不能为空，且至少包含一个有效关键字。", commands_executed,
+                                    param_validation_failed=True, should_refill_last_user_input=True)
+
+        safe_log_paths = [
+            re.sub(r"[;|&`$<>\\\"']", "", (p or "")).strip()
+            for p in log_paths
+            if isinstance(p, str) and p.strip()
+        ]
+        if not safe_log_paths:
+            return self.make_result("log_paths 不能为空，且至少包含一个有效路径。", commands_executed,
+                                    param_validation_failed=True, should_refill_last_user_input=True)
 
         safe_kw_pattern = "|".join(re.escape(kw) for kw in normalized_keywords)
         safe_kw_pattern = safe_kw_pattern.replace("\\", "\\\\").replace('"', '\\"')

@@ -452,6 +452,9 @@ class AgentLoop:
                     exec_ret = await self.tools.execute(tool_name, tool_args)
                     result = exec_ret.get("result", "")
                     tool_commands = exec_ret.get("commands", [])
+                    tool_param_validation_failed = bool(exec_ret.get("tool_param_validation_failed", False))
+                    tool_param_validation_errors = exec_ret.get("tool_param_validation_errors", [])
+                    should_refill_last_user_input = bool(exec_ret.get("should_refill_last_user_input", False))
 
                     # 计算执行耗时
                     end_time = time.time()
@@ -477,6 +480,9 @@ class AgentLoop:
                             "tool_status": "completed",
                             "tool_result": result,
                             "tool_commands": tool_commands,
+                            "tool_param_validation_failed": tool_param_validation_failed,
+                            "tool_param_validation_errors": tool_param_validation_errors,
+                            "should_refill_last_user_input": should_refill_last_user_input,
                         }
                         if asyncio.iscoroutinefunction(stream_callback):
                             await stream_callback(tool_result_info)
@@ -974,6 +980,9 @@ class AgentLoop:
                 exec_ret = await self.tools.execute(tool_name, tool_args)
                 result = exec_ret.get("result", "")
                 tool_commands = exec_ret.get("commands", [])
+                tool_param_validation_failed = bool(exec_ret.get("tool_param_validation_failed", False))
+                tool_param_validation_errors = exec_ret.get("tool_param_validation_errors", [])
+                should_refill_last_user_input = bool(exec_ret.get("should_refill_last_user_input", False))
                 duration = time.time() - start_time
 
                 if tool_commands:
@@ -995,6 +1004,9 @@ class AgentLoop:
                         "tool_status": "completed",
                         "tool_result": result,
                         "tool_commands": tool_commands,
+                        "tool_param_validation_failed": tool_param_validation_failed,
+                        "tool_param_validation_errors": tool_param_validation_errors,
+                        "should_refill_last_user_input": should_refill_last_user_input,
                     }
                     if asyncio.iscoroutinefunction(stream_callback):
                         await stream_callback(tool_result_info)
@@ -1069,6 +1081,9 @@ class AgentLoop:
                 exec_ret = await self.tools.execute("exec", {"command": cmd})
                 result = exec_ret.get("result", "")
                 tool_commands = exec_ret.get("commands", [])
+                tool_param_validation_failed = bool(exec_ret.get("tool_param_validation_failed", False))
+                tool_param_validation_errors = exec_ret.get("tool_param_validation_errors", [])
+                should_refill_last_user_input = bool(exec_ret.get("should_refill_last_user_input", False))
                 duration = time.time() - start_time
 
                 if tool_commands:
@@ -1088,6 +1103,9 @@ class AgentLoop:
                         "tool_status": "completed",
                         "tool_result": result,
                         "tool_commands": tool_commands,
+                        "tool_param_validation_failed": tool_param_validation_failed,
+                        "tool_param_validation_errors": tool_param_validation_errors,
+                        "should_refill_last_user_input": should_refill_last_user_input,
                     }
                     if asyncio.iscoroutinefunction(stream_callback):
                         await stream_callback(tool_result_info)

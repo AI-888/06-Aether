@@ -70,6 +70,10 @@ class ToolRegistry:
                 return {
                     "result": f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors),
                     "commands": [],
+                    "tool_param_validation_failed": True,
+                    "tool_param_validation_errors": errors,
+                    "tool_param_validation_tag": "参数校验失败",
+                    "should_refill_last_user_input": True,
                 }
             raw = await tool.execute(**params)
             # 兼容旧工具仍返回 str 的情况

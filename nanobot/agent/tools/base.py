@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Base class for agent tools."""
 
 from abc import ABC, abstractmethod
@@ -56,19 +57,30 @@ class Tool(ABC):
         pass
 
     @staticmethod
-    def make_result(result: str, commands: list[str] | None = None) -> dict[str, Any]:
+    def make_result(result: str,
+                    commands: list[str] | None = None,
+                    param_validation_failed: bool = False,
+                    param_validation_errors: list[str] | None = None,
+                    should_refill_last_user_input: bool = False) -> dict[str, Any]:
         """构建统一的工具返回值结构。
 
         Args:
             result: 执行结果字符串
             commands: 本次执行的命令列表
+            param_validation_failed: 参数校验失败
+            param_validation_errors: 参数校验失败原因
+            should_refill_last_user_input: 是否需要重新填充上一次用户输入
 
         Returns:
-            {"result": str, "commands": list[str]}
+            {"result": str, "commands": list[str], "tool_param_validation_failed": bool, "tool_param_validation_errors": list[str], "tool_param_validation_tag": str, "should_refill_last_user_input": bool}
         """
         return {
             "result": result,
             "commands": commands or [],
+            "tool_param_validation_failed": param_validation_failed,
+            "tool_param_validation_errors": param_validation_errors or [],
+            "tool_param_validation_tag": "参数校验失败" if param_validation_failed else "",
+            "should_refill_last_user_input": should_refill_last_user_input,
         }
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:
