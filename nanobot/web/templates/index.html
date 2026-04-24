@@ -241,15 +241,18 @@
         }
 
         #sendButton {
-            width: 40px;
+            min-width: 74px;
             height: 40px;
+            padding: 0 14px;
             border: none;
-            border-radius: 50%;
+            border-radius: 12px;
             cursor: pointer;
             background: #111111;
             color: #ffffff;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 700;
+            letter-spacing: 0.2px;
+            text-transform: lowercase;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -264,6 +267,21 @@
             opacity: 0.5;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .send-action-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .send-shortcut-hint {
+            font-size: 10px;
+            line-height: 1;
+            color: #9ca3af;
+            user-select: none;
+            white-space: nowrap;
         }
 
         .upload-status-row {
@@ -1069,9 +1087,19 @@
             }
 
             #sendButton {
-                width: 36px;
+                min-width: 64px;
                 height: 36px;
-                font-size: 14px;
+                padding: 0 10px;
+                border-radius: 10px;
+                font-size: 12px;
+            }
+
+            .send-action-wrap {
+                gap: 3px;
+            }
+
+            .send-shortcut-hint {
+                font-size: 9px;
             }
         }
 
@@ -1130,8 +1158,9 @@
                             <button id="uploadButton" title="上传文件" aria-label="上传文件">+</button>
                         </div>
 
-                        <div class="chat-actions-right">
-                            <button id="sendButton" onclick="sendMessage()" title="发送" aria-label="发送">⟶</button>
+                        <div class="chat-actions-right send-action-wrap">
+<button id="sendButton" onclick="sendMessage()" title="发送（⌘/Ctrl + Enter）" aria-label="发送（⌘/Ctrl + Enter）">submit</button>
+                            <span class="send-shortcut-hint">⌘/Ctrl + Enter</span>
                         </div>
                     </div>
                 </div>
@@ -1933,7 +1962,7 @@
 
         let tool_command = '';
         if (data.tool_args) {
-            tool_command = data.tool_args.command || data.tool_args.query || data.tool_args.path ||
+            tool_command = _renderCommandBlock(data.tool_args.command) || data.tool_args.query || data.tool_args.path ||
                          data.tool_args.file || data.tool_args.function_name ||
                          JSON.stringify(data.tool_args, null, 2);
         }
@@ -2987,7 +3016,7 @@
         isStreaming = false;
         shouldAbortCurrentRequest = false;
         sendButton.disabled = false;
-        sendButton.textContent = '⟶';
+        sendButton.textContent = 'submit';
         sendButton.onclick = sendMessage;
 
         messageInput.disabled = false;
@@ -3028,7 +3057,8 @@
             return;
         }
 
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
             sendMessage();
         }
     });
