@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+from loguru import logger
+
 """Skills loader for agent capabilities."""
 
 import json
@@ -24,6 +27,9 @@ class SkillsLoader:
         self.workspace_skills = workspace / "skills"
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
 
+        logger.info(f"SkillsLoader: {self.workspace_skills}, {self.builtin_skills}")
+        logger.info(f"SkillsLoader: {self.workspace_skills.exists()}, {self.builtin_skills.exists()}")
+
     def list_skills(self, filter_unavailable: bool = True) -> list[dict[str, str]]:
         """
         List all available skills.
@@ -35,22 +41,42 @@ class SkillsLoader:
             List of skill info dicts with 'name', 'path', 'source'.
         """
         skills = []
+        if not self.workspace_skills.exists():
+            logger.warning(f"SkillsLoader: workspace_skills not exists: {self.workspace_skills}")
+            return skills
+        else:
+            dirs = self.workspace_skills.iterdir()
+            logger.info("SkillsLoader. all dirs: ", dirs)
+            for skill_dir in dirs:
+                logger.info(f"SkillsLoader: skill_dir: {skill_dir}")
+                target_dir = skill_dir
+                if skill_dir.is_symlink():
+                    try:
+                        target_dir = skill_dir.resolve()
+                    except (OSError, RuntimeError) as e:
+                        logger.error(f"SkillsLoader error, skill_dir: {skill_dir}, error: {e}")
+                        continue
 
-        # Workspace skills (highest priority)
-        if self.workspace_skills.exists():
-            for skill_dir in self.workspace_skills.iterdir():
-                if skill_dir.is_dir():
-                    skill_files = sorted(skill_dir.glob("SKILL*.md"))
-                    if skill_files:
-                        skills.append({"name": skill_dir.name, "path": str(skill_files[0]), "source": "workspace"})
+                skill_files = sorted(target_dir.glob("SKILL*.md"))
+                for skill_file in skill_files:
+                    skills.append({"name": skill_file.name, "path": str(skill_file), "source": "workspace"})
+                    logger.info(
+                        f"SkillsLoader: skill_dir: {skill_dir}, skill_file: {skill_file}, workspace_skills: {self.workspace_skills}")
 
         # Built-in skills
-        if self.builtin_skills and self.builtin_skills.exists():
-            for skill_dir in self.builtin_skills.iterdir():
+        if not self.builtin_skills.exists():
+            logger.warning(f"SkillsLoader: builtin_skills not exists: {self.builtin_skills}")
+        else:
+            dirs = self.builtin_skills.iterdir()
+            logger.info(f"SkillsLoader. all dirs: {list(dirs)}")
+            for skill_dir in dirs:
+                logger.info(f"SkillsLoader: skill_dir built in: {skill_dir}")
                 if skill_dir.is_dir():
                     skill_files = sorted(skill_dir.glob("SKILL*.md"))
-                    if skill_files and not any(s["name"] == skill_dir.name for s in skills):
-                        skills.append({"name": skill_dir.name, "path": str(skill_files[0]), "source": "builtin"})
+                    for skill_file in skill_files:
+                        if not any(s["name"] == skill_dir.name for s in skills):
+                            skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "builtin"})
+                            logger.info(f"SkillsLoader: {skill_dir.name}, {skill_file}, builtin")
 
         # Filter by requirements
         if filter_unavailable:
@@ -69,10 +95,22 @@ class SkillsLoader:
         """
         # Check workspace first
         workspace_skill_dir = self.workspace_skills / name
+        logger.info(f"SkillsLoader: workspace_skill_dir: {workspace_skill_dir}")
         if workspace_skill_dir.exists():
-            skill_files = sorted(workspace_skill_dir.glob("SKILL*.md"))
-            if skill_files:
-                return "\n\n".join(f.read_text(encoding="utf-8") for f in skill_files)
+            target_dir = workspace_skill_dir
+            if workspace_skill_dir.is_symlink():
+                try:
+                    target_dir = workspace_skill_dir.resolve()
+                except (OSError, RuntimeError) as e:
+                    logger.error(
+                        f"SkillsLoader error, workspace_skill_dir: {workspace_skill_dir}, error: {e}"
+                    )
+                    target_dir = None
+
+            if target_dir:
+                skill_files = sorted(target_dir.glob("SKILL*.md"))
+                if skill_files:
+                    return "\n\n".join(f.read_text(encoding="utf-8") for f in skill_files)
 
         # Check built-in
         if self.builtin_skills:

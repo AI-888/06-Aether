@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import ast
 import re
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -27,7 +29,7 @@ class SecurityGuard:
     防止危险操作的执行。
     """
 
-    # 默认工具白名单
+    # 默认工具白名单（静态兜底）
     DEFAULT_WHITELIST: set[str] = {
         "check_disk_usage",
         "check_memory",
@@ -61,6 +63,8 @@ class SecurityGuard:
             extra_whitelist: 额外的工具白名单，来自 RCAConfig.security_whitelist
         """
         self._whitelist = set(self.DEFAULT_WHITELIST)
+        # 默认自动加入 tools 目录下定义的全部工具名
+        self._whitelist.update(self._discover_tools_whitelist())
         if extra_whitelist:
             self._whitelist.update(extra_whitelist)
 
@@ -69,6 +73,53 @@ class SecurityGuard:
             re.compile(pattern, re.IGNORECASE)
             for pattern in self.BLACKLIST_PATTERNS
         ]
+
+    @staticmethod
+    def _discover_tools_whitelist() -> set[str]:
+        """扫描 nanobot/agent/tools 目录，提取所有工具名。"""
+        tools_dir = Path(__file__).resolve().parents[1] / "agent" / "tools"
+        discovered: set[str] = set()
+
+        if not tools_dir.exists():
+            logger.warning(f"[RCA-SECURITY] tools 目录不存在: {tools_dir}")
+            return discovered
+
+        for py_file in tools_dir.rglob("*.py"):
+            if py_file.name.startswith("_"):
+                continue
+
+            try:
+                source = py_file.read_text(encoding="utf-8")
+                tree = ast.parse(source)
+            except Exception as e:
+                logger.debug(f"[RCA-SECURITY] 解析工具文件失败，跳过 {py_file}: {e}")
+                continue
+
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                for class_item in node.body:
+                    if not isinstance(class_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        continue
+                    if class_item.name != "name":
+                        continue
+                    for stmt in class_item.body:
+                        if isinstance(stmt, ast.Return):
+                            value = stmt.value
+                            if (
+                                isinstance(value, ast.Constant)
+                                and isinstance(value.value, str)
+                                and value.value.strip()
+                            ):
+                                discovered.add(value.value.strip())
+                            break
+
+        if discovered:
+            logger.info(
+                f"[RCA-SECURITY] 自动加载 tools 目录白名单: {sorted(discovered)}"
+            )
+
+        return discovered
 
     @property
     def whitelist(self) -> set[str]:

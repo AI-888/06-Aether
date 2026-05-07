@@ -279,6 +279,13 @@ class RCAEngine:
                         None, {}, {}, "error", trace.duration,
                     )
 
+                    # 模板变量校验失败：对齐参数校验提醒字段，便于前端统一提示用户
+                    is_template_validation_error = isinstance(e, TemplateResolveError)
+                    template_validation_errors = (
+                        [{"type": "template_variable", "message": str(e)}]
+                        if is_template_validation_error else []
+                    )
+
                     # ── 流式回调：执行错误 ──
                     if stream_callback:
                         stream_callback(step.id, {
@@ -288,6 +295,13 @@ class RCAEngine:
                             "_step_type": step.type.value,
                             "_duration": trace.duration,
                             "_error": str(e),
+                            "tool_param_validation_failed": is_template_validation_error,
+                            "tool_param_validation_errors": template_validation_errors,
+                            "tool_param_validation_tag": (
+                                "template_variable"
+                                if is_template_validation_error else ""
+                            ),
+                            "should_refill_last_user_input": is_template_validation_error,
                         })
 
                     raise RCAExecutionError(step.id, str(e))
@@ -416,8 +430,8 @@ class RCAEngine:
     ) -> dict[str, Any]:
         """Atomic Skill 底层执行 —— 通过 ToolRegistry 调用绑定的工具。
 
-        绑定规则：从 Atomic Skill YAML 的 execution.steps[0].tool 字段
-        获取底层 ToolRegistry 工具名称。若未声明则回退到 Atomic Skill 的 name。
+        绑定规则：仅使用 Atomic Skill 的 tools 列表
+        （来自 execution.steps 全部 tool 字段，需全部已注册）。
 
         Args:
             step_id: 当前步骤 ID（用于错误报告）
@@ -425,37 +439,107 @@ class RCAEngine:
             params: 已解析的输入参数
 
         Returns:
-            工具调用的原始返回数据
+            工具调用的原始返回数据（单工具时保持原结构；多工具时返回聚合结果）
 
         Raises:
             ToolNotFoundError: 绑定的 Tool 未找到
             SecurityViolationError: 安全校验拒绝
         """
-        # 优先使用 execution.steps 中声明的 tool，回退到 name
-        tool_name = atomic.tool or atomic.name
+        tool_names = [
+            name for name in atomic.tools
+            if isinstance(name, str) and name
+        ]
+        if not tool_names:
+            raise RCAExecutionError(
+                step_id,
+                f"Atomic Skill '{atomic.name}' 未配置可执行 tools",
+            )
 
-        # 检查 Tool 是否存在于 ToolRegistry
-        if hasattr(self.tools, "has"):
-            if not self.tools.has(tool_name):
-                raise ToolNotFoundError(step_id, tool_name)
-        elif hasattr(self.tools, "get"):
-            if self.tools.get(tool_name) is None:
-                raise ToolNotFoundError(step_id, tool_name)
+        # 逐个校验工具是否存在
+        for tool_name in tool_names:
+            if hasattr(self.tools, "has"):
+                if not self.tools.has(tool_name):
+                    raise ToolNotFoundError(step_id, tool_name)
+            elif hasattr(self.tools, "get"):
+                if self.tools.get(tool_name) is None:
+                    raise ToolNotFoundError(step_id, tool_name)
 
-        # 安全校验
-        self.security.validate_tool_call(tool_name, params)
+        # 按顺序执行全部绑定工具
+        normalized_results: list[dict[str, Any]] = []
+        for tool_name in tool_names:
+            # 安全校验
+            self.security.validate_tool_call(tool_name, params)
 
-        # 通过 ToolRegistry 执行工具调用
-        raw_result = await self.tools.execute(tool_name, params)
+            # 执行工具调用
+            raw_result = await self.tools.execute(tool_name, params)
+            normalized = self._normalize_atomic_tool_result(step_id, tool_name, raw_result)
+            normalized_results.append(normalized)
 
+        # 单工具：保持旧版返回结构
+        if len(normalized_results) == 1:
+            return normalized_results[0]
+
+        # 多工具：聚合返回
+        merged_commands: list[Any] = []
+        merged_result_lines: list[str] = []
+        tool_results: dict[str, Any] = {}
+
+        for idx, tool_name in enumerate(tool_names):
+            item = normalized_results[idx]
+            result_text = item.get("result", "")
+            commands = item.get("commands", [])
+
+            if isinstance(commands, list) and commands:
+                merged_commands.extend(commands)
+
+            if isinstance(result_text, str) and result_text:
+                merged_result_lines.append(f"[{tool_name}] {result_text}")
+
+            # 保留每个工具的完整结果（去除聚合层字段冲突）
+            tool_results[tool_name] = item
+
+        aggregated: dict[str, Any] = {
+            "result": "\n".join(merged_result_lines),
+            "commands": merged_commands,
+            "tool_results": tool_results,
+        }
+
+        # 聚合工具参数校验透传字段（存在任一失败即标记失败）
+        validation_failed = any(
+            bool(item.get("tool_param_validation_failed"))
+            for item in normalized_results
+        )
+        if validation_failed:
+            aggregated["tool_param_validation_failed"] = True
+            aggregated["tool_param_validation_errors"] = [
+                {
+                    "tool": tool_names[i],
+                    "errors": normalized_results[i].get("tool_param_validation_errors", []),
+                }
+                for i in range(len(tool_names))
+                if normalized_results[i].get("tool_param_validation_errors")
+            ]
+            aggregated["tool_param_validation_tag"] = "multi_tool"
+            aggregated["should_refill_last_user_input"] = any(
+                bool(item.get("should_refill_last_user_input"))
+                for item in normalized_results
+            )
+
+        return aggregated
+
+    @staticmethod
+    def _normalize_atomic_tool_result(
+        step_id: str,
+        tool_name: str,
+        raw_result: Any,
+    ) -> dict[str, Any]:
+        """归一化 Atomic 底层工具返回。"""
         # 新版返回格式为 dict: {"result": str, "commands": list, ...}
-        # 提取 result 字段和 commands 用于日志
         if isinstance(raw_result, dict):
             tool_commands = raw_result.get("commands", [])
             if tool_commands:
                 logger.info(f"[RCA] 🔧 工具执行命令: {tool_commands}")
             result_str = raw_result.get("result", "")
-            # 检查工具返回是否为错误信息
             if isinstance(result_str, str) and result_str.startswith("Error:"):
                 logger.error(f"[RCA] 工具 '{tool_name}' 执行失败: {result_str}")
                 if "missing required" in result_str or "Invalid parameters" in result_str:

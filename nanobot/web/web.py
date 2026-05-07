@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from nanobot.cli.commands import webui
+
 """Web interface for nanobot with intent classification."""
 
 from pathlib import Path
@@ -217,9 +219,9 @@ def rebuild_skill_vector_index(trigger: str = "manual") -> tuple[bool, str]:
     """重建 Skill 向量索引（tools + skills）。
 
     流程：
-    1) 先在临时目录初始化 skills 索引
-    2) 初始化成功后，删除旧目录并将临时目录移动为正式目录
-    3) 初始化失败时，仅删除临时目录，保留旧目录
+    1) 在正式目录直接执行 Skill 索引增量重建
+    2) 基于 skill 文件内容 MD5 判断是否变化
+    3) 变化则先删除旧向量，再初始化插入新向量
     """
     global intent_routing_store
 
@@ -227,12 +229,9 @@ def rebuild_skill_vector_index(trigger: str = "manual") -> tuple[bool, str]:
         return False, "Web UI 资源未初始化，无法重建 Skill 向量索引"
 
     base_workspace = Path(config.workspace_path).expanduser().resolve()
-    skills_dir = base_workspace / "skills_index"
-    tmp_workspace = base_workspace / f"tmp_skill_rebuild_{os.getpid()}_{uuid.uuid4().hex}"
-    tmp_skills_dir = tmp_workspace / "skills_index"
 
     try:
-        # 每次重建都使用新的 store 实例，避免缓存连接指向已移动/删除的数据库文件
+        # 使用正式目录 store，去掉临时目录切换
         current_store = IntentRoutingStore(base_workspace, config)
 
         tools_count = current_store.init_tools_index(
@@ -240,34 +239,18 @@ def rebuild_skill_vector_index(trigger: str = "manual") -> tuple[bool, str]:
             mcp_servers=config.mcp.servers,
         )
 
-        tmp_intent_store = IntentRoutingStore(tmp_workspace, config)
-
         from nanobot.rca.loader import RCASkillLoader
         skill_loader = RCASkillLoader(
             skill_dir=config.rca.skill_dir,
-            intent_routing_store=tmp_intent_store,
+            intent_routing_store=None,
         )
         loaded_count = skill_loader.load_all()
         logger.info(f"[WEB] 🧹加载skills.loaded_count: {loaded_count}")
-        skills_count = tmp_intent_store.init_skills_index(skill_loader)
-        logger.info(f"[WEB] 🧹初始化skills到临时目录成功: {skills_count}")
 
-        if tmp_skills_dir.exists():
-            if skills_dir.exists():
-                shutil.rmtree(skills_dir)
-                logger.info(f"[WEB] 🧹删除旧skills目录成功")
-            shutil.move(str(tmp_skills_dir), str(skills_dir))
-            logger.info(f"[WEB] 🧹移动临时目录为正式skills目录成功")
-        else:
-            logger.error(f"[WEB] 临时 skill 目录不存在，初始化结果无效")
-            raise RuntimeError("临时 skill 目录不存在，初始化结果无效")
+        skills_count = current_store.init_skills_index(skill_loader)
 
-        if tmp_workspace.exists():
-            logger.info(f"[WEB] 移动正式skills目录完成， 清理临时目录")
-            shutil.rmtree(tmp_workspace, ignore_errors=True)
-
-        # 切换全局路由 store 到正式目录，避免后续查询仍命中旧对象或旧连接
-        intent_routing_store = IntentRoutingStore(base_workspace, config)
+        # 切换全局路由 store 到正式目录新实例
+        intent_routing_store = current_store
         msg = (
             f"Skill 向量索引重建完成(trigger={trigger}): "
             f"tools={tools_count}, skills={skills_count}, loaded={loaded_count}"
@@ -275,8 +258,6 @@ def rebuild_skill_vector_index(trigger: str = "manual") -> tuple[bool, str]:
         logger.info(f"[WEB] 🧭 {msg}")
         return True, msg
     except Exception as e:
-        if tmp_workspace.exists():
-            shutil.rmtree(tmp_workspace, ignore_errors=True)
         err = f"Skill 向量索引重建失败(trigger={trigger}): {e}"
         logger.error(f"[WEB] ❌ {err}")
         return False, err
@@ -1858,6 +1839,8 @@ async def _execute_rca_skill(
     import json
     import time
 
+    callback_tracker = None
+
     try:
         from nanobot.rca.loader import RCASkillLoader
         from nanobot.rca.engine import RCAEngine
@@ -1924,6 +1907,18 @@ async def _execute_rca_skill(
             commands = output.get("_commands", [])
             error_msg = output.get("_error", "")
             step_desc = output.get("_step_description", "")
+            tool_param_validation_failed = bool(
+                output.get("tool_param_validation_failed", False)
+            )
+            tool_param_validation_errors = output.get(
+                "tool_param_validation_errors", []
+            )
+            tool_param_validation_tag = output.get(
+                "tool_param_validation_tag", ""
+            )
+            should_refill_last_user_input = bool(
+                output.get("should_refill_last_user_input", False)
+            )
 
             step_label = f"[{step_index}/{total_steps}] {step_id}"
 
@@ -1965,6 +1960,10 @@ async def _execute_rca_skill(
                     "tool_name": step_label,
                     "tool_status": "error",
                     "tool_error": error_msg,
+                    "tool_param_validation_failed": tool_param_validation_failed,
+                    "tool_param_validation_errors": tool_param_validation_errors,
+                    "tool_param_validation_tag": tool_param_validation_tag,
+                    "should_refill_last_user_input": should_refill_last_user_input,
                     "rca_step_index": step_index,
                     "rca_total_steps": total_steps,
                     "rca_step_type": step_type,
@@ -2134,6 +2133,11 @@ async def _execute_rca_skill(
         return report
 
     except Exception as e:
+        if callback_tracker is not None:
+            try:
+                await callback_tracker.wait_all()
+            except Exception as wait_err:
+                logger.warning(f"[RCA_STREAM] 等待错误回调任务完成失败: {wait_err}")
         logger.error(f"[WEB] RCA Skill 执行失败: {e}")
         return None
 
@@ -2318,3 +2322,6 @@ async def chat_endpoint(message: dict):
 
     response = await process_user_message(user_input)
     return {"response": response}
+
+def main():
+    webui()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -11,23 +12,22 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
 
-from mcp import ClientSession
-from mcp.client.sse import sse_client
-
 import chromadb
 from chromadb.config import Settings
 from loguru import logger
+from mcp import ClientSession
+from mcp.client.sse import sse_client
 
 from nanobot.knowledge.rag_config import RAGConfig
 from nanobot.knowledge.text_chunker import TextChunker
 from nanobot.knowledge.vector_embedder import VectorEmbedder
-from nanobot.utils.helpers import ensure_dir
 from nanobot.metrics import (
     RAG_QUERY_DURATION,
     RAG_EMBEDDING_DURATION,
     RAG_QUERY_RESULTS_COUNT,
     RAG_QUERY_TOTAL,
 )
+from nanobot.utils.helpers import ensure_dir
 
 TOOLS_COLLECTION = "ops_tools"
 SKILLS_COLLECTION = "skills"
@@ -93,7 +93,8 @@ def _extract_tools_from_list_tools_result(result: Any) -> list[dict[str, Any]]:
     if hasattr(result, "tools"):
         tools = getattr(result, "tools", None)
         if isinstance(tools, list):
-            return [t.model_dump() if hasattr(t, "model_dump") else t for t in tools if isinstance(t, dict) or hasattr(t, "model_dump")]
+            return [t.model_dump() if hasattr(t, "model_dump") else t for t in tools if
+                    isinstance(t, dict) or hasattr(t, "model_dump")]
 
     if isinstance(result, dict):
         tools = result.get("tools")
@@ -104,9 +105,9 @@ def _extract_tools_from_list_tools_result(result: Any) -> list[dict[str, Any]]:
 
 
 async def _fetch_mcp_tools_from_server_async(
-    base_url: str,
-    auth_token: str = "",
-    timeout: int = 10,
+        base_url: str,
+        auth_token: str = "",
+        timeout: int = 10,
 ) -> list[dict[str, Any]]:
     headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
 
@@ -166,7 +167,6 @@ def _fetch_mcp_tools_from_server(base_url: str, auth_token: str = "", timeout: i
 
 
 class IntentRoutingStore:
-
     """Vector stores for ops tools and skills retrieval."""
 
     def __init__(self, workspace: Path, config: Any):
@@ -196,6 +196,13 @@ class IntentRoutingStore:
         # skills 初始化状态文件
         self.skills_init_status_file = self.skills_dir / "init_status.json"
 
+        print(f"[IntentRoutingStore]  init skills_dir: {self.skills_dir}")
+        print(f"[IntentRoutingStore]  init tools_dir: {self.tools_dir}")
+        print(f"[IntentRoutingStore]  init tools_chroma_dir: {self.tools_chroma_dir}")
+        print(f"[IntentRoutingStore]  init skills_chroma_dir: {self.skills_chroma_dir}")
+        print(f"[IntentRoutingStore]  init skills_init_status_file: {self.skills_init_status_file}")
+        print(f"[IntentRoutingStore]  init rag_config: {self.rag_config}")
+
     @staticmethod
     def _build_rag_config(cfg: Any) -> RAGConfig:
         # 如果传入的本身就是 RAGConfig，直接使用
@@ -215,6 +222,48 @@ class IntentRoutingStore:
             return client.get_collection(name=name)
         except Exception:
             return client.create_collection(name=name)
+
+    @staticmethod
+    def _calc_file_md5(file_path: str) -> str:
+        """计算文件内容 MD5，失败返回空字符串。"""
+        if not file_path:
+            return ""
+        try:
+            p = Path(file_path).expanduser()
+            if not p.exists() or not p.is_file():
+                return ""
+            md5 = hashlib.md5()
+            with open(p, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
+                    md5.update(chunk)
+            return md5.hexdigest()
+        except Exception as e:
+            logger.warning(f"[ROUTING] 计算文件 MD5 失败: {file_path}, err={e}")
+            return ""
+
+    @staticmethod
+    def _build_skill_doc_and_meta(skill_info: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        """构造 Skill 文档文本和元数据（含文件 MD5）。"""
+        name = skill_info.get("name", "")
+        description = skill_info.get("description", "")
+        file_path = skill_info.get("file_path", "")
+        content_md5 = IntentRoutingStore._calc_file_md5(file_path)
+
+        doc_text = (
+            f"Skill: {name}\n"
+            f"描述: {description}\n"
+            f"源文件: {file_path}\n"
+            f"文件MD5: {content_md5}"
+        )
+        meta = {
+            "source": "skill",
+            "skill_name": name,
+            "skill_type": skill_info.get("type", ""),  # "atomic" 或 "sop"
+            "version": skill_info.get("version", ""),
+            "file_path": file_path,
+            "content_md5": content_md5,
+        }
+        return doc_text, meta
 
     def init_tools_index(self, tool_schemas: list[dict[str, Any]], mcp_servers: dict[str, Any] | None = None) -> int:
         """Build/refresh tools collection from ToolRegistry schemas and MCP servers full tools."""
@@ -254,9 +303,9 @@ class IntentRoutingStore:
             # 动态拉取失败时，回退到本地配置中可能携带的 tools 字段
             if not server_tools:
                 server_tools = (
-                    _read_cfg(server_cfg, "tools", None)
-                    or _read_cfg(server_cfg, "tool_specs", None)
-                    or []
+                        _read_cfg(server_cfg, "tools", None)
+                        or _read_cfg(server_cfg, "tool_specs", None)
+                        or []
                 )
                 if server_tools:
                     logger.warning(
@@ -315,85 +364,111 @@ class IntentRoutingStore:
     # ----- 统一 Skill 索引（YAML 格式 Skill） -----
 
     def init_skills_index(self, skill_loader: Any) -> int:
-        """构建统一的 Skill 向量索引。
+        """构建/增量重建统一的 Skill 向量索引。
 
-        从 RCASkillLoader 加载的所有 YAML Skill 中提取名称、描述和步骤信息，
-        向量化存储到统一的 skills 集合，供排障检索匹配使用。
-
-        Args:
-            skill_loader: RCASkillLoader 实例
-
-        Returns:
-            成功索引的 Skill 数量
+        规则：
+        1) 读取每个 skill 文件内容计算 MD5，并存入 metadata.content_md5
+        2) 重建时对比已有记录与当前文件 MD5：
+           - 变更/新增：先 delete 再 upsert
+           - 未变更：跳过
+           - 已删除文件对应的旧记录：删除
         """
-        # 已初始化则跳过
-        if self.skills_init_status_file.exists():
-            try:
-                status = json.loads(self.skills_init_status_file.read_text(encoding="utf-8"))
-                skill_count = status.get("skill_count", 0)
-                initialized_at = status.get("initialized_at", "")
-                logger.info(f"[ROUTING] ✅ skills 索引已初始化，跳过本次初始化")
-                logger.info(f"   - Skill 数量: {skill_count}")
-                logger.info(f"   - 初始化时间: {initialized_at}")
-                return skill_count
-            except Exception as e:
-                logger.warning(f"[ROUTING] 读取 skills 初始化状态文件失败: {e}，将重新初始化")
-
-        logger.info("[ROUTING] 🚀 开始初始化 skills 索引...")
+        logger.info("[ROUTING] 🚀 开始增量重建 skills 索引...")
         start_time = time.time()
 
         collection = self._get_or_create(self.skills_client, SKILLS_COLLECTION)
 
-        docs: list[str] = []
-        ids: list[str] = []
-        metas: list[dict[str, Any]] = []
+        # 读取现有索引快照
+        try:
+            existing = collection.get(include=["metadatas"])
+            existing_ids: list[str] = existing.get("ids") or []
+            existing_metas: list[dict[str, Any]] = existing.get("metadatas") or []
+            logger.info(f"[ROUTING] 现有索引快照: {existing_ids}")
+        except Exception as e:
+            logger.error(f"[ROUTING] 获取现有索引快照失败: {e}")
+            existing_ids = []
+            existing_metas = []
+
+        existing_map: dict[str, dict[str, Any]] = {}
+        for idx, meta in zip(existing_ids, existing_metas):
+            existing_map[idx] = meta or {}
 
         skills = skill_loader.list_skills()
+        current_ids_set: set[str] = set()
+
+        to_delete_ids: list[str] = []
+        to_upsert_ids: list[str] = []
+        to_upsert_docs: list[str] = []
+        to_upsert_metas: list[dict[str, Any]] = []
+
+        unchanged_count = 0
+        changed_count = 0
+        new_count = 0
+
         for skill_info in skills:
             name = skill_info.get("name", "")
             if not name:
                 continue
 
-            description = skill_info.get("description", "")
-            file_path = skill_info.get("file_path", "")
+            skill_id = f"skill::{name}"
+            current_ids_set.add(skill_id)
 
-            # 只向量化名字、描述和源文件地址，保持检索文本精简
-            doc_text = (
-                f"Skill: {name}\n"
-                f"描述: {description}\n"
-                f"源文件: {file_path}"
-            )
+            doc_text, meta = self._build_skill_doc_and_meta(skill_info)
+            current_md5 = str(meta.get("content_md5", "") or "")
+            old_md5 = str((existing_map.get(skill_id) or {}).get("content_md5", "") or "")
 
-            ids.append(f"skill::{name}")
-            docs.append(doc_text)
-            metas.append({
-                "source": "skill",
-                "skill_name": name,
-                "skill_type": skill_info.get("type", ""),   # "atomic" 或 "sop"
-                "version": skill_info.get("version", ""),
-                "file_path": skill_info.get("file_path", ""),
-            })
+            # 新增或变更：先删除再插入
+            if skill_id not in existing_map:
+                new_count += 1
+                to_delete_ids.append(skill_id)
+                to_upsert_ids.append(skill_id)
+                to_upsert_docs.append(doc_text)
+                to_upsert_metas.append(meta)
+            elif current_md5 != old_md5:
+                changed_count += 1
+                to_delete_ids.append(skill_id)
+                to_upsert_ids.append(skill_id)
+                to_upsert_docs.append(doc_text)
+                to_upsert_metas.append(meta)
+            else:
+                unchanged_count += 1
 
             logger.info(
                 f"[ROUTING] 📄 Skill: {name} v{skill_info.get('version', '?')} "
-                f"({skill_info.get('steps_count', 0)} 步骤) - {description[:60]}"
+                f"({skill_info.get('steps_count', 0)} 步骤)"
             )
 
-        if not docs:
-            logger.info("[ROUTING] skills 索引无文档可索引")
-            return 0
+        # 删除已不存在的 Skill 记录
+        stale_ids = [eid for eid in existing_map.keys() if eid.startswith("skill::") and eid not in current_ids_set]
+        if stale_ids:
+            to_delete_ids.extend(stale_ids)
 
-        embeddings = self.embedder.embed_batch(docs)
-        collection.upsert(ids=ids, documents=docs, metadatas=metas, embeddings=embeddings)
+        # 先删后插
+        if to_delete_ids:
+            uniq_delete_ids = list(dict.fromkeys(to_delete_ids))
+            collection.delete(ids=uniq_delete_ids)
 
-        elapsed = time.time() - start_time
+        upsert_count = 0
+        if to_upsert_ids:
+            embeddings = self.embedder.embed_batch(to_upsert_docs)
+            collection.upsert(
+                ids=to_upsert_ids,
+                documents=to_upsert_docs,
+                metadatas=to_upsert_metas,
+                embeddings=embeddings,
+            )
+            upsert_count = len(to_upsert_ids)
 
         # 写入初始化状态文件
+        elapsed = time.time() - start_time
         try:
             status_data = {
                 "initialized_at": datetime.now().isoformat(),
-                "skill_count": len(docs),
+                "skill_count": len(skills),
                 "elapsed_seconds": round(elapsed, 2),
+                "updated_count": upsert_count,
+                "deleted_count": len(list(dict.fromkeys(to_delete_ids))),
+                "unchanged_count": unchanged_count,
             }
             self.skills_init_status_file.write_text(
                 json.dumps(status_data, ensure_ascii=False, indent=2),
@@ -402,10 +477,12 @@ class IntentRoutingStore:
         except Exception as e:
             logger.warning(f"[ROUTING] 保存 skills 初始化状态文件失败: {e}")
 
-        logger.info(f"[ROUTING] ✅ skills 索引初始化完成:")
-        logger.info(f"   - Skill 数量: {len(docs)}")
+        logger.info("[ROUTING] ✅ skills 索引增量重建完成:")
+        logger.info(f"   - 总 Skill 数量: {len(skills)}")
+        logger.info(f"   - 新增: {new_count}, 变更: {changed_count}, 未变更: {unchanged_count}")
+        logger.info(f"   - 删除: {len(list(dict.fromkeys(to_delete_ids)))}")
         logger.info(f"   - 耗时: {elapsed:.2f} 秒")
-        return len(docs)
+        return len(skills)
 
     def search_tools(self, query: str, limit: int = 2) -> list[dict[str, Any]]:
         collection = self._get_or_create(self.tools_client, TOOLS_COLLECTION)
@@ -457,7 +534,8 @@ class IntentRoutingStore:
         except Exception as e:
             logger.warning(f"[ROUTING] 移除 Skill '{skill_name}' 索引失败: {e}")
 
-    def _query_collection(self, collection: Any, query: str, limit: int, operation: str = "intent_routing") -> list[dict[str, Any]]:
+    def _query_collection(self, collection: Any, query: str, limit: int, operation: str = "intent_routing") -> list[
+        dict[str, Any]]:
         query_start = time.time()
         emb = self.embedder.embed_text(query)
         embed_duration = time.time() - query_start
@@ -491,7 +569,8 @@ class IntentRoutingStore:
         total_duration = time.time() - query_start
 
         # Prometheus: 记录向量数据库查询耗时、结果数和计数
-        RAG_QUERY_DURATION.labels(operation=operation, domain="intent_routing", status="success").observe(search_duration)
+        RAG_QUERY_DURATION.labels(operation=operation, domain="intent_routing", status="success").observe(
+            search_duration)
         RAG_QUERY_RESULTS_COUNT.labels(operation=operation, domain="intent_routing").observe(len(results))
         RAG_QUERY_TOTAL.labels(operation=operation, domain="intent_routing", status="success").inc()
 

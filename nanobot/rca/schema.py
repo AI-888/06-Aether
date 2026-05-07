@@ -88,7 +88,7 @@ class SkillStep:
 class AtomicSkill:
     """Atomic Skill 定义。
 
-    原子技能：对单次工具调用的结构化封装。
+    原子技能：对单次或多次工具调用的结构化封装。
     本身不包含业务逻辑，通过 output_schema 约束输出格式。
     通过 execution.steps 中的 tool 字段绑定底层 ToolRegistry 工具。
 
@@ -99,7 +99,7 @@ class AtomicSkill:
         type: 固定为 "atomic"
         input_schema: 输入参数定义 {参数名: 类型}
         output_schema: 输出字段定义 {字段名: 类型}（必需，不可为空）
-        tool: 绑定的 ToolRegistry 工具名称（从 execution.steps[0].tool 提取）
+        tools: 绑定的 ToolRegistry 工具名称列表（来自 execution.steps 全部 tool）
         file_path: 源文件路径（运行时元数据）
         loaded_at: 加载时间（运行时元数据）
     """
@@ -109,7 +109,7 @@ class AtomicSkill:
     type: str = "atomic"
     input_schema: dict[str, str] = field(default_factory=dict)
     output_schema: dict[str, str] = field(default_factory=dict)
-    tool: str | None = None  # 绑定的 ToolRegistry 工具名称
+    tools: list[str] = field(default_factory=list)
 
     # 运行时元数据（非 YAML 字段）
     file_path: str | None = None

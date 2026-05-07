@@ -19,7 +19,7 @@ def filter_redundant_atomic_skills(
 
     判定"包含"的条件（满足任一即视为被包含）：
     - SOP 的某步骤 type=skill，skill 字段 == Atomic Skill 的 name
-    - SOP 的某步骤 type=tool，tool 字段 == Atomic Skill 的 tool 字段
+    - SOP 的某步骤 type=tool，tool 字段命中 Atomic Skill 的 tools 任一项
 
     Args:
         skill_results: RAG search_skills() 返回的原始结果列表
@@ -76,11 +76,20 @@ def filter_redundant_atomic_skills(
 
         # 条件 2：Atomic Skill 绑定的 tool 被 SOP 的 step.tool 引用
         atomic_obj = skill_loader.get_skill(atomic_name)
-        if atomic_obj and hasattr(atomic_obj, "tool") and atomic_obj.tool:
-            if atomic_obj.tool in sop_referenced_tools:
+        if atomic_obj:
+            atomic_tools: list[str] = []
+            tools_attr = getattr(atomic_obj, "tools", None)
+            if isinstance(tools_attr, list):
+                atomic_tools.extend(
+                    t for t in tools_attr
+                    if isinstance(t, str) and t
+                )
+
+            matched_tool = next((t for t in atomic_tools if t in sop_referenced_tools), None)
+            if matched_tool:
                 logger.info(
                     f"[SKILL-FILTER] 移除 Atomic Skill '{atomic_name}'"
-                    f"（其 tool '{atomic_obj.tool}' 被 SOP step.tool 引用）"
+                    f"（其 tool '{matched_tool}' 被 SOP step.tool 引用）"
                 )
                 continue
 

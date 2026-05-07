@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from datetime import datetime
@@ -41,13 +42,48 @@ class RCASkillLoader:
             skill_dir: RCA Skill YAML 文件所在目录
             intent_routing_store: IntentRoutingStore 实例（用于 RAG 注册）
         """
-        self.skill_dir = Path(skill_dir).expanduser()
+        raw_skill_dir = Path(skill_dir).expanduser()
+        try:
+            # 若 skill_dir 为软链接，解析到真实目录
+            self.skill_dir = raw_skill_dir.resolve()
+        except Exception:
+            # 解析失败时回退原路径，保持兼容
+            self.skill_dir = raw_skill_dir
         self.intent_store = intent_routing_store
         self._atomic_skills: dict[str, AtomicSkill] = {}  # name -> AtomicSkill
         self._sop_skills: dict[str, SOPSkill] = {}         # name -> SOPSkill
         self._lock = threading.RLock()
         self._watcher_thread: threading.Thread | None = None
         self._watcher_stop_event = threading.Event()
+
+    def _iter_yaml_files_follow_symlink_dirs(self) -> list[Path]:
+        """递归扫描 YAML 文件，支持跟随目录软连接。"""
+        yaml_files: list[Path] = []
+        visited_dirs: set[str] = set()
+
+        for root, dirnames, filenames in os.walk(
+            self.skill_dir,
+            topdown=True,
+            followlinks=True,
+        ):
+            root_path = Path(root)
+            try:
+                real_root = str(root_path.resolve())
+            except Exception:
+                real_root = str(root_path)
+
+            # 避免软连接环导致重复遍历
+            if real_root in visited_dirs:
+                dirnames[:] = []
+                continue
+            visited_dirs.add(real_root)
+
+            for filename in filenames:
+                lower_name = filename.lower()
+                if lower_name.endswith(".yaml") or lower_name.endswith(".yml"):
+                    yaml_files.append(root_path / filename)
+
+        return sorted(yaml_files, key=lambda p: str(p))
 
     def load_all(self) -> int:
         """加载目录中所有 YAML Skill 文件（递归搜索子目录）。
@@ -61,10 +97,8 @@ class RCASkillLoader:
             return 0
 
         count = 0
-        # 递归加载所有 yaml/yml 文件
-        yaml_files = sorted(self.skill_dir.rglob("*.yaml")) + sorted(
-            self.skill_dir.rglob("*.yml")
-        )
+        # 递归加载所有 yaml/yml 文件（支持目录软连接）
+        yaml_files = self._iter_yaml_files_follow_symlink_dirs()
         for path in yaml_files:
             skill = self.load_file(path)
             if skill:
@@ -309,7 +343,24 @@ class RCASkillLoader:
 
         def _watch_loop():
             observer = Observer()
+
+            # 监听根目录（包含常规子目录）
             observer.schedule(_Handler(), str(self.skill_dir), recursive=True)
+
+            # 额外监听一级子目录中的软连接目标目录
+            for child in self.skill_dir.iterdir():
+                if not child.is_symlink():
+                    continue
+                try:
+                    target = child.resolve()
+                except Exception as e:
+                    logger.warning(
+                        f"[RCA-LOADER] 软连接解析失败，跳过监听: {child}, error: {e}"
+                    )
+                    continue
+                if target.exists() and target.is_dir():
+                    observer.schedule(_Handler(), str(target), recursive=True)
+
             observer.start()
             logger.info(
                 f"[RCA-LOADER] 🔄 文件监听已启动: {self.skill_dir}"

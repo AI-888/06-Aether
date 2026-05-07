@@ -236,33 +236,41 @@ def validate(raw: dict[str, Any]) -> list[str]:
         return [f"未知的 Skill type: '{skill_type}'，允许值: atomic, sop"]
 
 
-def _extract_atomic_tool(data: dict[str, Any]) -> str | None:
-    """从 Atomic Skill 数据中提取绑定的 Tool 名称。
+def _extract_atomic_tools(data: dict[str, Any]) -> list[str]:
+    """从 Atomic Skill 数据中提取绑定的 Tool 名称列表。
 
     Atomic Skill YAML 中通过 execution.steps 声明底层工具绑定，
-    提取第一个步骤中的 tool 字段作为绑定的 ToolRegistry 工具名。
+    提取所有步骤中的 tool 字段作为绑定的 ToolRegistry 工具名（去重、保序）。
 
     Args:
         data: Skill 数据字典（已去除顶层 "skill" 包装）
 
     Returns:
-        绑定的工具名称，若未声明则返回 None
+        绑定的工具名称列表，若未声明则返回空列表
     """
     execution = data.get("execution")
     if not isinstance(execution, dict):
-        return None
+        return []
 
     steps = execution.get("steps")
     if not isinstance(steps, list) or not steps:
-        return None
+        return []
 
-    first_step = steps[0]
-    if isinstance(first_step, dict):
-        tool = first_step.get("tool")
-        if isinstance(tool, str) and tool.strip():
-            return tool.strip()
+    tools: list[str] = []
+    seen: set[str] = set()
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        tool = step.get("tool")
+        if not isinstance(tool, str):
+            continue
+        tool_name = tool.strip()
+        if not tool_name or tool_name in seen:
+            continue
+        seen.add(tool_name)
+        tools.append(tool_name)
 
-    return None
+    return tools
 
 
 def parse_atomic_skill(raw: dict[str, Any]) -> AtomicSkill:
@@ -283,8 +291,8 @@ def parse_atomic_skill(raw: dict[str, Any]) -> AtomicSkill:
 
     data = raw.get("skill", raw) if isinstance(raw, dict) else raw
 
-    # 从 execution.steps 中提取绑定的 Tool 名称
-    tool_name = _extract_atomic_tool(data)
+    # 从 execution.steps 中提取绑定的 Tool 名称列表
+    tool_names = _extract_atomic_tools(data)
 
     return AtomicSkill(
         name=str(data.get("name", "")),
@@ -293,7 +301,7 @@ def parse_atomic_skill(raw: dict[str, Any]) -> AtomicSkill:
         type="atomic",
         input_schema=dict(data.get("input_schema", {})),
         output_schema=dict(data.get("output_schema", {})),
-        tool=tool_name,
+        tools=tool_names,
     )
 
 

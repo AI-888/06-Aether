@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from prometheus_client import Histogram, Counter, Gauge, REGISTRY
+from prometheus_client import Histogram, Counter
 
 # ---------------------------------------------------------------------------
 # 1. 大模型 (LLM) 访问耗时指标
@@ -138,6 +138,7 @@ RCA_SECURITY_REJECT_TOTAL = Counter(
     labelnames=["tool_name"],
 )
 
+
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
@@ -203,10 +204,10 @@ class MetricsLogger:
     _instance: "MetricsLogger | None" = None
 
     def __init__(
-        self,
-        log_dir: str = "logs",
-        interval_seconds: int = 5,
-        backup_count: int = 30,
+            self,
+            log_dir: str = "logs",
+            interval_seconds: int = 5,
+            backup_count: int = 30,
     ):
         self._log_dir = log_dir
         self._interval = interval_seconds
@@ -231,7 +232,7 @@ class MetricsLogger:
 
         handler = TimedRotatingFileHandler(
             filename=log_file,
-            when="midnight",           # 每日零点切割
+            when="midnight",  # 每日零点切割
             interval=1,
             backupCount=self._backup_count,
             encoding="utf-8",
@@ -323,10 +324,10 @@ class MetricsLogger:
 
     @classmethod
     def get_instance(
-        cls,
-        log_dir: str = "logs",
-        interval_seconds: int = 5,
-        backup_count: int = 30,
+            cls,
+            log_dir: str = "logs",
+            interval_seconds: int = 5,
+            backup_count: int = 30,
     ) -> "MetricsLogger":
         """获取全局单例（首次调用时创建）。"""
         if cls._instance is None:
@@ -339,9 +340,9 @@ class MetricsLogger:
 
 
 def start_metrics_logging(
-    log_dir: str = "logs",
-    interval_seconds: int = 5,
-    backup_count: int = 30,
+        log_dir: str = "logs",
+        interval_seconds: int = 5,
+        backup_count: int = 30,
 ):
     """便捷函数：启动全局定时指标打印。"""
     ml = MetricsLogger.get_instance(
